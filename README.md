@@ -2,6 +2,15 @@
 
 A macOS scratchpad app inspired by [Antinote](https://antinote.io) — ephemeral notes, always one keystroke away.
 
+## Vision
+
+AlphaNote is a scratchpad-first note app for macOS that prioritizes **the present moment** over organization.
+It appears on demand via a global hotkey, lets you jot down temporary notes, perform calculations,
+convert units, set timers, and OCR text from images — all through natural language typing.
+
+It is NOT a replacement for permanent note apps. It is the fast, disposable companion you reach for
+between thoughts.
+
 ## Features
 
 - **Global hotkey (⌥A)** — instant access from anywhere
@@ -17,8 +26,31 @@ A macOS scratchpad app inspired by [Antinote](https://antinote.io) — ephemeral
 - Swift / SwiftUI + AppKit (macOS 14+)
 - GRDB.swift (SQLite)
 - swift-collections
-- Highlightr (code syntax)
 - Apple Vision (OCR)
+
+## Build
+
+```bash
+swift build
+```
+
+## Test
+
+```bash
+swift test
+```
+
+## Run
+
+```bash
+swift run AlphaNote
+```
+
+## Open in Xcode
+
+```bash
+open Package.swift
+```
 
 ## License
 

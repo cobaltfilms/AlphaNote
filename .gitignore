@@ -1,18 +1,11 @@
-# Xcode
 .DS_Store
-*.xcuserdata/
-*.xcworkspace/
-xcuserdata/
-DerivedData/
-build/
-
-# Swift Package Manager
 .build/
-.swiftpm/
+.derivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
 Packages/
 Package.resolved
-
-# General
 *.swp
+.swiftpm/
 *~
 .idea/
