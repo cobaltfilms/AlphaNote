@@ -8,7 +8,7 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executableProduct(
+        .executable(
             name: "AlphaNote",
             targets: ["AlphaNote"]
         )
