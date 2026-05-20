@@ -9,17 +9,21 @@ final class Converter {
     /// Examples: "12km in miles", "100USD in EUR", "72f in c"
     func convert(_ expression: String) -> String? {
         let pattern = #"(\d+\.?\d*)\s*([\w°]+)\s+(?:in|to|en)\s+([\w°]+)"#
-        guard let match = expression.range(of: pattern, options: .regularExpression) else {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
+              match.numberOfRanges >= 4 else {
             return nil
         }
 
-        let matched = String(expression[match])
-        let parts = matched.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        guard parts.count >= 4 else { return nil }
+        guard let valueRange = Range(match.range(at: 1), in: expression),
+              let fromRange = Range(match.range(at: 2), in: expression),
+              let toRange = Range(match.range(at: 3), in: expression) else {
+            return nil
+        }
 
-        guard let value = Double(parts[0]) else { return nil }
-        let from = normalize(parts[1])
-        let to = normalize(parts.dropFirst(3).joined(separator: " "))
+        guard let value = Double(String(expression[valueRange])) else { return nil }
+        let from = normalize(String(expression[fromRange]))
+        let to = normalize(String(expression[toRange]))
 
         // Try unit conversion
         if let result = convertUnit(value: value, from: from, to: to) {
