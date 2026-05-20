@@ -27,6 +27,13 @@ final class MathEvaluator {
         case `operator`(String) // + - * / ^
         case lparen, rparen
         case identifier(String) // for future variable support
+
+        var isBinaryOperator: Bool {
+            if case .operator(let op) = self, op != "" {
+                return true
+            }
+            return false
+        }
     }
 
     // MARK: - Tokenizer
@@ -61,10 +68,11 @@ final class MathEvaluator {
                 if !buffer.isEmpty {
                     flushNumber()
                     tokens.append(.operator("-"))
-                } else if tokens.last == .number(0) || tokens.last == .rparen || tokens.last != nil {
-                    tokens.append(.operator("-"))
-                } else {
+                } else if tokens.isEmpty || (tokens.last?.isBinaryOperator == true) || tokens.last == .lparen {
+                    // Negative number: at start, after another operator, or after lparen
                     buffer.append(Character(ch))
+                } else {
+                    tokens.append(.operator("-"))
                 }
             case "(":
                 if !buffer.isEmpty { flushNumber() }
@@ -82,6 +90,9 @@ final class MathEvaluator {
                 }
             }
         }
+
+        // Flush any remaining content in buffer
+        if !buffer.isEmpty { flushNumber() }
 
         // Handle colloquial "of" — convert "50% of 200" → 0.5 * 200
         var cleaned: [Token] = []
