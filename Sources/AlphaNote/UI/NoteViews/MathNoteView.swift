@@ -3,6 +3,7 @@ import SwiftUI
 struct MathNoteView: View {
     @Binding var note: Note
     @AppStorage("fontSize") private var fontSize: Double = 14
+    @State private var evaluator = MathEvaluator()
     @State private var evaluatedLines: [Int: String] = [:]
 
     var body: some View {
@@ -57,7 +58,7 @@ struct MathNoteView: View {
 
             if trimmed.hasSuffix("=") {
                 let expression = String(trimmed.dropLast()).trimmingCharacters(in: .whitespaces)
-                if let result = MathEvaluator.evaluate(expression) {
+                if let result = evaluator.evaluate(expression) {
                     let formatted: String
                     if result == floor(result) && abs(result) < Double(Int64.max) {
                         formatted = String(Int64(result))
@@ -66,7 +67,7 @@ struct MathNoteView: View {
                     }
                     evaluatedLines[index] = formatted
                 }
-            } else if let result = MathEvaluator.evaluate(trimmed) {
+            } else if let result = evaluator.evaluate(trimmed) {
                 let formatted: String
                 if result == floor(result) && abs(result) < Double(Int64.max) {
                     formatted = String(Int64(result))

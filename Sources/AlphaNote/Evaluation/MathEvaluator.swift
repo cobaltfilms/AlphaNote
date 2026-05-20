@@ -33,7 +33,7 @@ final class MathEvaluator {
 
     private func tokenize(_ input: String) -> [Token] {
         var tokens: [Token] = []
-        var chars = input.unicodeScalars
+        var chars = input[...].unicodeScalars
         var buffer = ""
 
         func flushNumber() {
@@ -173,7 +173,8 @@ final class MathEvaluator {
     private func parseUnary(_ tokens: [Token], _ pos: inout Int) throws -> Double {
         if pos < tokens.count, case .operator("-") = tokens[pos] {
             pos += 1
-            return -try parsePrimary(tokens, &pos)
+            let val = try parsePrimary(tokens, &pos)
+            return -val
         }
         return try parsePrimary(tokens, &pos)
     }
@@ -193,7 +194,7 @@ final class MathEvaluator {
             }
             pos += 1
             return result
-        case .identifier(let name):
+        case .identifier(_):
             // Future: variable lookup
             pos += 1
             return 0

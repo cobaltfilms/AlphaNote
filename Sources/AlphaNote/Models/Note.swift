@@ -48,11 +48,13 @@ struct Note: Codable, Identifiable, Equatable {
 
 // MARK: - GRDB Conformances
 
-extension Note: TableRecord {
+extension Note: TableRecord, FetchableRecord, MutablePersistableRecord {
     static let databaseTableName = "note"
-}
 
-extension Note: FetchableRecord {
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
     init(row: Row) {
         id = row["id"]
         content = row["content"]
@@ -62,15 +64,6 @@ extension Note: FetchableRecord {
         isPinned = row["isPinned"]
         createdAt = row["createdAt"]
         updatedAt = row["updatedAt"]
-    }
-}
-
-extension Note: MutablePersistableRecord {
-    static let persistenceKey = Column("id")
-    static let databaseTableName = "note"
-
-    mutating func didInsert(_ inserted: InsertSuccess) {
-        id = inserted.rowID
     }
 
     func encode(to container: inout PersistenceContainer) {
@@ -162,7 +155,7 @@ extension Note {
         do {
             try dbQueue.write { db in
                 _ = try Note
-                    .filter(Column("content").trim() == "")
+                    .filter(Column("content") == "")
                     .deleteAll(db)
             }
         } catch {

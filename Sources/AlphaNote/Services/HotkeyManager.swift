@@ -4,7 +4,7 @@ import Carbon
 final class HotkeyManager {
     private var globalHotkeyRef: EventHotKeyRef?
     private var localMonitor: Any?
-    private var hotkeyCallback: (() -> Void)?
+    var hotkeyCallback: (() -> Void)?
 
     // Carbon hotkey signature
     private static let hotkeySignature: FourCharCode = {
@@ -21,7 +21,14 @@ final class HotkeyManager {
             eventKind: UInt32(kEventHotKeyPressed)
         )
 
-        InstallApplicationEventHandler(&hotkeyEventHandler, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), nil)
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            hotkeyEventHandler,
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            nil
+        )
 
         var hotKeyID = EventHotKeyID(signature: Self.hotkeySignature, id: 1)
 
@@ -48,6 +55,19 @@ final class HotkeyManager {
             localMonitor = nil
         }
         hotkeyCallback = nil
+    }
+
+    // MARK: - Convenience
+
+    func register() {
+        // Option+A = keyCode 0
+        registerGlobalHotkey(keyCode: 0, modifiers: .option) { [weak self] in
+            self?.hotkeyCallback?()
+        }
+    }
+
+    func unregister() {
+        unregisterAll()
     }
 
     // MARK: - Private Helpers

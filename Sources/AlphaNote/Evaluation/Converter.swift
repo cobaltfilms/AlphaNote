@@ -125,7 +125,7 @@ final class Converter {
             group.leave()
         }
 
-        group.wait(timeout: .now() + 5)
+        _ = group.wait(timeout: .now() + 5)
 
         return result
     }

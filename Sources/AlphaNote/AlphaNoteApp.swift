@@ -22,13 +22,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         windowController = NoteWindowController()
 
-        hotkeyManager = HotkeyManager(
-            key: .a,
-            modifiers: .option
-        ) { [weak self] in
+        hotkeyManager = HotkeyManager()
+        hotkeyManager.registerGlobalHotkey(keyCode: 0, modifiers: .option) { [weak self] in
             self?.toggleWindow()
         }
-        hotkeyManager.register()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -47,7 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        hotkeyManager.unregister()
+        hotkeyManager.unregisterAll()
     }
 
     @objc private func statusItemClicked() {
