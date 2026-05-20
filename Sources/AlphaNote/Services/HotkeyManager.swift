@@ -30,7 +30,7 @@ final class HotkeyManager {
             nil
         )
 
-        var hotKeyID = EventHotKeyID(signature: Self.hotkeySignature, id: 1)
+        let hotKeyID = EventHotKeyID(signature: Self.hotkeySignature, id: 1)
 
         let carbonMods = carbonModifiers(from: modifiers)
         RegisterEventHotKey(keyCode, carbonMods, hotKeyID, GetApplicationEventTarget(), 0, &globalHotkeyRef)

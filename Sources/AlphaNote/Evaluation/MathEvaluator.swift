@@ -45,7 +45,7 @@ final class MathEvaluator {
 
         while let ch = chars.popFirst() {
             switch ch {
-            case "0"..."9", ".", "-": // negative handled by parser
+            case "0"..."9", ".": // negative handled by parser
                 buffer.append(Character(ch))
             case "%":
                 if !buffer.isEmpty { flushNumber() }
@@ -75,7 +75,7 @@ final class MathEvaluator {
             case " ", "\t":
                 if !buffer.isEmpty { flushNumber() }
             default:
-                if ch.properties.isLetter || ch == "_" {
+                if Character(ch).isLetter || ch == "_" {
                     buffer.append(Character(ch))
                 } else if !buffer.isEmpty {
                     flushNumber()
