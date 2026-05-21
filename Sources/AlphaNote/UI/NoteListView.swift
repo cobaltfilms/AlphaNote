@@ -62,7 +62,7 @@ struct NoteListView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(store.notes.enumerated()), id: \.offset) { index, note in
+                    ForEach(Array(store.notes.enumerated()), id: \.element.id) { index, note in
                         noteRow(note: note, index: index, isArchived: false)
                     }
 

@@ -71,6 +71,13 @@ final class NoteStore: ObservableObject {
             reloadNotes()
             return
         }
+
+        // Safety: a newly duplicated note must always start as active (not archived),
+        // even if a stale archived ID set exists from old data.
+        var ids = archivedNoteIDs
+        ids.remove(createdID)
+        setArchivedNoteIDs(ids)
+
         reloadNotes(selecting: createdID)
     }
 
@@ -209,7 +216,13 @@ final class NoteStore: ObservableObject {
 
     private func reloadNotes(selecting selectedID: Int64? = nil) {
         let allNotes = Note.fetchAll()
-        let archivedIDs = archivedNoteIDs
+        let allIDs = Set(allNotes.compactMap(\.id))
+        let archivedIDs = archivedNoteIDs.intersection(allIDs)
+
+        // Keep archive metadata consistent with existing notes only.
+        if archivedIDs != archivedNoteIDs {
+            setArchivedNoteIDs(archivedIDs)
+        }
 
         notes = allNotes.filter { note in
             guard let id = note.id else { return true }
