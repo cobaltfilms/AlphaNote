@@ -420,4 +420,5 @@ extension Notification.Name {
     static let alphaNoteToggleSidebar = Notification.Name("alphaNoteToggleSidebar")
     static let alphaNoteConvertToList = Notification.Name("alphaNoteConvertToList")
     static let alphaNoteDidSync = Notification.Name("alphaNoteDidSync")
+    static let alphaNoteOpenHelpCenter = Notification.Name("alphaNoteOpenHelpCenter")
 }

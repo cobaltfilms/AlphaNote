@@ -28,6 +28,13 @@ struct AlphaNoteApp: App {
                 }
                 .keyboardShortcut(listModeShortcutKeyEquivalent, modifiers: listModeShortcutModifierFlags)
             }
+
+            CommandGroup(replacing: .help) {
+                Button("AlphaNote Help") {
+                    NotificationCenter.default.post(name: .alphaNoteOpenHelpCenter, object: nil)
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+            }
         }
     }
 
@@ -57,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager?
     private var windowController: NoteWindowController?
     private var settingsWindowController: NSWindowController?
+    private var helpWindowController: NSWindowController?
     private var statusItem: NSStatusItem?
     private var savedNoteWindowLevel: NSWindow.Level?
     private var observedSettingsWindows = Set<ObjectIdentifier>()
@@ -78,6 +86,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         configureStatusItem()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openHelpCenter),
+            name: .alphaNoteOpenHelpCenter,
+            object: nil
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -178,6 +193,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let helpItem = NSMenuItem(
+            title: "Centre d’aide",
+            action: #selector(openHelpCenterFromMenu),
+            keyEquivalent: "h"
+        )
+        helpItem.keyEquivalentModifierMask = [.command, .shift]
+        helpItem.target = self
+        menu.addItem(helpItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -224,6 +248,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.restoreNoteWindowLevelIfNeeded()
             }
         }
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openHelpCenterFromMenu() {
+        openHelpCenter()
+    }
+
+    @objc private func openHelpCenter() {
+        if let existingWindow = helpWindowController?.window {
+            existingWindow.makeKeyAndOrderFront(nil)
+            existingWindow.orderFrontRegardless()
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let helpView = HelpCenterView()
+        let hostingView = NSHostingView(rootView: helpView)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 700),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Aide AlphaNote"
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.contentView = hostingView
+
+        let controller = NSWindowController(window: window)
+        helpWindowController = controller
+        controller.showWindow(nil)
         NSRunningApplication.current.activate(options: [.activateAllWindows])
         NSApp.activate(ignoringOtherApps: true)
     }
