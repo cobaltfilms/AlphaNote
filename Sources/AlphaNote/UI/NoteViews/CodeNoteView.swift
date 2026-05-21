@@ -3,6 +3,7 @@ import SwiftUI
 struct CodeNoteView: View {
     @Binding var note: Note
     @AppStorage("fontSize") private var fontSize: Double = 14
+    @FocusState private var isEditorFocused: Bool
 
     private var detectedLanguage: String {
         let titleLine = note.title.lowercased()
@@ -39,8 +40,12 @@ struct CodeNoteView: View {
             TextEditor(text: $note.content)
                 .font(.system(size: fontSize, design: .monospaced))
                 .scrollContentBackground(.hidden)
+                .focused($isEditorFocused)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
+                .onAppear {
+                    isEditorFocused = true
+                }
                 .onChange(of: note.content) {
                     note.detectKeyword()
                 }

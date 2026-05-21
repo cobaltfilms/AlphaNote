@@ -3,7 +3,6 @@ import Carbon
 
 final class HotkeyManager {
     private var globalHotkeyRef: EventHotKeyRef?
-    private var localMonitor: Any?
     var hotkeyCallback: (() -> Void)?
 
     // Carbon hotkey signature
@@ -34,25 +33,12 @@ final class HotkeyManager {
 
         let carbonMods = carbonModifiers(from: modifiers)
         RegisterEventHotKey(keyCode, carbonMods, hotKeyID, GetApplicationEventTarget(), 0, &globalHotkeyRef)
-
-        // Local monitor for when app is active
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.matchesHotkey(event, keyCode: keyCode, modifiers: modifiers) else {
-                return event
-            }
-            self.hotkeyCallback?()
-            return nil
-        }
     }
 
     func unregisterAll() {
         if let ref = globalHotkeyRef {
             UnregisterEventHotKey(ref)
             globalHotkeyRef = nil
-        }
-        if let monitor = localMonitor {
-            NSEvent.removeMonitor(monitor)
-            localMonitor = nil
         }
         hotkeyCallback = nil
     }

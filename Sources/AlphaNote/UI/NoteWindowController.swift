@@ -1,11 +1,16 @@
 import AppKit
 import SwiftUI
 
+private final class NoteWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 final class NoteWindowController: NSWindowController {
     private var hostingView: NSHostingView<NoteListView>!
 
     init() {
-        let window = NSWindow(
+        let window = NoteWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -17,7 +22,7 @@ final class NoteWindowController: NSWindowController {
         window.level = .floating
         window.isReleasedWhenClosed = false
         window.backgroundColor = .clear
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
         window.center()
 
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
@@ -36,14 +41,41 @@ final class NoteWindowController: NSWindowController {
 
     func showWindow() {
         guard let window else { return }
+
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.activate(ignoringOtherApps: true)
+
         window.alphaValue = 0
         window.orderFrontRegardless()
+        window.makeMain()
         window.makeKey()
+
+        DispatchQueue.main.async {
+            guard let contentView = window.contentView,
+                  let textView = self.firstTextView(in: contentView) else {
+                return
+            }
+            window.makeFirstResponder(textView)
+        }
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             window.animator().alphaValue = 1.0
         }
+    }
+
+    private func firstTextView(in view: NSView) -> NSTextView? {
+        if let textView = view as? NSTextView {
+            return textView
+        }
+
+        for subview in view.subviews {
+            if let textView = firstTextView(in: subview) {
+                return textView
+            }
+        }
+
+        return nil
     }
 
     func hideWindow() {

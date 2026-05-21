@@ -89,29 +89,41 @@ final class NoteStore: ObservableObject {
     }
 
     func viewForNote(_ note: Note) -> AnyView {
+        let noteBinding = binding(for: note)
+
         switch note.keyword {
         case "math":
-            return AnyView(MathNoteView(note: Binding(
-                get: { note },
-                set: { self.updateNote($0) }
-            )))
+            return AnyView(MathNoteView(note: noteBinding))
         case "list":
-            return AnyView(ListNoteView(note: Binding(
-                get: { note },
-                set: { self.updateNote($0) }
-            )))
+            return AnyView(ListNoteView(note: noteBinding))
         case "code":
-            return AnyView(CodeNoteView(note: Binding(
-                get: { note },
-                set: { self.updateNote($0) }
-            )))
+            return AnyView(CodeNoteView(note: noteBinding))
         case "timer":
             return AnyView(TimerNoteView())
         default:
-            return AnyView(PlainNoteView(note: Binding(
-                get: { note },
-                set: { self.updateNote($0) }
-            )))
+            return AnyView(PlainNoteView(note: noteBinding))
         }
+    }
+
+    private func binding(for note: Note) -> Binding<Note> {
+        Binding(
+            get: {
+                guard let noteID = note.id,
+                      let index = self.notes.firstIndex(where: { $0.id == noteID }) else {
+                    return note
+                }
+                return self.notes[index]
+            },
+            set: { updatedNote in
+                if let noteID = updatedNote.id,
+                   let index = self.notes.firstIndex(where: { $0.id == noteID }) {
+                    self.notes[index] = updatedNote
+                } else if self.currentIndex >= 0 && self.currentIndex < self.notes.count {
+                    self.notes[self.currentIndex] = updatedNote
+                }
+
+                self.updateNote(updatedNote)
+            }
+        )
     }
 }

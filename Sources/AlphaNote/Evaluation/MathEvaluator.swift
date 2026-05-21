@@ -8,7 +8,8 @@ final class MathEvaluator {
 
     /// Evaluate a math expression. Returns nil if it can't be parsed.
     func evaluate(_ expression: String) -> Double? {
-        let tokens = tokenize(expression)
+        let normalizedExpression = normalize(expression)
+        let tokens = tokenize(normalizedExpression)
         guard !tokens.isEmpty else { return nil }
         var pos = 0
         do {
@@ -34,6 +35,26 @@ final class MathEvaluator {
             }
             return false
         }
+    }
+
+    // MARK: - Normalization
+
+    private func normalize(_ input: String) -> String {
+        var expression = input
+            .replacingOccurrences(of: "÷", with: "/")
+            .replacingOccurrences(of: "×", with: "*")
+            .replacingOccurrences(of: "**", with: "^")
+
+        if let regex = try? NSRegularExpression(pattern: "(?<=\\d|\\)|%)\\s*[xX]\\s*(?=\\d|\\(|[A-Za-z_])") {
+            expression = regex.stringByReplacingMatches(
+                in: expression,
+                options: [],
+                range: NSRange(expression.startIndex..., in: expression),
+                withTemplate: "*"
+            )
+        }
+
+        return expression
     }
 
     // MARK: - Tokenizer

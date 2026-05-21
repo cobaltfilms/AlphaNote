@@ -6,100 +6,196 @@ final class Converter {
     // MARK: - Public API
 
     /// Convert a natural-language conversion expression.
-    /// Examples: "12km in miles", "100USD in EUR", "72f in c"
+    /// Examples: "12 km to mi", "10\" to cm", "100 USD to EUR", "$10 to JPY"
     func convert(_ expression: String) -> String? {
-        let pattern = #"(\d+\.?\d*)\s*([\w°]+)\s+(?:in|to|en)\s+([\w°]+)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-              let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
-              match.numberOfRanges >= 4 else {
+        let cleaned = expression
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let split = splitConversionExpression(cleaned) else {
             return nil
         }
 
-        guard let valueRange = Range(match.range(at: 1), in: expression),
-              let fromRange = Range(match.range(at: 2), in: expression),
-              let toRange = Range(match.range(at: 3), in: expression) else {
+        guard let parse = parseLeftHandValue(split.left) else {
             return nil
         }
 
-        guard let value = Double(String(expression[valueRange])) else { return nil }
-        let from = normalize(String(expression[fromRange]))
-        let to = normalize(String(expression[toRange]))
+        let toRaw = normalizeToken(split.right)
 
-        // Try unit conversion
-        if let result = convertUnit(value: value, from: from, to: to) {
+        if let result = convertUnit(value: parse.value, from: parse.unit, to: toRaw) {
             return result
         }
 
-        // Try currency conversion
-        if let result = convertCurrency(value: value, from: from, to: to) {
+        if let result = convertCurrency(value: parse.value, from: parse.currency, to: toRaw) {
             return result
         }
 
         return nil
+    }
+
+    // MARK: - Parsing
+
+    private func splitConversionExpression(_ expression: String) -> (left: String, right: String)? {
+        guard let regex = try? NSRegularExpression(pattern: "(?i)\\s+(to|in|en)\\s+"),
+              let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)) else {
+            return nil
+        }
+
+        guard let matchRange = Range(match.range, in: expression) else {
+            return nil
+        }
+
+        let left = String(expression[..<matchRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+        let right = String(expression[matchRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+
+        guard !left.isEmpty, !right.isEmpty else {
+            return nil
+        }
+
+        return (left, right)
+    }
+
+    private func parseLeftHandValue(_ left: String) -> (value: Double, unit: String, currency: String)? {
+        let nsLeft = left as NSString
+        let numberPattern = "[-+]?\\d+(?:[.,]\\d+)?"
+
+        guard let numberRegex = try? NSRegularExpression(pattern: numberPattern),
+              let numberMatch = numberRegex.firstMatch(in: left, range: NSRange(location: 0, length: nsLeft.length)) else {
+            return nil
+        }
+
+        let numberText = nsLeft.substring(with: numberMatch.range).replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(numberText) else {
+            return nil
+        }
+
+        let numberRange = numberMatch.range
+        let before = nsLeft.substring(with: NSRange(location: 0, length: numberRange.location)).trimmingCharacters(in: .whitespaces)
+        let afterStart = numberRange.location + numberRange.length
+        let after = nsLeft.substring(with: NSRange(location: afterStart, length: nsLeft.length - afterStart)).trimmingCharacters(in: .whitespaces)
+
+        let symbolCurrency = currencyFromSymbol(before.isEmpty ? after : before)
+        let fromCurrency = symbolCurrency.isEmpty ? normalizeCurrency(before.isEmpty ? after : before) : symbolCurrency
+        let fromUnitRaw = normalizeToken(after.isEmpty ? before : after)
+
+        return (value, fromUnitRaw, fromCurrency)
     }
 
     // MARK: - Unit Conversion
 
-    private let distanceUnits: [String: Double] = [
-        "km": 1000, "kilometer": 1000, "kilometers": 1000,
-        "m": 1, "meter": 1, "meters": 1,
-        "cm": 0.01, "centimeter": 0.01,
-        "mm": 0.001, "millimeter": 0.001,
-        "mi": 1609.344, "mile": 1609.344, "miles": 1609.344,
-        "yd": 0.9144, "yard": 0.9144, "yards": 0.9144,
-        "ft": 0.3048, "foot": 0.3048, "feet": 0.3048,
-        "in": 0.0254, "inch": 0.0254, "inches": 0.0254,
-    ]
-
-    private let massUnits: [String: Double] = [
-        "kg": 1, "kilogram": 1, "kilograms": 1,
-        "g": 0.001, "gram": 0.001, "grams": 0.001,
-        "lb": 0.453592, "pound": 0.453592, "pounds": 0.453592,
-        "oz": 0.0283495, "ounce": 0.0283495, "ounces": 0.0283495,
-    ]
-
     private func convertUnit(value: Double, from: String, to: String) -> String? {
-        // Distance
-        if let fromM = distanceUnits[from], let toM = distanceUnits[to] {
-            let result = value * fromM / toM
-            return formatResult(result, unit: to)
+        if let fromUnit = lengthUnit(from), let toUnit = lengthUnit(to) {
+            let converted = convertDimension(value: value, from: fromUnit, to: toUnit)
+            return formatResult(converted, unit: to)
         }
 
-        // Mass
-        if let fromKg = massUnits[from], let toKg = massUnits[to] {
-            let result = value * fromKg / toKg
-            return formatResult(result, unit: to)
+        if let fromUnit = areaUnit(from), let toUnit = areaUnit(to) {
+            let converted = convertDimension(value: value, from: fromUnit, to: toUnit)
+            return formatResult(converted, unit: to)
         }
 
-        // Temperature
-        if isTemp(from) && isTemp(to) {
-            let result = convertTemp(value: value, from: from, to: to)
-            return formatResult(result, unit: to)
+        if let fromUnit = volumeUnit(from), let toUnit = volumeUnit(to) {
+            let converted = convertDimension(value: value, from: fromUnit, to: toUnit)
+            return formatResult(converted, unit: to)
+        }
+
+        if let fromUnit = massUnit(from), let toUnit = massUnit(to) {
+            let converted = convertDimension(value: value, from: fromUnit, to: toUnit)
+            return formatResult(converted, unit: to)
+        }
+
+        if let fromUnit = temperatureUnit(from), let toUnit = temperatureUnit(to) {
+            let converted = convertDimension(value: value, from: fromUnit, to: toUnit)
+            return formatResult(converted, unit: to)
         }
 
         return nil
     }
 
-    private func isTemp(_ unit: String) -> Bool {
-        ["c", "°c", "celsius", "f", "°f", "fahrenheit", "k", "kelvin"].contains(unit)
+    private func convertDimension(value: Double, from: Dimension, to: Dimension) -> Double {
+        let base = from.converter.baseUnitValue(fromValue: value)
+        return to.converter.value(fromBaseUnitValue: base)
     }
 
-    private func convertTemp(value: Double, from: String, to: String) -> Double {
-        // Convert to Celsius first
-        let celsius: Double
-        switch from {
-        case "c", "°c", "celsius": celsius = value
-        case "f", "°f", "fahrenheit": celsius = (value - 32) * 5 / 9
-        case "k", "kelvin": celsius = value - 273.15
-        default: return value
-        }
+    private func lengthUnit(_ raw: String) -> UnitLength? {
+        let token = normalizeToken(raw)
+        let map: [String: UnitLength] = [
+            "m": .meters, "meter": .meters, "metre": .meters, "meters": .meters, "metres": .meters,
+            "cm": .centimeters, "centimeter": .centimeters, "centimetre": .centimeters, "centimeters": .centimeters, "centimetres": .centimeters,
+            "mm": .millimeters, "millimeter": .millimeters, "millimetre": .millimeters, "millimeters": .millimeters, "millimetres": .millimeters,
+            "km": .kilometers, "kilometer": .kilometers, "kilometre": .kilometers, "kilometers": .kilometers, "kilometres": .kilometers,
+            "in": .inches, "inch": .inches, "inches": .inches, "\"": .inches, "″": .inches,
+            "ft": .feet, "foot": .feet, "feet": .feet, "'": .feet, "′": .feet,
+            "mi": .miles, "mile": .miles, "miles": .miles,
+            "yd": .yards, "yard": .yards, "yards": .yards
+        ]
+        return map[token]
+    }
 
-        switch to {
-        case "c", "°c", "celsius": return celsius
-        case "f", "°f", "fahrenheit": return celsius * 9 / 5 + 32
-        case "k", "kelvin": return celsius + 273.15
-        default: return value
-        }
+    private func areaUnit(_ raw: String) -> UnitArea? {
+        let token = normalizeToken(raw)
+        let map: [String: UnitArea] = [
+            "sqm": .squareMeters, "m²": .squareMeters, "sqmeters": .squareMeters, "squaremeter": .squareMeters, "squaremeters": .squareMeters, "squarem": .squareMeters,
+            "sqcm": .squareCentimeters, "cm²": .squareCentimeters, "squarecentimeter": .squareCentimeters, "squarecentimeters": .squareCentimeters, "squarecm": .squareCentimeters,
+            "sqmm": .squareMillimeters, "mm²": .squareMillimeters, "squaremillimeter": .squareMillimeters, "squaremillimeters": .squareMillimeters, "squaremm": .squareMillimeters,
+            "ha": .hectares, "hectare": .hectares, "hectares": .hectares,
+            "sqkm": .squareKilometers, "km²": .squareKilometers, "squarekilometer": .squareKilometers, "squarekilometers": .squareKilometers, "squarekm": .squareKilometers,
+            "sqft": .squareFeet, "ft²": .squareFeet, "squarefoot": .squareFeet, "squarefeet": .squareFeet, "squareft": .squareFeet,
+            "sqin": .squareInches, "in²": .squareInches, "squareinch": .squareInches, "squareinches": .squareInches, "squarein": .squareInches,
+            "sqyd": .squareYards, "yd²": .squareYards, "squareyard": .squareYards, "squareyards": .squareYards, "squareyd": .squareYards,
+            "sqmi": .squareMiles, "mi²": .squareMiles, "squaremile": .squareMiles, "squaremiles": .squareMiles, "squaremi": .squareMiles,
+            "acre": .acres, "acres": .acres,
+            "are": .ares, "ares": .ares
+        ]
+        return map[token]
+    }
+
+    private func volumeUnit(_ raw: String) -> UnitVolume? {
+        let token = normalizeToken(raw)
+        let map: [String: UnitVolume] = [
+            "l": .liters, "liter": .liters, "litre": .liters, "liters": .liters, "litres": .liters,
+            "ml": .milliliters, "milliliter": .milliliters, "millilitre": .milliliters, "milliliters": .milliliters, "millilitres": .milliliters,
+            "m³": .cubicMeters, "cubicmeter": .cubicMeters, "cubicmeters": .cubicMeters,
+            "cm³": .cubicCentimeters, "cc": .cubicCentimeters, "cubiccentimeter": .cubicCentimeters, "cubiccentimeters": .cubicCentimeters,
+            "mm³": .cubicMillimeters, "cubicmillimeter": .cubicMillimeters, "cubicmillimeters": .cubicMillimeters,
+            "gal": .gallons, "gallon": .gallons, "gallons": .gallons,
+            "qt": .quarts, "quart": .quarts, "quarts": .quarts,
+            "pt": .pints, "pint": .pints, "pints": .pints,
+            "cup": .cups, "cups": .cups,
+            "floz": .fluidOunces, "flozs": .fluidOunces, "fluidounce": .fluidOunces, "fluidounces": .fluidOunces,
+            "tbsp": .tablespoons, "tablespoon": .tablespoons, "tablespoons": .tablespoons,
+            "tsp": .teaspoons, "teaspoon": .teaspoons, "teaspoons": .teaspoons,
+            "in³": .cubicInches, "cubicinch": .cubicInches, "cubicinches": .cubicInches,
+            "ft³": .cubicFeet, "cubicfoot": .cubicFeet, "cubicfeet": .cubicFeet,
+            "yd³": .cubicYards, "cubicyard": .cubicYards, "cubicyards": .cubicYards
+        ]
+        return map[token]
+    }
+
+    private func massUnit(_ raw: String) -> UnitMass? {
+        let token = normalizeToken(raw)
+        let map: [String: UnitMass] = [
+            "kg": .kilograms, "kgs": .kilograms, "kilogram": .kilograms, "kilograms": .kilograms,
+            "g": .grams, "gs": .grams, "gram": .grams, "grams": .grams,
+            "mg": .milligrams, "milligram": .milligrams, "milligrams": .milligrams,
+            "µg": .micrograms, "ug": .micrograms, "mcg": .micrograms, "microgram": .micrograms, "micrograms": .micrograms,
+            "t": .metricTons, "tonne": .metricTons, "tonnes": .metricTons, "metricton": .metricTons, "metrictons": .metricTons,
+            "lb": .pounds, "lbs": .pounds, "pound": .pounds, "pounds": .pounds,
+            "oz": .ounces, "ozs": .ounces, "ounce": .ounces, "ounces": .ounces,
+            "st": .stones, "stone": .stones, "stones": .stones
+        ]
+        return map[token]
+    }
+
+    private func temperatureUnit(_ raw: String) -> UnitTemperature? {
+        let token = normalizeToken(raw)
+        let map: [String: UnitTemperature] = [
+            "c": .celsius, "°c": .celsius, "celsius": .celsius, "centigrade": .celsius,
+            "f": .fahrenheit, "°f": .fahrenheit, "fahrenheit": .fahrenheit,
+            "k": .kelvin, "kelvin": .kelvin, "kelvins": .kelvin
+        ]
+        return map[token]
     }
 
     // MARK: - Currency Conversion
@@ -109,8 +205,8 @@ final class Converter {
     private var ratesTimestamp: Date = .distantPast
 
     private func convertCurrency(value: Double, from: String, to: String) -> String? {
-        // Only attempt for 3-letter currency codes
-        guard from.count == 3, to.count == 3,
+        guard from.count == 3,
+              to.count == 3,
               from.allSatisfy({ $0.isUppercase }),
               to.allSatisfy({ $0.isUppercase }) else {
             return nil
@@ -124,7 +220,7 @@ final class Converter {
         fetchRates(base: from) { rates in
             if let rate = rates[to] {
                 let converted = value * rate
-                result = String(format: "%.2f %@", converted, to.uppercased())
+                result = "\(self.formatNumber(converted)) \(to)"
             }
             group.leave()
         }
@@ -135,13 +231,12 @@ final class Converter {
     }
 
     private func fetchRates(base: String, completion: @escaping ([String: Double]) -> Void) {
-        // Use cache if fresh (< 1 hour)
         if ratesBase == base && Date().timeIntervalSince(ratesTimestamp) < 3600 && !cachedRates.isEmpty {
             completion(cachedRates)
             return
         }
 
-        let urlStr = "https://api.exchangerate.host/latest?base=\(base.uppercased())"
+        let urlStr = "https://api.exchangerate.host/latest?base=\(base)"
         guard let url = URL(string: urlStr) else {
             completion([:])
             return
@@ -163,16 +258,52 @@ final class Converter {
 
     // MARK: - Helpers
 
-    private func normalize(_ unit: String) -> String {
-        unit.lowercased()
-            .replacingOccurrences(of: "°", with: "")
-            .replacingOccurrences(of: "s$", with: "", options: .regularExpression)
+    private func currencyFromSymbol(_ token: String) -> String {
+        switch token.trimmingCharacters(in: .whitespaces) {
+        case "$": return "USD"
+        case "€": return "EUR"
+        case "£": return "GBP"
+        case "¥", "￥": return "JPY"
+        default: return ""
+        }
+    }
+
+    private func normalizeCurrency(_ token: String) -> String {
+        let value = token
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        if value.count == 3, value.allSatisfy({ $0.isLetter }) {
+            return value
+        }
+
+        return ""
+    }
+
+    private func normalizeToken(_ token: String) -> String {
+        token
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "°", with: "°")
+            .replacingOccurrences(of: " ", with: "")
     }
 
     private func formatResult(_ value: Double, unit: String) -> String {
-        if value == floor(value) && abs(value) < 1e9 {
-            return "\(Int64(value)) \(unit)"
+        "\(formatNumber(value)) \(unit)"
+    }
+
+    private func formatNumber(_ value: Double) -> String {
+        if value == floor(value) {
+            return String(Int64(value))
         }
-        return String(format: "%.4g %@", value, unit)
+
+        var formatted = String(format: "%.6f", value)
+        while formatted.last == "0" {
+            formatted.removeLast()
+        }
+        if formatted.last == "." {
+            formatted.removeLast()
+        }
+        return formatted
     }
 }

@@ -16,6 +16,10 @@ final class DatabaseManager {
     private init() {}
 
     func setup() {
+        if dbQueue != nil {
+            return
+        }
+
         do {
             var config = Configuration()
             config.prepareDatabase { db in
@@ -30,8 +34,12 @@ final class DatabaseManager {
     }
 
     func getDBQueue() -> DatabaseQueue {
+        if dbQueue == nil {
+            setup()
+        }
+
         guard let db = dbQueue else {
-            fatalError("Database not initialized. Call setup() first.")
+            fatalError("Database initialization failed.")
         }
         return db
     }

@@ -54,6 +54,12 @@ final class AlphaNoteTests: XCTestCase {
         XCTAssertEqual(evaluator.evaluate("100 - 20% of 50"), 90.0)
     }
 
+    func testAlternateOperatorForms() {
+        XCTAssertEqual(evaluator.evaluate("2 x 3"), 6.0)
+        XCTAssertEqual(evaluator.evaluate("8 ÷ 2"), 4.0)
+        XCTAssertEqual(evaluator.evaluate("2 ** 3"), 8.0)
+    }
+
     // MARK: - Converter
 
     let converter = Converter()

@@ -18,7 +18,7 @@ struct NoteListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .gesture(
+        .simultaneousGesture(
             DragGesture(minimumDistance: 30)
                 .onEnded { value in
                     let horizontalAmount = value.translation.width
