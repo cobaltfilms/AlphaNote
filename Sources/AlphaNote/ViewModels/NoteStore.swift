@@ -6,7 +6,8 @@ final class NoteStore: ObservableObject {
     @Published var notes: [Note] = []
     @Published var archivedNotes: [Note] = []
     @Published var currentIndex: Int = 0
-    @AppStorage("archivedNoteIDs") private var archivedNoteIDsStorage: String = "[]"
+    @AppStorage("archivedNoteIDs") private var legacyArchivedNoteIDsStorage: String = "[]"
+    @AppStorage("archivedIDsMigratedToDatabase") private var archivedIDsMigratedToDatabase: Bool = false
 
     var currentNote: Note? {
         guard !notes.isEmpty, currentIndex >= 0, currentIndex < notes.count else {
@@ -16,6 +17,7 @@ final class NoteStore: ObservableObject {
     }
 
     func loadNotes() {
+        migrateLegacyArchiveIDsIfNeeded()
         reloadNotes()
         repairListNotesIfNeeded()
     }
@@ -28,6 +30,7 @@ final class NoteStore: ObservableObject {
             reloadNotes()
             return
         }
+        SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: createdID)
     }
 
@@ -37,32 +40,35 @@ final class NoteStore: ObservableObject {
     }
 
     func isArchived(_ note: Note) -> Bool {
-        guard let id = note.id else { return false }
-        return archivedNoteIDs.contains(id)
+        note.archived
     }
 
     func archiveNote(_ note: Note) {
-        guard let id = note.id else { return }
-        var ids = archivedNoteIDs
-        ids.insert(id)
-        setArchivedNoteIDs(ids)
-        let nextSelection = adjacentNoteID(forDeletedNoteID: id)
+        var updated = note
+        updated.archived = true
+        updateNote(updated)
+        let nextSelection = adjacentNoteID(forDeletedNoteID: note.id)
         reloadNotes(selecting: nextSelection)
     }
 
     func unarchiveNote(_ note: Note) {
-        guard let id = note.id else { return }
-        var ids = archivedNoteIDs
-        ids.remove(id)
-        setArchivedNoteIDs(ids)
-        reloadNotes(selecting: id)
+        var updated = note
+        updated.archived = false
+        updateNote(updated)
+        reloadNotes(selecting: note.id)
     }
 
     func duplicateNote(_ note: Note) {
         var duplicated = note
         duplicated.id = nil
+        duplicated.uuid = UUID().uuidString.lowercased()
         duplicated.createdAt = Date()
         duplicated.updatedAt = Date()
+        duplicated.archived = false
+        duplicated.isDeleted = false
+        duplicated.deletedAt = nil
+        duplicated.lastSyncedAt = nil
+        duplicated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
         let allPositions = (notes + archivedNotes).map(\.position)
         duplicated.position = (allPositions.max() ?? -1) + 1
 
@@ -72,12 +78,7 @@ final class NoteStore: ObservableObject {
             return
         }
 
-        // Safety: a newly duplicated note must always start as active (not archived),
-        // even if a stale archived ID set exists from old data.
-        var ids = archivedNoteIDs
-        ids.remove(createdID)
-        setArchivedNoteIDs(ids)
-
+        SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: createdID)
     }
 
@@ -117,6 +118,7 @@ final class NoteStore: ObservableObject {
         Note.update(note)
         var updated = note
         updated.detectKeyword()
+        updated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
 
         if let index = notes.firstIndex(where: { $0.id == note.id }) {
             notes[index] = updated
@@ -124,16 +126,13 @@ final class NoteStore: ObservableObject {
         if let index = archivedNotes.firstIndex(where: { $0.id == note.id }) {
             archivedNotes[index] = updated
         }
+        SyncEngine.shared.notifyLocalChange()
     }
 
     func deleteNote(_ note: Note) {
         let nextSelection = adjacentNoteID(forDeletedNoteID: note.id)
-        if let id = note.id {
-            var ids = archivedNoteIDs
-            ids.remove(id)
-            setArchivedNoteIDs(ids)
-        }
         Note.delete(note)
+        SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: nextSelection)
     }
 
@@ -216,22 +215,8 @@ final class NoteStore: ObservableObject {
 
     private func reloadNotes(selecting selectedID: Int64? = nil) {
         let allNotes = Note.fetchAll()
-        let allIDs = Set(allNotes.compactMap(\.id))
-        let archivedIDs = archivedNoteIDs.intersection(allIDs)
-
-        // Keep archive metadata consistent with existing notes only.
-        if archivedIDs != archivedNoteIDs {
-            setArchivedNoteIDs(archivedIDs)
-        }
-
-        notes = allNotes.filter { note in
-            guard let id = note.id else { return true }
-            return !archivedIDs.contains(id)
-        }
-        archivedNotes = allNotes.filter { note in
-            guard let id = note.id else { return false }
-            return archivedIDs.contains(id)
-        }
+        notes = allNotes.filter { !$0.archived }
+        archivedNotes = allNotes.filter { $0.archived }
 
         if notes.isEmpty {
             let created = Note.create(Note(position: 0))
@@ -249,20 +234,42 @@ final class NoteStore: ObservableObject {
         currentIndex = min(max(currentIndex, 0), notes.count - 1)
     }
 
-    private var archivedNoteIDs: Set<Int64> {
-        guard let data = archivedNoteIDsStorage.data(using: .utf8),
+    private var legacyArchivedNoteIDs: Set<Int64> {
+        guard let data = legacyArchivedNoteIDsStorage.data(using: .utf8),
               let ids = try? JSONDecoder().decode([Int64].self, from: data) else {
             return []
         }
         return Set(ids)
     }
 
-    private func setArchivedNoteIDs(_ ids: Set<Int64>) {
+    private func setLegacyArchivedNoteIDs(_ ids: Set<Int64>) {
         let sorted = ids.sorted()
         if let data = try? JSONEncoder().encode(sorted),
            let json = String(data: data, encoding: .utf8) {
-            archivedNoteIDsStorage = json
+            legacyArchivedNoteIDsStorage = json
         }
+    }
+
+    private func migrateLegacyArchiveIDsIfNeeded() {
+        guard !archivedIDsMigratedToDatabase else { return }
+
+        let archivedIDs = legacyArchivedNoteIDs
+        guard !archivedIDs.isEmpty else {
+            archivedIDsMigratedToDatabase = true
+            return
+        }
+
+        let existing = Note.fetchAllIncludingDeleted()
+        for var note in existing where archivedIDs.contains(note.id ?? -1) {
+            if note.archived {
+                continue
+            }
+            note.archived = true
+            Note.update(note)
+        }
+
+        setLegacyArchivedNoteIDs([])
+        archivedIDsMigratedToDatabase = true
     }
 
     private func repairListNotesIfNeeded() {
@@ -320,6 +327,7 @@ final class NoteStore: ObservableObject {
             : notes[safe: currentIndex - 1]?.id
 
         Note.delete(current)
+        SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: preferredID ?? fallbackID)
         return true
     }

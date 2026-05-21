@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     var body: some View {
@@ -23,7 +24,7 @@ struct SettingsView: View {
                     Label("Advanced", systemImage: "wrench.and.screwdriver")
                 }
         }
-        .frame(width: 450, height: 300)
+        .frame(width: 580, height: 440)
     }
 }
 
@@ -116,16 +117,74 @@ struct KeywordSettingsView: View {
 // MARK: - Advanced
 
 struct AdvancedSettingsView: View {
-    @AppStorage("databaseLocation") private var databaseLocation = "~/Application Support/AlphaNote"
+    @ObservedObject private var syncEngine = SyncEngine.shared
+
+    @AppStorage(DatabaseManager.databaseLocationUserDefaultsKey)
+    private var databaseLocation = DatabaseManager.defaultDatabaseDirectoryPath()
+    @AppStorage(SyncEngine.syncEnabledKey) private var syncEnabled = false
+    @AppStorage(SyncEngine.syncIntervalMinutesKey) private var syncIntervalMinutes = 5
+    @AppStorage(SyncEngine.nextcloudServerURLKey) private var nextcloudServerURL = ""
+    @AppStorage(SyncEngine.nextcloudUsernameKey) private var nextcloudUsername = ""
+
+    @State private var appPassword = ""
+    @State private var feedbackMessage: String?
+    @State private var feedbackIsError = false
+    @State private var isTestingConnection = false
 
     var body: some View {
         Form {
-            TextField("Database location", text: $databaseLocation)
+            Section {
+                TextField("Database location", text: $databaseLocation)
+            } header: {
+                Text("Database")
+            }
+
+            Section {
+                Toggle("Enable cloud sync", isOn: $syncEnabled)
+                    .onChange(of: syncEnabled) {
+                        SyncEngine.shared.configureTimer()
+                        if syncEnabled {
+                            SyncEngine.shared.runManualSync()
+                        }
+                    }
+
+                TextField("Server URL", text: $nextcloudServerURL)
+
+                TextField("Username", text: $nextcloudUsername)
+
+                SecureField("App password", text: $appPassword)
+
+                Stepper("Sync interval: \(syncIntervalMinutes) min", value: $syncIntervalMinutes, in: 1...60)
+                    .onChange(of: syncIntervalMinutes) {
+                        SyncEngine.shared.configureTimer()
+                    }
+
+                HStack {
+                    Button(isTestingConnection ? "Testing..." : "Test connection") {
+                        Task { await testConnection() }
+                    }
+                    .disabled(isTestingConnection)
+
+                    Button("Sync now") {
+                        Task { await triggerManualSync() }
+                    }
+                    .disabled(!syncEnabled)
+
+                    Spacer()
+                }
+
+                Text(statusLine)
+                    .font(.system(size: 12))
+                    .foregroundStyle(statusColor)
+            } header: {
+                Text("Cloud Sync (Nextcloud)")
+            }
+
             HStack {
                 Spacer()
                 Button("Reveal in Finder") {
-                    let url = URL(fileURLWithPath: databaseLocation.replacingOccurrences(of: "~", with: NSHomeDirectory()))
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
+                    let resolvedPath = DatabaseManager.resolveDatabaseDirectoryPath(databaseLocation)
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: resolvedPath)
                 }
                 Button("Export Data") {
                     let panel = NSSavePanel()
@@ -138,6 +197,10 @@ struct AdvancedSettingsView: View {
             }
         }
         .padding(20)
+        .onAppear {
+            loadStoredPassword()
+            syncIntervalMinutes = max(syncIntervalMinutes, 1)
+        }
     }
 
     private func exportData(to url: URL) {
@@ -147,6 +210,82 @@ struct AdvancedSettingsView: View {
             try data.write(to: url)
         } catch {
             print("[Settings] Export failed: \(error)")
+        }
+    }
+
+    private var statusLine: String {
+        if let feedbackMessage {
+            return feedbackMessage
+        }
+
+        switch syncEngine.status {
+        case .idle:
+            return "Status: idle"
+        case .syncing:
+            return "Status: syncing..."
+        case let .success(date):
+            return "Status: success (\(date.formatted(date: .abbreviated, time: .shortened)))"
+        case let .error(message):
+            return "Status: error - \(message)"
+        }
+    }
+
+    private var statusColor: Color {
+        if feedbackMessage != nil {
+            return feedbackIsError ? .red : .green
+        }
+
+        if case .error = syncEngine.status {
+            return .red
+        }
+        return .secondary
+    }
+
+    private func loadStoredPassword() {
+        do {
+            let loaded = try KeychainService.shared.readPassword(serverURL: nextcloudServerURL, username: nextcloudUsername)
+            appPassword = loaded ?? ""
+        } catch {
+            feedbackMessage = error.localizedDescription
+            feedbackIsError = true
+        }
+    }
+
+    private func persistPasswordIfPossible() throws {
+        let server = nextcloudServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = nextcloudUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !server.isEmpty, !username.isEmpty else { return }
+        guard !appPassword.isEmpty else { return }
+        try KeychainService.shared.savePassword(appPassword, serverURL: server, username: username)
+    }
+
+    private func testConnection() async {
+        feedbackMessage = nil
+        feedbackIsError = false
+        isTestingConnection = true
+        defer { isTestingConnection = false }
+
+        do {
+            try persistPasswordIfPossible()
+            try await SyncEngine.shared.testConnection()
+            feedbackMessage = "Connection successful."
+            feedbackIsError = false
+        } catch {
+            feedbackMessage = error.localizedDescription
+            feedbackIsError = true
+        }
+    }
+
+    private func triggerManualSync() async {
+        do {
+            feedbackMessage = nil
+            feedbackIsError = false
+            try persistPasswordIfPossible()
+            SyncEngine.shared.runManualSync()
+        } catch {
+            feedbackMessage = error.localizedDescription
+            feedbackIsError = true
         }
     }
 }

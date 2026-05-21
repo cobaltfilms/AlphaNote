@@ -90,4 +90,77 @@ final class AlphaNoteTests: XCTestCase {
             XCTAssertTrue(result.contains("2.2"), "Got: \(result)")
         }
     }
+
+    // MARK: - Sync merge
+
+    func testSyncConflictChoosesMostRecentUpdate() {
+        let older = CloudNoteDTO(
+            note: Note(
+                uuid: "11111111-1111-1111-1111-111111111111",
+                content: "old",
+                updatedAt: Date(timeIntervalSince1970: 100),
+                lastModifiedByDeviceId: "device-a"
+            )
+        )
+        let newer = CloudNoteDTO(
+            note: Note(
+                uuid: "11111111-1111-1111-1111-111111111111",
+                content: "new",
+                updatedAt: Date(timeIntervalSince1970: 200),
+                lastModifiedByDeviceId: "device-b"
+            )
+        )
+
+        let winner = SyncEngine.resolveConflict(older, newer)
+        XCTAssertEqual(winner.content, "new")
+    }
+
+    func testSyncConflictTieBreaksByDeviceID() {
+        let sameDate = Date(timeIntervalSince1970: 100)
+        let lhs = CloudNoteDTO(
+            note: Note(
+                uuid: "22222222-2222-2222-2222-222222222222",
+                content: "from-a",
+                updatedAt: sameDate,
+                lastModifiedByDeviceId: "aaa-device"
+            )
+        )
+        let rhs = CloudNoteDTO(
+            note: Note(
+                uuid: "22222222-2222-2222-2222-222222222222",
+                content: "from-z",
+                updatedAt: sameDate,
+                lastModifiedByDeviceId: "zzz-device"
+            )
+        )
+
+        let winner = SyncEngine.resolveConflict(lhs, rhs)
+        XCTAssertEqual(winner.content, "from-a")
+    }
+
+    func testSyncConflictDeletedWinsWhenTimestampEqual() {
+        let sameDate = Date(timeIntervalSince1970: 100)
+        let active = CloudNoteDTO(
+            note: Note(
+                uuid: "33333333-3333-3333-3333-333333333333",
+                content: "active",
+                isDeleted: false,
+                updatedAt: sameDate,
+                lastModifiedByDeviceId: "same-device"
+            )
+        )
+        let deleted = CloudNoteDTO(
+            note: Note(
+                uuid: "33333333-3333-3333-3333-333333333333",
+                content: "active",
+                isDeleted: true,
+                deletedAt: sameDate,
+                updatedAt: sameDate,
+                lastModifiedByDeviceId: "same-device"
+            )
+        )
+
+        let winner = SyncEngine.resolveConflict(active, deleted)
+        XCTAssertTrue(winner.isDeleted)
+    }
 }

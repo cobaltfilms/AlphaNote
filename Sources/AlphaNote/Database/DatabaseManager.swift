@@ -3,14 +3,36 @@ import GRDB
 
 final class DatabaseManager {
     static let shared = DatabaseManager()
+    static let databaseLocationUserDefaultsKey = "databaseLocation"
+    static let defaultDatabaseFilename = "alph note.sqlite"
 
     private var dbQueue: DatabaseQueue?
 
-    private var databaseURL: URL {
+    var databaseFileURL: URL {
+        databaseDirectoryURL.appendingPathComponent(Self.defaultDatabaseFilename)
+    }
+
+    var databaseDirectoryURL: URL {
+        let storedPath = UserDefaults.standard.string(forKey: Self.databaseLocationUserDefaultsKey)
+        let resolvedPath = Self.resolveDatabaseDirectoryPath(storedPath)
+        let directoryURL = URL(fileURLWithPath: resolvedPath, isDirectory: true)
+        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        return directoryURL
+    }
+
+    static func defaultDatabaseDirectoryPath() -> String {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("AlphaNote", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("alph note.sqlite")
+        return appSupport.appendingPathComponent("AlphaNote", isDirectory: true).path
+    }
+
+    static func resolveDatabaseDirectoryPath(_ raw: String?) -> String {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let candidate = trimmed.isEmpty ? defaultDatabaseDirectoryPath() : trimmed
+        return (candidate as NSString).expandingTildeInPath
+    }
+
+    private var databaseURL: URL {
+        databaseFileURL
     }
 
     private init() {}
@@ -69,6 +91,30 @@ final class DatabaseManager {
                 t.primaryKey("key", .text)
                 t.column("value", .text).notNull().defaults(to: "")
             }
+        }
+
+        migrator.registerMigration("v2_sync") { db in
+            try db.alter(table: "note") { t in
+                t.add(column: "uuid", .text)
+                t.add(column: "archived", .boolean).notNull().defaults(to: false)
+                t.add(column: "isDeleted", .boolean).notNull().defaults(to: false)
+                t.add(column: "deletedAt", .datetime)
+                t.add(column: "lastSyncedAt", .datetime)
+                t.add(column: "lastModifiedByDeviceId", .text).notNull().defaults(to: "")
+            }
+
+            let rows = try Row.fetchAll(db, sql: "SELECT id FROM note WHERE uuid IS NULL OR trim(uuid) = ''")
+            for row in rows {
+                let id: Int64 = row["id"]
+                try db.execute(
+                    sql: "UPDATE note SET uuid = ? WHERE id = ?",
+                    arguments: [UUID().uuidString.lowercased(), id]
+                )
+            }
+
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_note_uuid ON note(uuid)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_note_isDeleted ON note(isDeleted)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_note_updatedAt ON note(updatedAt)")
         }
 
         try migrator.migrate(dbQueue)

@@ -37,6 +37,9 @@ struct NoteListView: View {
         .onReceive(NotificationCenter.default.publisher(for: .alphaNoteConvertToList)) { _ in
             store.convertCurrentNoteToList()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .alphaNoteDidSync)) { _ in
+            store.loadNotes()
+        }
     }
 
     private var sidebar: some View {
@@ -416,4 +419,5 @@ extension Notification.Name {
     static let alphaNoteCreateNote = Notification.Name("alphaNoteCreateNote")
     static let alphaNoteToggleSidebar = Notification.Name("alphaNoteToggleSidebar")
     static let alphaNoteConvertToList = Notification.Name("alphaNoteConvertToList")
+    static let alphaNoteDidSync = Notification.Name("alphaNoteDidSync")
 }

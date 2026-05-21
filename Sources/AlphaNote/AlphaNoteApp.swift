@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DatabaseManager.shared.setup()
+        SyncEngine.shared.start()
         _ = NSApp.setActivationPolicy(.regular)
         configureDockIcon()
 
