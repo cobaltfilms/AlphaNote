@@ -640,6 +640,9 @@ final class NoteStore: ObservableObject {
                (lower.hasPrefix("voici ") || lower.contains("liste des ingredients") || lower.contains("liste d'ingredients")) {
                 continue
             }
+            if isLikelyPromptLeakLine(line) {
+                continue
+            }
 
             if !seen.contains(lower) {
                 items.append(line)
@@ -648,6 +651,53 @@ final class NoteStore: ObservableObject {
         }
 
         return items
+    }
+
+    private func isLikelyPromptLeakLine(_ line: String) -> Bool {
+        let folded = line.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+
+        let directMarkers = [
+            "[note active prioritaire]",
+            "[source url]",
+            "[web search]",
+            "looking at the provided notes",
+            "notes pertinentes",
+            "contexte produit alphanote",
+            "the user provided",
+            "same as the one the user provided"
+        ]
+        if directMarkers.contains(where: { folded.contains($0) }) {
+            return true
+        }
+
+        let headingMarkers = [
+            "question:",
+            "important:",
+            "notes pertinentes:",
+            "sources:",
+            "reponse:",
+            "réponse:"
+        ]
+        if headingMarkers.contains(where: { folded == $0 || folded.hasPrefix($0) }) {
+            return true
+        }
+
+        if folded.count > 110 {
+            let reasoningMarkers = [
+                "the user",
+                "we need to",
+                "i need to",
+                "let's",
+                "l'utilisateur",
+                "je vais",
+                "je dois"
+            ]
+            if reasoningMarkers.contains(where: { folded.contains($0) }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func applySemanticOperation(result: AIResult, question: String) -> String? {
@@ -672,8 +722,11 @@ final class NoteStore: ObservableObject {
         case "list":
             let payload = content.isEmpty ? responseText : content
             guard !payload.isEmpty else { return nil }
+            let items = listItems(from: payload)
+            guard !items.isEmpty else { return nil }
+            let normalizedList = items.map { "* \($0)" }.joined(separator: "\n")
             convertSemanticAnswerToListOnCurrentNote(
-                payload,
+                normalizedList,
                 titleHint: title.isEmpty ? question : title,
                 refinementPrompt: question
             )

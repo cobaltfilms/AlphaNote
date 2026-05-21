@@ -264,4 +264,25 @@ final class AlphaNoteTests: XCTestCase {
         let urls = URLDetector.extractURLs(from: text)
         XCTAssertTrue(urls.contains(where: { $0.absoluteString.contains("elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190") }))
     }
+
+    func testSemanticParserSalvagesJSONWhenPrefixedByCommentary() throws {
+        let raw = """
+        Looking at the provided notes, here's the structured answer:
+        {
+          "answer": "Liste prête.",
+          "operation": {
+            "type": "list",
+            "content": "- riz\\n- poulet\\n- gingembre",
+            "title": "Courses"
+          },
+          "sources": ["url:https%3A%2F%2Fexample.com%2Frecipe"]
+        }
+        """
+
+        let result = try AIResponseParser.parse(raw, for: .semanticAnswer)
+        XCTAssertEqual(result.metadata["format"], "json_semantic")
+        XCTAssertEqual(result.metadata["operation_type"], "list")
+        XCTAssertEqual(result.metadata["operation_title"], "Courses")
+        XCTAssertEqual(result.metadata["operation_content"], "- riz\n- poulet\n- gingembre")
+    }
 }

@@ -68,8 +68,7 @@ enum AIResponseParser {
 
     private static func parseSemanticAnswer(_ raw: String) -> AIResult {
         let normalizedJSON = stripCodeFence(raw)
-        if let data = normalizedJSON.data(using: .utf8),
-           let payload = try? JSONDecoder().decode(SemanticPayload.self, from: data) {
+        if let payload = decodeSemanticPayload(from: normalizedJSON) {
             let answer = payload.answer.trimmingCharacters(in: .whitespacesAndNewlines)
             let operationType = payload.operation.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let operationContent = sanitize(payload.operation.content)
@@ -89,6 +88,76 @@ enum AIResponseParser {
         }
 
         return AIResult(text: raw, metadata: ["format": "text_fallback"])
+    }
+
+    private static func decodeSemanticPayload(from raw: String) -> SemanticPayload? {
+        if let direct = decodeSemanticPayloadCandidate(raw) {
+            return direct
+        }
+
+        if let candidate = extractJSONPayloadCandidate(from: raw),
+           let decoded = decodeSemanticPayloadCandidate(candidate) {
+            return decoded
+        }
+
+        return nil
+    }
+
+    private static func decodeSemanticPayloadCandidate(_ candidate: String) -> SemanticPayload? {
+        guard let data = candidate.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(SemanticPayload.self, from: data)
+    }
+
+    // Salvage JSON payload when local models prepend commentary before valid JSON.
+    private static func extractJSONPayloadCandidate(from raw: String) -> String? {
+        guard let start = raw.firstIndex(of: "{") else {
+            return nil
+        }
+
+        var depth = 0
+        var inString = false
+        var escaping = false
+
+        for index in raw.indices[start...] {
+            let ch = raw[index]
+
+            if inString {
+                if escaping {
+                    escaping = false
+                    continue
+                }
+                if ch == "\\" {
+                    escaping = true
+                    continue
+                }
+                if ch == "\"" {
+                    inString = false
+                }
+                continue
+            }
+
+            if ch == "\"" {
+                inString = true
+                continue
+            }
+
+            if ch == "{" {
+                depth += 1
+                continue
+            }
+
+            if ch == "}" {
+                depth -= 1
+                if depth == 0 {
+                    let candidate = String(raw[start...index]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    return candidate.isEmpty ? nil : candidate
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func parseModeRouting(_ raw: String) -> AIResult {
