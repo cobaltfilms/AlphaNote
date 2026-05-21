@@ -28,7 +28,10 @@ struct AlphaNoteApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager?
     private var windowController: NoteWindowController?
+    private var settingsWindowController: NSWindowController?
     private var statusItem: NSStatusItem?
+    private var savedNoteWindowLevel: NSWindow.Level?
+    private var observedSettingsWindows = Set<ObjectIdentifier>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DatabaseManager.shared.setup()
@@ -174,8 +177,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        demoteNoteWindowForSettings()
+
+        let didOpenWithSwiftUISettings =
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) ||
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+
+        if !didOpenWithSwiftUISettings {
+            showFallbackSettingsWindow()
+        }
+
+        _ = bringSettingsToFront()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self else { return }
+            let found = self.bringSettingsToFront()
+            if !found {
+                self.restoreNoteWindowLevelIfNeeded()
+            }
+        }
         NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func quitApp() {
@@ -186,6 +207,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let windowController else { return }
         NSApp.unhide(nil)
         windowController.showWindow()
+    }
+
+    private func showFallbackSettingsWindow() {
+        if let existingWindow = settingsWindowController?.window {
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let settingsView = SettingsView()
+        let hostingView = NSHostingView(rootView: settingsView)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 390),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Settings"
+        window.level = .modalPanel
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.contentView = hostingView
+
+        let controller = NSWindowController(window: window)
+        settingsWindowController = controller
+        attachSettingsCloseHandler(to: window)
+        controller.showWindow(nil)
+    }
+
+    @discardableResult
+    private func bringSettingsToFront() -> Bool {
+        let settingsWindows = NSApp.windows.filter { [weak self] window in
+            if window === self?.settingsWindowController?.window {
+                return true
+            }
+
+            let title = window.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let settingsLikeTitle =
+                title.contains("settings") ||
+                title.contains("preferences") ||
+                title.contains("réglages")
+
+            return settingsLikeTitle
+        }
+
+        guard !settingsWindows.isEmpty else { return false }
+
+        for window in settingsWindows {
+            window.level = .modalPanel
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            attachSettingsCloseHandler(to: window)
+        }
+        return true
+    }
+
+    private func demoteNoteWindowForSettings() {
+        guard let noteWindow = windowController?.window else { return }
+        if savedNoteWindowLevel == nil {
+            savedNoteWindowLevel = noteWindow.level
+        }
+        noteWindow.level = .normal
+    }
+
+    private func restoreNoteWindowLevelIfNeeded() {
+        guard let noteWindow = windowController?.window,
+              let previousLevel = savedNoteWindowLevel else {
+            return
+        }
+
+        noteWindow.level = previousLevel
+        savedNoteWindowLevel = nil
+    }
+
+    private func attachSettingsCloseHandler(to window: NSWindow) {
+        let id = ObjectIdentifier(window)
+        guard !observedSettingsWindows.contains(id) else { return }
+        observedSettingsWindows.insert(id)
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            if let closingWindow = notification.object as? NSWindow {
+                self.observedSettingsWindows.remove(ObjectIdentifier(closingWindow))
+            }
+            self.restoreNoteWindowLevelIfNeeded()
+        }
     }
 
     private func toggleWindow() {
