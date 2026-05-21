@@ -25,18 +25,32 @@ actor AIService: AIServiceProtocol {
             throw AIError.disabled
         }
 
-        let qualityRaw = UserDefaults.standard.string(forKey: AISettingsKeys.qualityMode) ?? AIQualityTier.balanced.rawValue
-        let quality = AIQualityTier(rawValue: qualityRaw) ?? .balanced
+        let qualityRaw = UserDefaults.standard.string(forKey: AISettingsKeys.qualityMode) ?? AIQualityTier.fast.rawValue
+        let quality = AIQualityTier(rawValue: qualityRaw) ?? .fast
 
         let selectedModelID = UserDefaults.standard.string(forKey: AISettingsKeys.selectedModelID)
         let customModelID = UserDefaults.standard
             .string(forKey: AISettingsKeys.customModelID)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let profile = AIModelRegistry.effectiveProfile(userModelID: selectedModelID, qualityTier: quality)
-        let effectiveModelID = customModelID.isEmpty ? profile.id : customModelID
+        let requestedProfile = AIModelRegistry.effectiveProfile(userModelID: selectedModelID, qualityTier: quality)
+        let swapUsedGB = AIModelDiagnostics.swapUsedGB()
+        let conservativeMode = UserDefaults.standard.object(forKey: AISettingsKeys.conservativePolicyEnabled) == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: AISettingsKeys.conservativePolicyEnabled)
+        let companionAwarenessEnabled = resolvedCompanionAwarenessEnabled()
+        let companionLLMRunning = companionAwarenessEnabled && AIModelDiagnostics.companionLLMStatus().isDetected
+        let resolvedProfile = requestedProfile
+        let effectiveModelID = customModelID.isEmpty ? resolvedProfile.id : customModelID
 
         let maxTokensSetting = UserDefaults.standard.integer(forKey: AISettingsKeys.maxTokens)
-        let maxTokens = max(128, maxTokensSetting == 0 ? profile.recommendedMaxTokens : maxTokensSetting)
+        let requestedMaxTokens = maxTokensSetting == 0 ? resolvedProfile.recommendedMaxTokens : maxTokensSetting
+        let maxTokens = AIModelRegistry.memorySafeMaxTokens(
+            requested: requestedMaxTokens,
+            profile: resolvedProfile,
+            swapUsedGB: swapUsedGB,
+            conservativeMode: conservativeMode,
+            companionLLMRunning: companionLLMRunning
+        )
 
         let prompt = AIPromptBuilder.prompt(for: task, note: note, context: context)
         let options = AIRequestOptions(
@@ -104,6 +118,61 @@ actor AIService: AIServiceProtocol {
         }
     }
 
+    func prepareModel(
+        modelID: String,
+        onProgress: @escaping @Sendable (String, Double?) -> Void
+    ) async -> Result<String, AIError> {
+        let normalized = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return .failure(.internalFailure("ID de modèle vide."))
+        }
+        guard let mlxEngine = mlxEngine as? MLXSwiftInferenceEngine else {
+            return .failure(.modelUnavailable)
+        }
+
+        do {
+            let output = try await mlxEngine.prepareModel(modelID: normalized) { rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !line.isEmpty else { return }
+                let percent = AIModelDiagnostics.parseProgressPercent(from: line)
+                if let friendly = AIModelDiagnostics.userFriendlyProgressLine(line) {
+                    onProgress(friendly, percent)
+                }
+            }
+            return .success(output)
+        } catch {
+            return .failure(mapError(error))
+        }
+    }
+
+    func unloadCurrentModel() async {
+        guard let mlxEngine = mlxEngine as? MLXSwiftInferenceEngine else {
+            return
+        }
+        await mlxEngine.unloadActiveModel()
+    }
+
+    func localModelStatus(modelID: String) -> AIModelLocalStatus {
+        AIModelDiagnostics.localStatus(for: modelID)
+    }
+
+    nonisolated func runtimeInfo() -> AIManagedRuntimeInfo {
+        AIManagedRuntime.diagnose()
+    }
+
+    func repairRuntimeWithUV(onProgress: @escaping @Sendable (String) -> Void) async -> Result<String, AIError> {
+        let result = await Task.detached(priority: .userInitiated) {
+            AIManagedRuntime.repairWithUV(onProgress: onProgress)
+        }.value
+
+        switch result {
+        case let .success(info):
+            return .success("Runtime IA prêt. \(info.summary)")
+        case let .failure(error):
+            return .failure(.internalFailure(error.localizedDescription))
+        }
+    }
+
     private func collect(stream: AsyncThrowingStream<String, Error>, timeout: TimeInterval) async throws -> String {
         try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
@@ -134,11 +203,25 @@ actor AIService: AIServiceProtocol {
 
     private func mapError(_ error: Error) -> AIError {
         if let aiError = error as? AIError {
+            if case let .internalFailure(message) = aiError {
+                return .internalFailure(AIModelDiagnostics.summarizedError(message))
+            }
             return aiError
         }
         if error is CancellationError {
             return .cancelled
         }
-        return .internalFailure(error.localizedDescription)
+        return .internalFailure(AIModelDiagnostics.summarizedError(error.localizedDescription))
+    }
+
+    private func resolvedCompanionAwarenessEnabled() -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: AISettingsKeys.companionAwarenessEnabled) != nil {
+            return defaults.bool(forKey: AISettingsKeys.companionAwarenessEnabled)
+        }
+        if defaults.object(forKey: AISettingsKeys.cotypistAwarenessEnabledLegacy) != nil {
+            return defaults.bool(forKey: AISettingsKeys.cotypistAwarenessEnabledLegacy)
+        }
+        return true
     }
 }

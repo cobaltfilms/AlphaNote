@@ -231,15 +231,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         demoteNoteWindowForSettings()
-
-        let didOpenWithSwiftUISettings =
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) ||
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-
-        if !didOpenWithSwiftUISettings {
-            showFallbackSettingsWindow()
-        }
-
+        // Always use an AppKit settings window to avoid SwiftUI Settings scene invalidation edge cases.
+        showFallbackSettingsWindow()
         _ = bringSettingsToFront()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self else { return }
@@ -291,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showWindowIfNeeded() {
+        ensureMainWindowController()
         guard let windowController else { return }
         NSApp.unhide(nil)
         windowController.showWindow()
@@ -387,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func toggleWindow() {
+        ensureMainWindowController()
         guard let windowController else { return }
 
         if windowController.window?.isVisible == true {
@@ -394,6 +389,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             NSApp.unhide(nil)
             windowController.showWindow()
+        }
+    }
+
+    private func ensureMainWindowController() {
+        if windowController == nil {
+            windowController = NoteWindowController()
         }
     }
 }

@@ -195,17 +195,13 @@ struct NoteListView: View {
                 TextField("Question IA sur tes notes", text: $questionDraft)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11))
+                    .submitLabel(.send)
+                    .onSubmit {
+                        askQuestionToCurrentNote()
+                    }
 
                 Button(isAnswering ? "..." : "Demander") {
-                    Task {
-                        isAnswering = true
-                        let askedNoteID = store.currentNote?.id
-                        semanticAnswer = await store.askNotes(question: questionDraft)
-                        if let noteID = askedNoteID {
-                            perNoteAnswer[noteID] = semanticAnswer
-                        }
-                        isAnswering = false
-                    }
+                    askQuestionToCurrentNote()
                 }
                 .buttonStyle(.plain)
                 .disabled(isAnswering || questionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -251,6 +247,21 @@ struct NoteListView: View {
     private var positionLabel: String {
         guard !store.notes.isEmpty else { return "0 / 0" }
         return "\(store.currentIndex + 1) / \(store.notes.count)"
+    }
+
+    private func askQuestionToCurrentNote() {
+        guard !isAnswering else { return }
+        let question = questionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else { return }
+        Task {
+            isAnswering = true
+            let askedNoteID = store.currentNote?.id
+            semanticAnswer = await store.askNotes(question: question)
+            if let noteID = askedNoteID {
+                perNoteAnswer[noteID] = semanticAnswer
+            }
+            isAnswering = false
+        }
     }
 
     private func title(for note: Note, index: Int) -> String {
