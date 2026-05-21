@@ -234,6 +234,7 @@ private struct MathColoringEditor: NSViewRepresentable {
             let lines = content.components(separatedBy: .newlines)
             var variables: [String: Double] = [:]
             var variableUnits: [String: String] = [:]
+            var percentVariables = Set<String>()
             var transformedLines: [String] = []
 
             for (index, line) in lines.enumerated() {
@@ -253,12 +254,25 @@ private struct MathColoringEditor: NSViewRepresentable {
                    let result = evaluateExpression(
                     assignment.expression,
                     variables: variables,
-                    variableUnits: variableUnits
+                    variableUnits: variableUnits,
+                    percentVariables: percentVariables
                    ),
                    let numeric = result.numericValue {
                     variables[assignment.name] = numeric
+                    let key = assignment.name.lowercased()
+                    let isRatioPercent = shouldTreatAsUnitlessRatio(
+                        expression: assignment.expression,
+                        variableUnits: variableUnits
+                    )
+                    if isPercentExpression(assignment.expression) || isRatioPercent {
+                        percentVariables.insert(key)
+                    } else {
+                        percentVariables.remove(key)
+                    }
                     if let unitHint = result.unitHint {
                         variableUnits[assignment.name] = unitHint
+                    } else {
+                        variableUnits.removeValue(forKey: assignment.name)
                     }
                     transformedLines.append(line)
                     continue
@@ -274,7 +288,9 @@ private struct MathColoringEditor: NSViewRepresentable {
                     if let result = evaluateExpression(
                         lhs,
                         variables: variables,
-                        variableUnits: variableUnits
+                        variableUnits: variableUnits,
+                        percentVariables: percentVariables,
+                        forcePercentOutput: percentVariables.contains(lhs.lowercased())
                     ) {
                         transformedLines.append("\(lhs) = \(result.display)")
                     } else {
@@ -335,9 +351,12 @@ private struct MathColoringEditor: NSViewRepresentable {
         private func evaluateExpression(
             _ expression: String,
             variables: [String: Double],
-            variableUnits: [String: String]
+            variableUnits: [String: String],
+            percentVariables: Set<String>,
+            forcePercentOutput: Bool = false
         ) -> MathEvaluationResult? {
-            let substituted = substituteVariables(in: expression, variables: variables)
+            let expanded = expandRelativePercentVariables(in: expression, percentVariables: percentVariables)
+            let substituted = substituteVariables(in: expanded, variables: variables)
 
             if let converted = converter.convert(substituted) {
                 let numeric = extractLeadingNumber(from: converted)
@@ -353,7 +372,11 @@ private struct MathColoringEditor: NSViewRepresentable {
             let combinedHints = explicitUnitHints.union(inferredVariableUnitHints)
 
             let preferredUnit = inferredVariableUnitHints.first ?? explicitUnitHints.first
-            let unitHint = resolveCompatibleUnitHint(hints: combinedHints, preferred: preferredUnit)
+            var unitHint = resolveCompatibleUnitHint(hints: combinedHints, preferred: preferredUnit)
+
+            if shouldTreatAsUnitlessRatio(expression: expression, variableUnits: variableUnits) {
+                unitHint = nil
+            }
 
             if combinedHints.count > 1, unitHint == nil {
                 return MathEvaluationResult(
@@ -370,8 +393,15 @@ private struct MathColoringEditor: NSViewRepresentable {
                 return nil
             }
 
+            let display: String
+            if forcePercentOutput {
+                display = "\(format(value * 100))%"
+            } else {
+                display = formatWithUnit(value, unitHint: unitHint)
+            }
+
             return MathEvaluationResult(
-                display: formatWithUnit(value, unitHint: unitHint),
+                display: display,
                 numericValue: value,
                 unitHint: unitHint
             )
@@ -384,7 +414,13 @@ private struct MathColoringEditor: NSViewRepresentable {
             for name in sortedNames {
                 guard let value = variables[name] else { continue }
                 let escapedName = NSRegularExpression.escapedPattern(for: name)
-                let pattern = "(?<![\\p{L}\\p{N}_])\(escapedName)(?![\\p{L}\\p{N}_])"
+                let pattern: String
+                if name.contains(where: { $0.isWhitespace }) {
+                    pattern = "(?<![\\p{L}\\p{N}_])\(escapedName)(?![\\p{L}\\p{N}_])"
+                } else {
+                    // Avoid replacing a short variable name when it is likely part of a multi-word name.
+                    pattern = "(?<![\\p{L}\\p{N}_])\(escapedName)(?![\\p{L}\\p{N}_]|\\s+[\\p{L}_])"
+                }
 
                 guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
                     continue
@@ -399,6 +435,98 @@ private struct MathColoringEditor: NSViewRepresentable {
             }
 
             return resolved
+        }
+
+        private func isPercentExpression(_ expression: String) -> Bool {
+            expression.contains("%")
+        }
+
+        private func expandRelativePercentVariables(
+            in expression: String,
+            percentVariables: Set<String>
+        ) -> String {
+            guard !percentVariables.isEmpty else { return expression }
+
+            let parts = splitTopLevelAddSub(expression)
+            guard !parts.operators.isEmpty else { return expression }
+
+            var result = parts.terms[0]
+            for (index, op) in parts.operators.enumerated() {
+                let rhs = parts.terms[index + 1]
+                if isPercentVariableTerm(rhs, percentVariables: percentVariables) {
+                    result = "(\(result) \(op) (\(result) * \(rhs)))"
+                } else {
+                    result = "(\(result) \(op) \(rhs))"
+                }
+            }
+
+            return result
+        }
+
+        private func splitTopLevelAddSub(_ expression: String) -> (terms: [String], operators: [String]) {
+            var terms: [String] = []
+            var operators: [String] = []
+            var depth = 0
+            var current = ""
+            var previousNonSpace: Character?
+
+            for char in expression {
+                if char == "(" {
+                    depth += 1
+                    current.append(char)
+                    previousNonSpace = char
+                    continue
+                }
+
+                if char == ")" {
+                    depth = max(0, depth - 1)
+                    current.append(char)
+                    previousNonSpace = char
+                    continue
+                }
+
+                if depth == 0, char == "+" || char == "-" {
+                    let isUnary = previousNonSpace == nil || previousNonSpace == "(" ||
+                        previousNonSpace == "+" || previousNonSpace == "-" ||
+                        previousNonSpace == "*" || previousNonSpace == "/" || previousNonSpace == "^"
+
+                    if !isUnary {
+                        terms.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
+                        operators.append(String(char))
+                        current = ""
+                        previousNonSpace = nil
+                        continue
+                    }
+                }
+
+                current.append(char)
+                if !char.isWhitespace {
+                    previousNonSpace = char
+                }
+            }
+
+            terms.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
+            return (terms, operators)
+        }
+
+        private func isPercentVariableTerm(_ term: String, percentVariables: Set<String>) -> Bool {
+            var candidate = term.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            while candidate.hasPrefix("("), candidate.hasSuffix(")"), candidate.count >= 2 {
+                candidate.removeFirst()
+                candidate.removeLast()
+                candidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            guard let regex = try? NSRegularExpression(pattern: "^[A-Za-z_][A-Za-z0-9_]*$"),
+                  regex.firstMatch(
+                    in: candidate,
+                    range: NSRange(candidate.startIndex..., in: candidate)
+                  ) != nil else {
+                return false
+            }
+
+            return percentVariables.contains(candidate.lowercased())
         }
 
         private func sanitizeMathExpression(_ expression: String) -> String {
@@ -457,20 +585,56 @@ private struct MathColoringEditor: NSViewRepresentable {
         }
 
         private func inferVariableUnitHints(in expression: String, variableUnits: [String: String]) -> Set<String> {
-            let names = variableNamesInExpression(expression)
-            let hints = names.compactMap { variableUnits[$0] }.compactMap { canonicalUnitToken($0) }
-            return Set(hints)
+            var hints = Set<String>()
+
+            for (name, unit) in variableUnits {
+                let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedName.isEmpty else { continue }
+
+                let escapedName = NSRegularExpression.escapedPattern(for: trimmedName)
+                let pattern = "(?<![\\p{L}\\p{N}_])\(escapedName)(?![\\p{L}\\p{N}_])"
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                    continue
+                }
+
+                let range = NSRange(expression.startIndex..., in: expression)
+                if regex.firstMatch(in: expression, options: [], range: range) != nil,
+                   let canonical = canonicalUnitToken(unit) {
+                    hints.insert(canonical)
+                }
+            }
+
+            return hints
         }
 
-        private func variableNamesInExpression(_ expression: String) -> [String] {
-            guard let regex = try? NSRegularExpression(pattern: "[A-Za-z_][A-Za-z0-9_]*") else {
-                return []
+        private func shouldTreatAsUnitlessRatio(expression: String, variableUnits: [String: String]) -> Bool {
+            guard expression.contains("/") else { return false }
+
+            var matchedCanonicals: [String] = []
+            for (name, unit) in variableUnits {
+                let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedName.isEmpty else { continue }
+
+                let escapedName = NSRegularExpression.escapedPattern(for: trimmedName)
+                let pattern = "(?<![\\p{L}\\p{N}_])\(escapedName)(?![\\p{L}\\p{N}_])"
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                    continue
+                }
+
+                let range = NSRange(expression.startIndex..., in: expression)
+                let matches = regex.matches(in: expression, options: [], range: range)
+                guard !matches.isEmpty, let canonical = canonicalUnitToken(unit) else {
+                    continue
+                }
+
+                for _ in matches {
+                    matchedCanonicals.append(canonical)
+                }
             }
-            let matches = regex.matches(in: expression, range: NSRange(expression.startIndex..., in: expression))
-            return matches.compactMap { match in
-                guard let range = Range(match.range, in: expression) else { return nil }
-                return String(expression[range])
-            }
+
+            guard matchedCanonicals.count >= 2 else { return false }
+            let families = Set(matchedCanonicals.compactMap { unitDescriptor(for: $0)?.family })
+            return families.count == 1
         }
 
         private func extractTrailingUnitHint(from text: String) -> String? {

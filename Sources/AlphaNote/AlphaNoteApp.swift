@@ -9,6 +9,19 @@ struct AlphaNoteApp: App {
         Settings {
             SettingsView()
         }
+        .commands {
+            CommandMenu("Notes") {
+                Button("Nouvelle note") {
+                    NotificationCenter.default.post(name: .alphaNoteCreateNote, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+
+                Button("Afficher / Masquer la liste") {
+                    NotificationCenter.default.post(name: .alphaNoteToggleSidebar, object: nil)
+                }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+            }
+        }
     }
 }
 
@@ -107,6 +120,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleItem.target = self
         menu.addItem(toggleItem)
 
+        let newNoteItem = NSMenuItem(
+            title: "New Note",
+            action: #selector(createNoteFromMenu),
+            keyEquivalent: "n"
+        )
+        newNoteItem.keyEquivalentModifierMask = [.option]
+        newNoteItem.target = self
+        menu.addItem(newNoteItem)
+
+        let toggleListItem = NSMenuItem(
+            title: "Toggle Note List",
+            action: #selector(toggleListFromMenu),
+            keyEquivalent: "l"
+        )
+        toggleListItem.keyEquivalentModifierMask = [.option]
+        toggleListItem.target = self
+        menu.addItem(toggleListItem)
+
         let settingsItem = NSMenuItem(
             title: "Settings…",
             action: #selector(openSettings),
@@ -132,6 +163,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleWindow()
     }
 
+    @objc private func createNoteFromMenu() {
+        showWindowIfNeeded()
+        NotificationCenter.default.post(name: .alphaNoteCreateNote, object: nil)
+    }
+
+    @objc private func toggleListFromMenu() {
+        showWindowIfNeeded()
+        NotificationCenter.default.post(name: .alphaNoteToggleSidebar, object: nil)
+    }
+
     @objc private func openSettings() {
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         NSRunningApplication.current.activate(options: [.activateAllWindows])
@@ -139,6 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+
+    private func showWindowIfNeeded() {
+        guard let windowController else { return }
+        NSApp.unhide(nil)
+        windowController.showWindow()
     }
 
     private func toggleWindow() {

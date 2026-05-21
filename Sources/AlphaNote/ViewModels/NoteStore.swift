@@ -14,24 +14,22 @@ final class NoteStore: ObservableObject {
     }
 
     func loadNotes() {
-        notes = Note.fetchAll()
-        if notes.isEmpty {
-            addNote()
-        }
-        if currentIndex >= notes.count {
-            currentIndex = max(0, notes.count - 1)
-        }
+        reloadNotes()
     }
 
     func addNote() {
         let position = (notes.map(\.position).max() ?? -1) + 1
-        var note = Note(position: position)
-        Note.create(note)
-        if let created = Note.fetchAll().last {
-            note = created
+        let created = Note.create(Note(position: position))
+        guard let createdID = created.id else {
+            reloadNotes()
+            return
         }
-        notes.append(note)
-        currentIndex = notes.count - 1
+        reloadNotes(selecting: createdID)
+    }
+
+    func selectNote(id: Int64) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        currentIndex = index
     }
 
     func updateNote(_ note: Note) {
@@ -44,47 +42,46 @@ final class NoteStore: ObservableObject {
     }
 
     func deleteNote(_ note: Note) {
+        let nextSelection = adjacentNoteID(forDeletedNoteID: note.id)
         Note.delete(note)
-        notes.removeAll { $0.id == note.id }
-        if currentIndex >= notes.count {
-            currentIndex = max(0, notes.count - 1)
-        }
-        if notes.isEmpty {
-            addNote()
-        }
+        reloadNotes(selecting: nextSelection)
     }
 
     func deleteEmptyNotes() {
+        let selectedID = currentNote?.id
         Note.deleteEmpty()
-        notes.removeAll { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if currentIndex >= notes.count {
-            currentIndex = max(0, notes.count - 1)
-        }
-        if notes.isEmpty {
-            addNote()
-        }
+        reloadNotes(selecting: selectedID)
     }
 
     func navigateNext() {
+        guard !notes.isEmpty else {
+            addNote()
+            return
+        }
+
+        if deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: false) {
+            return
+        }
+
         if currentIndex < notes.count - 1 {
             currentIndex += 1
         } else {
-            let currentNote = notes[currentIndex]
-            if currentNote.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                deleteNote(currentNote)
-            } else {
-                addNote()
-            }
+            addNote()
         }
     }
 
     func navigatePrevious() {
+        guard !notes.isEmpty else {
+            addNote()
+            return
+        }
+
+        if deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: true) {
+            return
+        }
+
         if currentIndex > 0 {
             currentIndex -= 1
-            let currentNote = notes[currentIndex]
-            if currentNote.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                deleteNote(currentNote)
-            }
         }
     }
 
@@ -125,5 +122,69 @@ final class NoteStore: ObservableObject {
                 self.updateNote(updatedNote)
             }
         )
+    }
+
+    private func reloadNotes(selecting selectedID: Int64? = nil) {
+        notes = Note.fetchAll()
+
+        if notes.isEmpty {
+            let created = Note.create(Note(position: 0))
+            notes = [created]
+            currentIndex = 0
+            return
+        }
+
+        if let selectedID,
+           let index = notes.firstIndex(where: { $0.id == selectedID }) {
+            currentIndex = index
+            return
+        }
+
+        currentIndex = min(max(currentIndex, 0), notes.count - 1)
+    }
+
+    private func adjacentNoteID(forDeletedNoteID noteID: Int64?) -> Int64? {
+        guard let noteID,
+              let deletedIndex = notes.firstIndex(where: { $0.id == noteID }) else {
+            return currentNote?.id
+        }
+
+        if deletedIndex + 1 < notes.count {
+            return notes[deletedIndex + 1].id
+        }
+
+        if deletedIndex - 1 >= 0 {
+            return notes[deletedIndex - 1].id
+        }
+
+        return nil
+    }
+
+    private func deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: Bool) -> Bool {
+        guard let current = currentNote else {
+            return false
+        }
+
+        if !current.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return false
+        }
+
+        let preferredID = preferPrevious
+            ? notes[safe: currentIndex - 1]?.id
+            : notes[safe: currentIndex + 1]?.id
+        let fallbackID = preferPrevious
+            ? notes[safe: currentIndex + 1]?.id
+            : notes[safe: currentIndex - 1]?.id
+
+        Note.delete(current)
+        reloadNotes(selecting: preferredID ?? fallbackID)
+        return true
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        guard indices.contains(index) else { return nil }
+        return self[index]
     }
 }

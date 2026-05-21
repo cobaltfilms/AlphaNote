@@ -154,9 +154,7 @@ extension Note {
         let dbQueue = DatabaseManager.shared.getDBQueue()
         do {
             try dbQueue.write { db in
-                _ = try Note
-                    .filter(Column("content") == "")
-                    .deleteAll(db)
+                try db.execute(sql: "DELETE FROM note WHERE trim(content) = ''")
             }
         } catch {
             print("[Note] deleteEmpty error: \(error)")
