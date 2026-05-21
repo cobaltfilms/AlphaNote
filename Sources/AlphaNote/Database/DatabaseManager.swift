@@ -48,7 +48,10 @@ final class DatabaseManager {
         guard let dbQueue else { return }
 
         var migrator = DatabaseMigrator()
-        migrator.eraseDatabaseOnSchemaChange = true
+        // Keep user data across app rebuilds/runs.
+        // Automatic erase on schema change is convenient for prototyping,
+        // but it makes notes appear to "reset" during development.
+        migrator.eraseDatabaseOnSchemaChange = false
 
         migrator.registerMigration("v1") { db in
             try db.create(table: "note") { t in
