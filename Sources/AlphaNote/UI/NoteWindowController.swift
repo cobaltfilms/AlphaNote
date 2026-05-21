@@ -25,7 +25,7 @@ final class NoteWindowController: NSWindowController {
         window.isMovableByWindowBackground = false
         window.center()
 
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = false
         window.standardWindowButton(.zoomButton)?.isHidden = true
 
         let noteListView = NoteListView()
