@@ -16,6 +16,9 @@ final class NoteStore: ObservableObject {
     @AppStorage(AISettingsKeys.enabled) private var aiEnabled = false
 
     private var currentAITask: Task<Void, Never>?
+    private let mathEvaluator = MathEvaluator()
+    private let converter = Converter()
+    private let remoteContext = RemoteContextFeature()
 
     var currentNote: Note? {
         guard !notes.isEmpty, currentIndex >= 0, currentIndex < notes.count else {
@@ -260,22 +263,103 @@ final class NoteStore: ObservableObject {
         guard let currentNote else {
             return "Aucune note courante sélectionnée."
         }
+
+        let modes = await resolveRouteModes(question: trimmed, currentNote: currentNote)
+        let wantsWebResearch = modes.contains(.web)
+        let wantsList = modes.contains(.list)
+        let wantsMath = modes.contains(.math)
+        let wantsTransform = modes.contains(.transform)
+        let providedURLs = URLDetector.extractURLs(from: trimmed)
+
+        if wantsMath && !wantsWebResearch,
+           let localMathMessage = handleLocalMathRequest(question: trimmed, currentNote: currentNote) {
+            return localMathMessage
+        }
+
+        if wantsList && !wantsWebResearch,
+           let localListMessage = handleLocalListRequest(question: trimmed, currentNote: currentNote) {
+            return localListMessage
+        }
+
+        if wantsWebResearch && wantsList && !providedURLs.isEmpty {
+            let directIngredients = await remoteContext.recipeIngredientItems(from: trimmed, maxItems: 40)
+            if !directIngredients.isEmpty {
+                let payload = directIngredients.map { "* \($0)" }.joined(separator: "\n")
+                convertSemanticAnswerToListOnCurrentNote(
+                    payload,
+                    titleHint: trimmed,
+                    refinementPrompt: trimmed
+                )
+                return "Liste générée depuis l'URL fournie."
+            }
+        }
+
         do {
             let answer = try await SemanticSearchFeature().answerCurrentNoteOnly(
                 question: trimmed,
                 currentNote: currentNote
             )
-            let shouldAutoApplyList = AIIntentDetector.isExplicitListRequest(trimmed) ||
-                (currentNote.keyword == "list" && AIIntentDetector.isListRefinementRequest(trimmed))
+            if let appliedMessage = applySemanticOperation(result: answer, question: trimmed) {
+                return appliedMessage
+            }
+
+            let shouldAutoApplyList = !wantsWebResearch && (wantsList ||
+                AIIntentDetector.isExplicitListRequest(trimmed) ||
+                (currentNote.keyword == "list" && AIIntentDetector.isListRefinementRequest(trimmed)))
             if shouldAutoApplyList {
+                let listPayload = semanticListPayload(from: answer)
+                guard !listPayload.isEmpty else {
+                    return "Je n'ai pas pu générer une liste propre. Donne 2-3 éléments clés et je la construis."
+                }
                 convertSemanticAnswerToListOnCurrentNote(
-                    answer.text,
+                    listPayload,
                     titleHint: trimmed,
                     refinementPrompt: trimmed
                 )
                 return "Liste mise à jour dans la note courante."
             }
-            return answer.text
+
+            if wantsWebResearch {
+                if wantsList {
+                    let listPayload = semanticListPayload(from: answer)
+                    if !listPayload.isEmpty {
+                        convertSemanticAnswerToListOnCurrentNote(
+                            listPayload,
+                            titleHint: trimmed,
+                            refinementPrompt: trimmed
+                        )
+                        return "Liste web générée dans la note courante."
+                    }
+                }
+
+                let research = composedWebResearchText(from: answer)
+                if !research.isEmpty {
+                    replaceCurrentNoteWithSemanticAnswer(research)
+                    return "Recherche web générée dans la note courante."
+                }
+                let fallback = cleanedSemanticFallbackText(answer.text)
+                guard !fallback.isEmpty else {
+                    return "Je n'ai pas trouvé de sources web exploitables pour cette demande."
+                }
+                replaceCurrentNoteWithSemanticAnswer(fallback)
+                return "Réponse générée, mais sans sources web exploitables."
+            }
+
+            if wantsTransform {
+                let cleaned = cleanedSemanticFallbackText(answer.text)
+                guard !cleaned.isEmpty else {
+                    return "Aucun résultat exploitable. Reformule avec une demande plus directe."
+                }
+                replaceCurrentNoteWithSemanticAnswer(cleaned)
+                return "Note mise à jour automatiquement."
+            }
+
+            let cleaned = cleanedSemanticFallbackText(answer.text)
+            if cleaned.isEmpty {
+                return "Aucun résultat exploitable. Reformule avec une demande plus directe."
+            }
+
+            return cleaned
         } catch {
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -564,6 +648,553 @@ final class NoteStore: ObservableObject {
         }
 
         return items
+    }
+
+    private func applySemanticOperation(result: AIResult, question: String) -> String? {
+        let operation = (result.metadata["operation_type"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let content = (result.metadata["operation_content"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = (result.metadata["operation_title"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let responseText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch operation {
+        case "replace":
+            let payload = content.isEmpty ? responseText : content
+            guard !payload.isEmpty else { return nil }
+            replaceCurrentNoteWithSemanticAnswer(payload)
+            return "Note mise à jour automatiquement."
+        case "append":
+            let payload = content.isEmpty ? responseText : content
+            guard !payload.isEmpty else { return nil }
+            insertSemanticAnswerIntoCurrentNote(payload)
+            return "Contenu ajouté à la note."
+        case "list":
+            let payload = content.isEmpty ? responseText : content
+            guard !payload.isEmpty else { return nil }
+            convertSemanticAnswerToListOnCurrentNote(
+                payload,
+                titleHint: title.isEmpty ? question : title,
+                refinementPrompt: question
+            )
+            return "Liste générée dans la note."
+        case "none", "":
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func cleanedSemanticFallbackText(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+
+        text = text.replacingOccurrences(
+            of: #"<think>[\s\S]*?</think>"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        text = text.replacingOccurrences(
+            of: #"</?think>"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        let reasoningLinePatterns = [
+            #"(?i)^okay[:,]?\s*the user"#,
+            #"(?i)^okay[:,]?\s*let['’]s"#,
+            #"(?i)^the user wants"#,
+            #"(?i)^the question is"#,
+            #"(?i)^let me "#,
+            #"(?i)^i['’]?ll "#,
+            #"(?i)^i will "#,
+            #"(?i)^first[:,]?"#,
+            #"(?i)^that makes sense"#,
+            #"(?i)^so i need to"#,
+            #"(?i)^i need to"#,
+            #"(?i)^we need to"#,
+            #"(?i)^je vais "#,
+            #"(?i)^l['’]utilisateur"#,
+            #"(?i)^réfléchissons"#,
+            #"(?i)^pense"#,
+            #"(?i)^je dois "#,
+            #"(?i)^analysons"#,
+            #"(?i)^analyse[:\s]"#
+        ]
+
+        let cleanedLines = text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { line in
+                guard !line.isEmpty else { return false }
+                for pattern in reasoningLinePatterns {
+                    if line.range(of: pattern, options: .regularExpression) != nil {
+                        return false
+                    }
+                }
+                return true
+            }
+
+        let joined = cleanedLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if joined.isEmpty {
+            return ""
+        }
+        if looksLikeReasoningMeta(joined) {
+            return ""
+        }
+        return joined
+    }
+
+    private func looksLikeReasoningMeta(_ text: String) -> Bool {
+        let normalized = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let markers = [
+            "the user", "the question is", "let's see", "i need to", "we need to",
+            "l'utilisateur", "la question est", "je vais", "je dois", "raisonnement"
+        ]
+        let markerHits = markers.filter { normalized.contains($0) }.count
+        if markerHits >= 2 {
+            return true
+        }
+        return normalized.hasPrefix("okay") && normalized.contains("user")
+    }
+
+    private func semanticListPayload(from result: AIResult) -> String {
+        let operationContent = (result.metadata["operation_content"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = operationContent.isEmpty ? result.text : operationContent
+        let cleaned = cleanedSemanticFallbackText(source)
+        guard !cleaned.isEmpty else { return "" }
+        let items = listItems(from: cleaned)
+        guard !items.isEmpty else { return "" }
+        return items.map { "* \($0)" }.joined(separator: "\n")
+    }
+
+    private func resolveRouteModes(question: String, currentNote: Note) async -> Set<ModeRoutingFeature.RouteMode> {
+        let aiModes = await ModeRoutingFeature().routeModes(question: question, noteKeyword: currentNote.keyword)
+        var modes = aiModes
+
+        // Double filtering: deterministic safeguard layer.
+        let hasURL = !URLDetector.extractURLs(from: question).isEmpty
+        let heuristicMath = AIIntentDetector.isMathRequest(question, noteKeyword: currentNote.keyword)
+        let heuristicList = AIIntentDetector.isListRequest(question, noteKeyword: currentNote.keyword)
+        let heuristicWeb = AIIntentDetector.isWebResearchRequest(question)
+        let heuristicTransform = AIIntentDetector.isNoteTransformationRequest(question)
+        let isMathNote = currentNote.keyword.lowercased() == "math"
+
+        if modes.isEmpty {
+            if heuristicMath { modes.insert(.math) }
+            if heuristicList { modes.insert(.list) }
+            if heuristicWeb { modes.insert(.web) }
+            if heuristicTransform { modes.insert(.transform) }
+        }
+
+        if heuristicWeb || hasURL {
+            modes.insert(.web)
+            modes.insert(.qa)
+        }
+
+        if heuristicList {
+            modes.insert(.list)
+        }
+
+        if heuristicTransform {
+            modes.insert(.transform)
+        }
+
+        if isMathNote {
+            modes.insert(.math)
+        } else if hasURL, modes.contains(.list), modes.contains(.web) {
+            // New note + URL + list intent should not be hijacked by math.
+            modes.remove(.math)
+        }
+
+        if modes.isEmpty {
+            modes.insert(.qa)
+        }
+
+        return modes
+    }
+
+    private func composedWebResearchText(from result: AIResult) -> String {
+        let base = cleanedSemanticFallbackText(result.text)
+        var sections: [String] = []
+        if !base.isEmpty {
+            sections.append(base)
+        }
+
+        let sourceIDs = (result.metadata["sources"] ?? "")
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let urlSources = sourceIDs.compactMap { item -> String? in
+            if item.hasPrefix("url:") {
+                let encoded = String(item.dropFirst(4))
+                return encoded.removingPercentEncoding ?? encoded
+            }
+            if item.hasPrefix("http://") || item.hasPrefix("https://") {
+                return item
+            }
+            return nil
+        }
+
+        let answerURLs = URLDetector.extractURLs(from: base).map(\.absoluteString)
+        let allSources = urlSources + answerURLs
+
+        if !allSources.isEmpty {
+            let unique = Array(NSOrderedSet(array: allSources)) as? [String] ?? allSources
+            let formatted = unique.map { "- \($0)" }.joined(separator: "\n")
+            sections.append("Sources:\n\(formatted)")
+        }
+
+        return sections.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func handleLocalListRequest(question: String, currentNote: Note) -> String? {
+        guard AIIntentDetector.isListRequest(question, noteKeyword: currentNote.keyword) else {
+            return nil
+        }
+
+        let directItems = localListItems(from: question)
+        guard !directItems.isEmpty else {
+            return nil
+        }
+
+        let payload = directItems.map { "* \($0)" }.joined(separator: "\n")
+        convertSemanticAnswerToListOnCurrentNote(
+            payload,
+            titleHint: question,
+            refinementPrompt: question
+        )
+        return "Liste générée dans la note courante."
+    }
+
+    private func localListItems(from question: String) -> [String] {
+        let raw = question
+            .replacingOccurrences(of: #"[;|]+"#, with: ",", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+et\s+"#, with: ", ", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"\b(fais|cree|crée|donne|genere|génère)\b"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"\b(liste|checklist|todo|to-do|ingredients|ingrédients)\b"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: ":", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let parts = raw
+            .components(separatedBy: ",")
+            .map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            }
+            .filter { part in
+                guard !part.isEmpty else { return false }
+                let folded = part.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                if folded.count < 2 {
+                    return false
+                }
+                if folded.hasPrefix("je veux") || folded.hasPrefix("stp") || folded.hasPrefix("svp") {
+                    return false
+                }
+                return true
+            }
+
+        let unique = Array(NSOrderedSet(array: parts)) as? [String] ?? parts
+        return unique
+    }
+
+    private func handleLocalMathRequest(question: String, currentNote: Note) -> String? {
+        guard AIIntentDetector.isMathRequest(question, noteKeyword: currentNote.keyword) else {
+            return nil
+        }
+
+        if let reduction = percentageReductionResult(question: question, noteContent: currentNote.content) {
+            applyMathContentToCurrentNote(reduction.noteContent)
+            return reduction.userMessage
+        }
+
+        if let pricing = pricingMathResult(question: question, noteContent: currentNote.content) {
+            applyMathContentToCurrentNote(pricing.noteContent)
+            return pricing.userMessage
+        }
+
+        if converter.convert(question) != nil {
+            let conversionExpression = conversionExpressionCandidate(from: question)
+            let mathNote = """
+            math: Conversion IA
+            \(conversionExpression)
+            """
+            applyMathContentToCurrentNote(mathNote)
+            return "Conversion calculée et notée."
+        }
+
+        let candidates = mathExpressionCandidates(from: question)
+        for expression in candidates {
+            if let value = mathEvaluator.evaluate(expression) {
+                let result = formattedMathNumber(value)
+                let mathNote = """
+                math: Calcul IA
+                \(expression) =
+                \(result)
+                """
+                applyMathContentToCurrentNote(mathNote)
+                return "Calcul effectué et noté."
+            }
+        }
+
+        return nil
+    }
+
+    private func percentageReductionResult(question: String, noteContent: String) -> (noteContent: String, userMessage: String)? {
+        let normalized = question.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let isReductionRequest = normalized.contains("pourcentage") &&
+            (normalized.contains("reduction") || normalized.contains("réduction"))
+        guard isReductionRequest else { return nil }
+
+        let pair = resolvedPricePair(question: question, noteContent: noteContent)
+        let basePrice = pair?.base ?? extractedNumbers(from: question).first
+        let finalPrice = pair?.final ?? extractedNumbers(from: question).dropFirst().first
+
+        guard let basePrice, let finalPrice else {
+            let guide = """
+            math: Réduction (%)
+            // Remplace base et final avec tes valeurs
+            base: 120
+            final: 90
+            reduction_pct: ((base - final) / base) * 100
+            reduction_pct =
+            """
+            return (guide, "J'ai préparé la formule. Donne le prix de base et le prix final pour calculer le résultat.")
+        }
+
+        guard basePrice != 0 else {
+            return ("", "Le prix de base ne peut pas être 0.")
+        }
+
+        let reduction = ((basePrice - finalPrice) / basePrice) * 100
+        let mathNote = """
+        math: Réduction (%)
+        base: \(formattedMathNumber(basePrice))
+        final: \(formattedMathNumber(finalPrice))
+        reduction_pct: ((base - final) / base) * 100
+        reduction_pct =
+        """
+        return (mathNote, "Réduction calculée: \(formattedMathNumber(reduction)) %")
+    }
+
+    private func pricingMathResult(question: String, noteContent: String) -> (noteContent: String, userMessage: String)? {
+        let normalized = question.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let hasPricingWords = normalized.contains("prix") || normalized.contains("vend") ||
+            normalized.contains("piece") || normalized.contains("pièce") ||
+            normalized.contains("euro") || normalized.contains("€") ||
+            normalized.contains("achat") || normalized.contains("vente")
+        guard hasPricingWords else { return nil }
+
+        let pair = resolvedPricePair(question: question, noteContent: noteContent)
+        let initial = pair?.base ?? extractedNumbers(from: question).first
+        let final = pair?.final ?? extractedNumbers(from: question).dropFirst().first
+        guard let initial, let final else { return nil }
+        guard initial != 0 else { return nil }
+
+        let amount = initial - final
+        let pct = (amount / initial) * 100
+        let mathNote = """
+        math: Écart de prix
+        prix_initial: \(formattedMathNumber(initial))
+        prix_final: \(formattedMathNumber(final))
+        reduction_montant: prix_initial - prix_final
+        reduction_montant =
+        reduction_pct: ((prix_initial - prix_final) / prix_initial) * 100
+        reduction_pct =
+        """
+        return (
+            mathNote,
+            "Écart calculé: \(formattedMathNumber(amount)) et \(formattedMathNumber(pct)) % de réduction."
+        )
+    }
+
+    private struct PriceMention {
+        let value: Double
+        let position: Int
+        let hasCurrency: Bool
+        let hasSellCue: Bool
+        let hasBuyCue: Bool
+        let hasPerUnitCue: Bool
+        let hasNoiseCue: Bool
+
+        var score: Int {
+            var value = 0
+            if hasCurrency { value += 4 }
+            if hasSellCue { value += 3 }
+            if hasBuyCue { value += 3 }
+            if hasPerUnitCue { value += 1 }
+            if hasNoiseCue { value -= 4 }
+            return value
+        }
+    }
+
+    private func resolvedPricePair(question: String, noteContent: String) -> (base: Double, final: Double)? {
+        if let pair = resolvedPricePair(in: question) {
+            return pair
+        }
+        let fallbackText = "\(question)\n\(noteContent)"
+        return resolvedPricePair(in: fallbackText)
+    }
+
+    private func resolvedPricePair(in text: String) -> (base: Double, final: Double)? {
+        let mentions = extractPriceMentions(from: text)
+            .filter { $0.score >= 2 }
+            .sorted { $0.position < $1.position }
+
+        guard !mentions.isEmpty else { return nil }
+
+        if let sell = mentions.first(where: { $0.hasSellCue }),
+           let buy = mentions.first(where: { $0.hasBuyCue && $0.position > sell.position }) {
+            return (sell.value, buy.value)
+        }
+
+        if let buy = mentions.first(where: { $0.hasBuyCue }),
+           let sellBefore = mentions.last(where: { $0.hasSellCue && $0.position < buy.position }) {
+            return (sellBefore.value, buy.value)
+        }
+
+        let currencyMentions = mentions.filter { $0.hasCurrency }
+        if currencyMentions.count >= 2 {
+            return (currencyMentions[0].value, currencyMentions[1].value)
+        }
+
+        if mentions.count >= 2 {
+            return (mentions[0].value, mentions[1].value)
+        }
+
+        return nil
+    }
+
+    private func extractPriceMentions(from text: String) -> [PriceMention] {
+        let pattern = #"(?:(?:€|\$|£|¥)\s*)?([-+]?\d+(?:[.,]\d+)?)(?:\s*(?:€|eur|usd|gbp|jpy|mad|dhs?|fcfa|\$|£|¥))?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return []
+        }
+
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        let matches = regex.matches(in: text, options: [], range: fullRange)
+        var result: [PriceMention] = []
+
+        for match in matches {
+            guard match.numberOfRanges >= 2 else { continue }
+            let numberRange = match.range(at: 1)
+            guard numberRange.location != NSNotFound else { continue }
+
+            let rawNumber = nsText.substring(with: numberRange).replacingOccurrences(of: ",", with: ".")
+            guard let value = Double(rawNumber) else { continue }
+
+            let matchText = nsText.substring(with: match.range)
+            let hasCurrency = matchText.range(
+                of: #"€|\$|£|¥|(?i)\beur\b|(?i)\busd\b|(?i)\bmad\b|(?i)\bdhs?\b|(?i)\bfcfa\b"#,
+                options: .regularExpression
+            ) != nil
+
+            let contextStart = max(0, match.range.location - 26)
+            let contextEnd = min(nsText.length, match.range.location + match.range.length + 26)
+            let context = nsText.substring(with: NSRange(location: contextStart, length: contextEnd - contextStart))
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+
+            let hasSellCue = containsAny(context, [
+                " vend", " vente", " vendu", " prix", " tarif", " coute", "cout", "coûte"
+            ])
+            let hasBuyCue = containsAny(context, [
+                " achet", " achat", " je veux", " payer", " paie", " propose", " nego", "nego", "negoc"
+            ])
+            let hasPerUnitCue = containsAny(context, [
+                " piece", " pieces", " unite", " unites", "/u"
+            ])
+            let hasNoiseCue = containsAny(context, [
+                " cheval", " chevaux", " cv", " kg", " km", " litre", " litres"
+            ])
+
+            result.append(
+                PriceMention(
+                    value: value,
+                    position: match.range.location,
+                    hasCurrency: hasCurrency,
+                    hasSellCue: hasSellCue,
+                    hasBuyCue: hasBuyCue,
+                    hasPerUnitCue: hasPerUnitCue,
+                    hasNoiseCue: hasNoiseCue
+                )
+            )
+        }
+
+        return result
+    }
+
+    private func containsAny(_ text: String, _ markers: [String]) -> Bool {
+        markers.contains { text.contains($0) }
+    }
+
+    private func extractedNumbers(from text: String) -> [Double] {
+        let pattern = #"[-+]?\d+(?:[.,]\d+)?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return []
+        }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        return matches.compactMap { match in
+            let raw = nsText.substring(with: match.range).replacingOccurrences(of: ",", with: ".")
+            return Double(raw)
+        }
+    }
+
+    private func mathExpressionCandidates(from question: String) -> [String] {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        var candidates = [trimmed]
+        let stripped = trimmed
+            .replacingOccurrences(of: #"(?i)\b(calcule|calcul|combien|resultat|résultat|donne)\b"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "?", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stripped.isEmpty {
+            candidates.append(stripped)
+        }
+
+        if let range = stripped.range(of: #"[0-9\(\)\+\-\*\/\^\.\,\%\s]+"#, options: .regularExpression) {
+            let expression = String(stripped[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !expression.isEmpty {
+                candidates.append(expression)
+            }
+        }
+
+        return Array(Set(candidates))
+    }
+
+    private func applyMathContentToCurrentNote(_ content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        replaceCurrentNoteWithSemanticAnswer(trimmed)
+    }
+
+    private func conversionExpressionCandidate(from question: String) -> String {
+        let pattern = #"[-+]?\d+(?:[.,]\d+)?\s*[a-zA-Z°"'\u00B2\u00B3]+\s*(?:to|in|en)\s*[a-zA-Z°"'\u00B2\u00B3]+"#
+        if let range = question.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+            let expression = String(question[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !expression.isEmpty {
+                return "\(expression) ="
+            }
+        }
+        return "// Conversion\n\(question)"
+    }
+
+    private func formattedMathNumber(_ value: Double) -> String {
+        if value == floor(value) {
+            return String(Int64(value))
+        }
+
+        var text = String(format: "%.6f", value)
+        while text.last == "0" {
+            text.removeLast()
+        }
+        if text.last == "." {
+            text.removeLast()
+        }
+        return text
     }
 
     private func runAIForCurrent(task: AITask) async {

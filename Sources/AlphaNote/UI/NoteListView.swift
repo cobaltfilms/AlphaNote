@@ -13,6 +13,7 @@ struct NoteListView: View {
     @State private var perNoteQuestionDraft: [Int64: String] = [:]
     @State private var perNoteAnswer: [Int64: String] = [:]
     @State private var isAnswering = false
+    @FocusState private var isAIQuestionFocused: Bool
 
     var body: some View {
         ZStack {
@@ -192,19 +193,51 @@ struct NoteListView: View {
             Divider()
 
             HStack(spacing: 8) {
-                TextField("Question IA sur tes notes", text: $questionDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 11))
-                    .submitLabel(.send)
-                    .onSubmit {
-                        askQuestionToCurrentNote()
-                    }
+                ZStack(alignment: .trailing) {
+                    TextField("IA — demande de modifier cette note…", text: $questionDraft)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.leading, 88)
+                        .padding(.trailing, 12)
+                        .padding(.vertical, 8)
+                        .focused($isAIQuestionFocused)
+                        .submitLabel(.send)
+                        .disabled(isAnswering)
+                        .onSubmit {
+                            askQuestionToCurrentNote()
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(
+                                    isAIQuestionFocused
+                                        ? Color.accentColor.opacity(0.95)
+                                        : Color.accentColor.opacity(0.45),
+                                    lineWidth: isAIQuestionFocused ? 1.8 : 1.0
+                                )
+                        )
+                        .shadow(
+                            color: Color.accentColor.opacity(isAIQuestionFocused ? 0.45 : 0.18),
+                            radius: isAIQuestionFocused ? 12 : 6
+                        )
 
-                Button(isAnswering ? "..." : "Demander") {
-                    askQuestionToCurrentNote()
+                    HStack(spacing: 6) {
+                        ForEach(detectedBadges, id: \.id) { badge in
+                            intentBadge(badge)
+                        }
+                        Spacer()
+                    }
+                    .padding(.leading, 8)
+
+                    if isAnswering {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.trailing, 10)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(isAnswering || questionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
@@ -261,6 +294,79 @@ struct NoteListView: View {
                 perNoteAnswer[noteID] = semanticAnswer
             }
             isAnswering = false
+        }
+    }
+
+    private struct IntentBadgeSpec {
+        let id: String
+        let label: String
+        let foreground: Color
+        let background: Color
+    }
+
+    private var detectedBadges: [IntentBadgeSpec] {
+        let question = questionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else { return [] }
+        let keyword = store.currentNote?.keyword
+        let intent = AIIntentDetector.classifyIntent(question, noteKeyword: keyword)
+        let web = AIIntentDetector.isWebResearchRequest(question)
+        let list = AIIntentDetector.isListRequest(question, noteKeyword: keyword)
+        var badges: [IntentBadgeSpec] = []
+
+        if web {
+            badges.append(IntentBadgeSpec(
+                id: "web",
+                label: "WEB",
+                foreground: .mint,
+                background: Color.mint.opacity(0.20)
+            ))
+            if list {
+                badges.append(IntentBadgeSpec(
+                    id: "list",
+                    label: "LISTE",
+                    foreground: .green,
+                    background: Color.green.opacity(0.18)
+                ))
+            } else {
+                badges.append(IntentBadgeSpec(
+                    id: "qa",
+                    label: "Q/R",
+                    foreground: .secondary,
+                    background: Color.secondary.opacity(0.15)
+                ))
+            }
+            return badges
+        }
+
+        badges.append(intentBadgeSpec(intent))
+        return badges
+    }
+
+    @ViewBuilder
+    private func intentBadge(_ spec: IntentBadgeSpec) -> some View {
+        Text(spec.label)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(spec.foreground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(spec.background)
+            )
+    }
+
+    private func intentBadgeSpec(_ intent: AIIntentDetector.NoteIntent) -> IntentBadgeSpec {
+        switch intent {
+        case .math:
+            return IntentBadgeSpec(id: "math", label: "MATH", foreground: .orange, background: Color.orange.opacity(0.18))
+        case .list:
+            return IntentBadgeSpec(id: "list", label: "LISTE", foreground: .green, background: Color.green.opacity(0.18))
+        case .transform:
+            return IntentBadgeSpec(id: "action", label: "ACTION", foreground: .blue, background: Color.blue.opacity(0.18))
+        case .webResearch:
+            return IntentBadgeSpec(id: "web", label: "WEB", foreground: .mint, background: Color.mint.opacity(0.20))
+        case .question:
+            return IntentBadgeSpec(id: "qa", label: "Q/R", foreground: .secondary, background: Color.secondary.opacity(0.15))
         }
     }
 

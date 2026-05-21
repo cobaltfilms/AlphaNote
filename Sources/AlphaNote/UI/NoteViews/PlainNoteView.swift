@@ -83,6 +83,8 @@ struct PlainNoteView: View {
             return "Aperçu de la réécriture"
         case .extractActions:
             return "Aperçu des actions"
+        case .modeRouting:
+            return "Aperçu du routage"
         case .semanticAnswer:
             return "Aperçu de la réponse"
         }

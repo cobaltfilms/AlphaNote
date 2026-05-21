@@ -213,7 +213,19 @@ actor MLXCommandRunner {
     }
 
     private func sanitizeMLXOutput(_ output: String) -> String {
-        let lines = output
+        let withoutThinking = output
+            .replacingOccurrences(
+                of: #"<think>[\s\S]*?</think>"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"</?think>"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+
+        let lines = withoutThinking
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter {

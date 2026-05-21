@@ -19,7 +19,7 @@ final class NoteWindowController: NSWindowController {
 
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.level = .floating
+        window.level = .normal
         window.isReleasedWhenClosed = false
         window.backgroundColor = .clear
         window.isMovableByWindowBackground = false
@@ -46,9 +46,8 @@ final class NoteWindowController: NSWindowController {
         NSApp.activate(ignoringOtherApps: true)
 
         window.alphaValue = 0
-        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
         window.makeMain()
-        window.makeKey()
 
         DispatchQueue.main.async {
             guard let contentView = window.contentView,

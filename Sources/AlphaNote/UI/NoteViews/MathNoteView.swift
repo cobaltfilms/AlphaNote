@@ -159,7 +159,8 @@ private struct MathColoringEditor: NSViewRepresentable {
 
                 if let colonIndex = line.firstIndex(of: ":") {
                     let name = String(line[..<colonIndex]).trimmingCharacters(in: .whitespaces)
-                    if !name.isEmpty {
+                    let isModeHeaderLine = index == 0 && isMathHeader(trimmed)
+                    if !name.isEmpty && !isModeHeaderLine && !isModeKeyword(name) {
                         let distance = line.distance(from: line.startIndex, to: colonIndex)
                         let nameRange = NSRange(location: lineRange.location, length: distance)
                         if nameRange.length > 0 {
@@ -317,7 +318,7 @@ private struct MathColoringEditor: NSViewRepresentable {
             }
 
             let name = String(line[..<colonIndex]).trimmingCharacters(in: .whitespaces)
-            guard !name.isEmpty else {
+            guard !name.isEmpty, !isModeKeyword(name) else {
                 return nil
             }
 
@@ -332,6 +333,11 @@ private struct MathColoringEditor: NSViewRepresentable {
             }
 
             return (name, expression)
+        }
+
+        private func isModeKeyword(_ name: String) -> Bool {
+            let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return key == "math" || key == "list" || key == "code" || key == "timer"
         }
 
         private struct MathEvaluationResult {

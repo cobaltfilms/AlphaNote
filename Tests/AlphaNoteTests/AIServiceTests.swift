@@ -60,6 +60,56 @@ final class AIServiceTests: XCTestCase {
         XCTAssertEqual(result.text, "fallback output")
         XCTAssertEqual(result.metadata["engine"], "fallback")
     }
+
+    func testSemanticAnswerParsesOperationPayload() async throws {
+        let json = """
+        {
+          "answer": "J'ai restructuré la note.",
+          "operation": {
+            "type": "replace",
+            "content": "Titre\\n- point 1\\n- point 2",
+            "title": ""
+          },
+          "sources": ["11111111-1111-1111-1111-111111111111"]
+        }
+        """
+
+        let service = AIService(
+            mlxEngine: MockEngine(output: json),
+            fallbackEngine: MockEngine(output: "fallback")
+        )
+
+        let result = try await service.run(task: .semanticAnswer, note: Note(content: "Réécris"), context: .empty)
+        XCTAssertEqual(result.text, "J'ai restructuré la note.")
+        XCTAssertEqual(result.metadata["operation_type"], "replace")
+        XCTAssertEqual(result.metadata["operation_content"], "Titre\n- point 1\n- point 2")
+        XCTAssertEqual(result.metadata["sources"], "11111111-1111-1111-1111-111111111111")
+    }
+
+    func testSemanticAnswerStripsThinkBlockBeforeParsing() async throws {
+        let json = """
+        <think>private reasoning</think>
+        {
+          "answer": "Note complétée.",
+          "operation": {
+            "type": "append",
+            "content": "Ajout final",
+            "title": ""
+          },
+          "sources": []
+        }
+        """
+
+        let service = AIService(
+            mlxEngine: MockEngine(output: json),
+            fallbackEngine: MockEngine(output: "fallback")
+        )
+
+        let result = try await service.run(task: .semanticAnswer, note: Note(content: "Complète"), context: .empty)
+        XCTAssertEqual(result.text, "Note complétée.")
+        XCTAssertEqual(result.metadata["operation_type"], "append")
+        XCTAssertEqual(result.metadata["operation_content"], "Ajout final")
+    }
 }
 
 private struct MockEngine: AIInferenceEngineProtocol {

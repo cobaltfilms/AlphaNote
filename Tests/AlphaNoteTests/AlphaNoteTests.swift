@@ -163,4 +163,105 @@ final class AlphaNoteTests: XCTestCase {
         let winner = SyncEngine.resolveConflict(active, deleted)
         XCTAssertTrue(winner.isDeleted)
     }
+
+    // MARK: - AI intents
+
+    func testMathIntentDetectedFromExpression() {
+        XCTAssertTrue(AIIntentDetector.isMathRequest("12 * 8", noteKeyword: nil))
+    }
+
+    func testMathIntentDetectedFromReductionRequest() {
+        XCTAssertTrue(AIIntentDetector.isMathRequest("calcule le pourcentage de réduction", noteKeyword: nil))
+    }
+
+    func testMathIntentDetectedFromMathNoteKeyword() {
+        XCTAssertTrue(AIIntentDetector.isMathRequest("n'importe quoi", noteKeyword: "math"))
+    }
+
+    func testMathIntentDetectedFromNoisyPricingSentence() {
+        XCTAssertTrue(AIIntentDetector.isMathRequest("un type à 900 chevaux, il les vend à 580€ pièce", noteKeyword: nil))
+    }
+
+    func testListIntentDetectedFromIngredientsWithTypos() {
+        XCTAssertTrue(AIIntentDetector.isListRequest("fais moi une list: ognion, courgette, tomate", noteKeyword: nil))
+    }
+
+    func testIntentClassifierPrefersMathWhenApplicable() {
+        let intent = AIIntentDetector.classifyIntent("pourcentage reduction prix base 120 final 90", noteKeyword: nil)
+        if case .math = intent {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected math intent")
+        }
+    }
+
+    func testIntentClassifierPrefersWebResearchForWebQuery() {
+        let intent = AIIntentDetector.classifyIntent(
+            "liste moi les modèles les plus performants cette semaine selon le web",
+            noteKeyword: nil
+        )
+        if case .webResearch = intent {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected webResearch intent")
+        }
+    }
+
+    func testIntentClassifierPrefersWebResearchOverListForMixedQuery() {
+        let intent = AIIntentDetector.classifyIntent(
+            "liste moi le matériel nécessaire pour construire un NAS en 2026 selon le web",
+            noteKeyword: nil
+        )
+        if case .webResearch = intent {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected webResearch intent for mixed list+web query")
+        }
+    }
+
+    func testRecipeURLListRequestIsWebResearchWhenNotInMathNote() {
+        let intent = AIIntentDetector.classifyIntent(
+            "liste moi les ingrédients nécessaires à cette recette en détail : https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190",
+            noteKeyword: nil
+        )
+        if case .webResearch = intent {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected webResearch intent for recipe URL list request")
+        }
+    }
+
+    func testRecipeURLListRequestStaysMathInMathNote() {
+        let intent = AIIntentDetector.classifyIntent(
+            "liste moi les ingrédients nécessaires à cette recette en détail : https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190",
+            noteKeyword: "math"
+        )
+        if case .math = intent {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected math intent when current note is math")
+        }
+        XCTAssertFalse(
+            AIIntentDetector.isMathRequest(
+                "liste moi les ingrédients nécessaires à cette recette en détail : https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190",
+                noteKeyword: nil
+            )
+        )
+    }
+
+    func testURLDetectorNormalizesMalformedScheme() {
+        let urls = URLDetector.extractURLs(from: "recette: htrp://example.com/page")
+        XCTAssertTrue(urls.contains(where: { $0.absoluteString == "https://example.com/page" }))
+    }
+
+    func testURLDetectorSupportsWWWWithoutScheme() {
+        let urls = URLDetector.extractURLs(from: "voir www.example.com/recette")
+        XCTAssertTrue(urls.contains(where: { $0.absoluteString == "https://www.example.com/recette" }))
+    }
+
+    func testURLDetectorKeepsHTTPSURLInsideSentence() {
+        let text = "liste ingrédients: https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190 en détail"
+        let urls = URLDetector.extractURLs(from: text)
+        XCTAssertTrue(urls.contains(where: { $0.absoluteString.contains("elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190") }))
+    }
 }

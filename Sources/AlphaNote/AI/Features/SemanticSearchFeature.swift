@@ -27,12 +27,33 @@ struct SemanticSearchFeature {
         ]
         let remote = await remoteContext.contexts(from: question, maxCount: 2)
         contexts.append(contentsOf: remote)
+        if AIIntentDetector.isWebResearchRequest(question) {
+            let web = await remoteContext.webResearchContexts(query: question, maxCount: 3)
+            contexts.append(contentsOf: web)
+        }
+        contexts.append(alphaNoteCapabilitiesContext())
 
         let pseudoNote = Note(content: question)
         return try await service.run(
             task: .semanticAnswer,
             note: pseudoNote,
             context: AIContext(noteTitle: "", languageCode: "fr", relatedNotes: contexts)
+        )
+    }
+
+    private func alphaNoteCapabilitiesContext() -> NoteContext {
+        NoteContext(
+            uuid: "alphanote-doc-capabilities",
+            title: "[DOC APP] Capacités AlphaNote",
+            content: """
+            AlphaNote est une application de notes locales.
+            Fonctions principales:
+            - mode math: calculs, pourcentages, conversions (unités/devises)
+            - mode list: création et raffinement de listes actionnables
+            - mode code: snippets prêts à coller dans la note
+            - mode timer: notes orientées sessions de temps
+            L'assistant doit produire du contenu final pour la note, pas un raisonnement intermédiaire.
+            """
         )
     }
 }

@@ -18,6 +18,7 @@ enum AITask: Sendable, Equatable {
     case summarize
     case rewrite(style: RewriteStyle)
     case extractActions
+    case modeRouting
     case semanticAnswer
 
     var telemetryName: String {
@@ -25,6 +26,7 @@ enum AITask: Sendable, Equatable {
         case .summarize: return "summarize"
         case .rewrite: return "rewrite"
         case .extractActions: return "extract_actions"
+        case .modeRouting: return "mode_routing"
         case .semanticAnswer: return "semantic_answer"
         }
     }
