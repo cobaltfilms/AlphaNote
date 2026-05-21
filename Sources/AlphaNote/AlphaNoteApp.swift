@@ -19,7 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DatabaseManager.shared.setup()
-        _ = NSApp.setActivationPolicy(.accessory)
+        _ = NSApp.setActivationPolicy(.regular)
+        configureDockIcon()
 
         windowController = NoteWindowController()
         windowController?.showWindow()
@@ -31,31 +32,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = item.button {
-            if let image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "AlphaNote") {
-                image.isTemplate = true
-                button.image = image
-            } else {
-                button.title = "AN"
-            }
-        }
-        item.menu = makeStatusMenu()
-        statusItem = item
+        configureStatusItem()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager?.unregisterAll()
     }
 
+    private func configureDockIcon() {
+        let size = NSSize(width: 1024, height: 1024)
+        let image = NSImage(size: size)
+
+        image.lockFocus()
+
+        NSColor.clear.setFill()
+        NSBezierPath(rect: NSRect(origin: .zero, size: size)).fill()
+
+        let bgRect = NSRect(x: 96, y: 96, width: 832, height: 832)
+        let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 180, yRadius: 180)
+
+        NSGraphicsContext.current?.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 18
+        shadow.shadowOffset = NSSize(width: 0, height: -6)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.22)
+        shadow.set()
+
+        NSColor(calibratedRed: 0.10, green: 0.12, blue: 0.18, alpha: 1).setFill()
+        bgPath.fill()
+
+        NSGraphicsContext.current?.restoreGraphicsState()
+
+        let font = NSFont(name: "Menlo-Bold", size: 560) ?? NSFont.systemFont(ofSize: 560, weight: .bold)
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor(calibratedWhite: 0.96, alpha: 1)
+        ]
+        NSString(string: "A").draw(at: NSPoint(x: 305, y: 245), withAttributes: textAttributes)
+
+        NSColor(calibratedRed: 1.0, green: 0.73, blue: 0.30, alpha: 1).setFill()
+        NSBezierPath(roundedRect: NSRect(x: 596, y: 298, width: 36, height: 405), xRadius: 10, yRadius: 10).fill()
+
+        image.unlockFocus()
+
+        NSApp.applicationIconImage = image
+    }
+
+    private func configureStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            button.image = nil
+            button.title = "A|"
+            button.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
+            button.toolTip = "AlphaNote"
+        }
+        item.menu = makeStatusMenu()
+        statusItem = item
+    }
+
     private func makeStatusMenu() -> NSMenu {
         let menu = NSMenu()
 
+        let titleItem = NSMenuItem(title: "AlphaNote", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
+        menu.addItem(.separator())
+
         let toggleItem = NSMenuItem(
-            title: "Open / Hide AlphaNote",
+            title: "Toggle Window",
             action: #selector(toggleFromMenu),
-            keyEquivalent: ""
+            keyEquivalent: "a"
         )
+        toggleItem.keyEquivalentModifierMask = [.option]
         toggleItem.target = self
         menu.addItem(toggleItem)
 

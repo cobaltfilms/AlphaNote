@@ -24,7 +24,10 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
-            path: "Sources/AlphaNote"
+            path: "Sources/AlphaNote",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "AlphaNoteTests",
