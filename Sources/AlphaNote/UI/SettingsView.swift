@@ -76,6 +76,9 @@ struct KeywordSettingsView: View {
     @AppStorage("keywordList") private var keywordList = "list"
     @AppStorage("keywordCode") private var keywordCode = "code"
     @AppStorage("keywordTimer") private var keywordTimer = "timer"
+    @AppStorage("listCheckTrigger") private var listCheckTrigger = "/x"
+    @AppStorage("listModeShortcutKey") private var listModeShortcutKey = "l"
+    @AppStorage("listModeShortcutModifiers") private var listModeShortcutModifiers = "commandShift"
 
     var body: some View {
         Form {
@@ -83,6 +86,28 @@ struct KeywordSettingsView: View {
             TextField("List keyword", text: $keywordList)
             TextField("Code keyword", text: $keywordCode)
             TextField("Timer keyword", text: $keywordTimer)
+            TextField("List check trigger", text: $listCheckTrigger)
+            HStack {
+                Picker("List shortcut", selection: $listModeShortcutModifiers) {
+                    Text("⌘⇧").tag("commandShift")
+                    Text("⌘⌥").tag("commandOption")
+                    Text("⌘⌃").tag("commandControl")
+                    Text("⌘").tag("command")
+                }
+                .frame(width: 140)
+
+                TextField("Key", text: $listModeShortcutKey)
+                    .frame(width: 40)
+                    .onChange(of: listModeShortcutKey) {
+                        let filtered = listModeShortcutKey
+                            .lowercased()
+                            .filter { $0.isLetter || $0.isNumber }
+                        listModeShortcutKey = String(filtered.prefix(1))
+                        if listModeShortcutKey.isEmpty {
+                            listModeShortcutKey = "l"
+                        }
+                    }
+            }
         }
         .padding(20)
     }

@@ -4,6 +4,9 @@ import AppKit
 struct NoteListView: View {
     @StateObject private var store = NoteStore()
     @State private var isSidebarVisible = true
+    @State private var showArchived = false
+    @State private var renamingNote: Note?
+    @State private var renameDraft = ""
 
     var body: some View {
         ZStack {
@@ -31,6 +34,9 @@ struct NoteListView: View {
                 isSidebarVisible.toggle()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .alphaNoteConvertToList)) { _ in
+            store.convertCurrentNoteToList()
+        }
     }
 
     private var sidebar: some View {
@@ -55,37 +61,46 @@ struct NoteListView: View {
             Divider()
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(store.notes.enumerated()), id: \.offset) { index, note in
+                        noteRow(note: note, index: index, isArchived: false)
+                    }
+
+                    if !store.archivedNotes.isEmpty {
+                        Divider().padding(.vertical, 2)
+
                         Button {
-                            if let noteID = note.id {
-                                store.selectNote(id: noteID)
-                            } else {
-                                store.currentIndex = index
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                showArchived.toggle()
                             }
                         } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(title(for: note, index: index))
-                                    .font(.system(size: 12, weight: .medium))
-                                    .lineLimit(1)
-                                Text(preview(for: note))
-                                    .font(.system(size: 11))
+                            HStack(spacing: 6) {
+                                Image(systemName: showArchived ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text("Archives (\(store.archivedNotes.count))")
+                                    .font(.system(size: 11, weight: .semibold))
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                Spacer()
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(index == store.currentIndex ? Color.primary.opacity(0.12) : Color.clear)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                         }
                         .buttonStyle(.plain)
+
+                        if showArchived {
+                            ForEach(store.archivedNotes, id: \.id) { note in
+                                noteRow(note: note, index: nil, isArchived: true)
+                            }
+                        }
                     }
                 }
                 .padding(10)
             }
         }
         .frame(width: 220)
+        .sheet(item: $renamingNote) { note in
+            renameSheet(for: note)
+        }
     }
 
     private var content: some View {
@@ -150,19 +165,118 @@ struct NoteListView: View {
     }
 
     private func title(for note: Note, index: Int) -> String {
+        let trimmedTitle = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty {
+            return trimmedTitle
+        }
         let lines = note.content.components(separatedBy: .newlines)
         if let firstNonEmpty = lines.first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-            return firstNonEmpty
+            return firstNonEmpty.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return "Note \(index + 1)"
     }
 
     private func preview(for note: Note) -> String {
-        let trimmed = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source: String
+        if note.keyword == "list" {
+            let lines = note.content.components(separatedBy: .newlines)
+            if let first = lines.first, ListModeFormatter.isListHeader(first) {
+                source = Array(lines.dropFirst()).joined(separator: "\n")
+            } else {
+                source = note.content
+            }
+        } else {
+            source = note.content
+        }
+
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             return "Vide"
         }
         return trimmed.replacingOccurrences(of: "\n", with: " ")
+    }
+
+    @ViewBuilder
+    private func noteRow(note: Note, index: Int?, isArchived: Bool) -> some View {
+        let selected = index.map { $0 == store.currentIndex } ?? false
+
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title(for: note, index: index ?? 0))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Text(preview(for: note))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Menu {
+                Button("Renommer") {
+                    renamingNote = note
+                    renameDraft = title(for: note, index: index ?? 0)
+                }
+                Button("Dupliquer") {
+                    store.duplicateNote(note)
+                }
+                if isArchived {
+                    Button("Désarchiver") {
+                        store.unarchiveNote(note)
+                    }
+                } else {
+                    Button("Archiver") {
+                        store.archiveNote(note)
+                    }
+                }
+                Divider()
+                Button("Supprimer", role: .destructive) {
+                    store.deleteNote(note)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(selected ? Color.primary.opacity(0.12) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .opacity(isArchived ? 0.72 : 1.0)
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            guard !isArchived else { return }
+            if let noteID = note.id {
+                store.selectNote(id: noteID)
+            } else if let index {
+                store.currentIndex = index
+            }
+        }
+    }
+
+    private func renameSheet(for note: Note) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Renommer la note")
+                .font(.headline)
+            TextField("Nouveau nom", text: $renameDraft)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Spacer()
+                Button("Annuler") {
+                    renamingNote = nil
+                }
+                Button("Enregistrer") {
+                    store.renameNote(note, to: renameDraft)
+                    renamingNote = nil
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 320)
     }
 }
 
@@ -301,4 +415,5 @@ private struct TrackpadSwipeMonitorView: NSViewRepresentable {
 extension Notification.Name {
     static let alphaNoteCreateNote = Notification.Name("alphaNoteCreateNote")
     static let alphaNoteToggleSidebar = Notification.Name("alphaNoteToggleSidebar")
+    static let alphaNoteConvertToList = Notification.Name("alphaNoteConvertToList")
 }

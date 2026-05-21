@@ -35,14 +35,28 @@ struct Note: Codable, Identifiable, Equatable {
     }
 
     mutating func detectKeyword() {
-        let firstLine = content.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        let rawFirstLine = content.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespaces) ?? ""
+        let firstLine = rawFirstLine.lowercased()
+
         if Note.knownKeywords.contains(firstLine) {
             keyword = firstLine
             title = firstLine
-        } else {
-            keyword = ""
-            title = firstLine
+            return
         }
+
+        if let colonIndex = rawFirstLine.firstIndex(of: ":") {
+            let possibleKeyword = String(rawFirstLine[..<colonIndex]).trimmingCharacters(in: .whitespaces).lowercased()
+            if Note.knownKeywords.contains(possibleKeyword) {
+                keyword = possibleKeyword
+                let customTitle = String(rawFirstLine[rawFirstLine.index(after: colonIndex)...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                title = customTitle.isEmpty ? possibleKeyword : customTitle
+                return
+            }
+        }
+
+        keyword = ""
+        title = firstLine
     }
 }
 

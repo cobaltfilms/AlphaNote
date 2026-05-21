@@ -4,7 +4,9 @@ import SwiftUI
 @MainActor
 final class NoteStore: ObservableObject {
     @Published var notes: [Note] = []
+    @Published var archivedNotes: [Note] = []
     @Published var currentIndex: Int = 0
+    @AppStorage("archivedNoteIDs") private var archivedNoteIDsStorage: String = "[]"
 
     var currentNote: Note? {
         guard !notes.isEmpty, currentIndex >= 0, currentIndex < notes.count else {
@@ -15,10 +17,12 @@ final class NoteStore: ObservableObject {
 
     func loadNotes() {
         reloadNotes()
+        repairListNotesIfNeeded()
     }
 
     func addNote() {
-        let position = (notes.map(\.position).max() ?? -1) + 1
+        let allPositions = (notes + archivedNotes).map(\.position)
+        let position = (allPositions.max() ?? -1) + 1
         let created = Note.create(Note(position: position))
         guard let createdID = created.id else {
             reloadNotes()
@@ -32,17 +36,96 @@ final class NoteStore: ObservableObject {
         currentIndex = index
     }
 
+    func isArchived(_ note: Note) -> Bool {
+        guard let id = note.id else { return false }
+        return archivedNoteIDs.contains(id)
+    }
+
+    func archiveNote(_ note: Note) {
+        guard let id = note.id else { return }
+        var ids = archivedNoteIDs
+        ids.insert(id)
+        setArchivedNoteIDs(ids)
+        let nextSelection = adjacentNoteID(forDeletedNoteID: id)
+        reloadNotes(selecting: nextSelection)
+    }
+
+    func unarchiveNote(_ note: Note) {
+        guard let id = note.id else { return }
+        var ids = archivedNoteIDs
+        ids.remove(id)
+        setArchivedNoteIDs(ids)
+        reloadNotes(selecting: id)
+    }
+
+    func duplicateNote(_ note: Note) {
+        var duplicated = note
+        duplicated.id = nil
+        duplicated.createdAt = Date()
+        duplicated.updatedAt = Date()
+        let allPositions = (notes + archivedNotes).map(\.position)
+        duplicated.position = (allPositions.max() ?? -1) + 1
+
+        let created = Note.create(duplicated)
+        guard let createdID = created.id else {
+            reloadNotes()
+            return
+        }
+        reloadNotes(selecting: createdID)
+    }
+
+    func renameNote(_ note: Note, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        var updated = note
+        let lines = updated.content.components(separatedBy: .newlines)
+        let firstLine = lines.first ?? ""
+        let remaining = Array(lines.dropFirst())
+
+        if ListModeFormatter.isListHeader(firstLine) {
+            updated.content = remaining.isEmpty
+                ? "list: \(trimmed)"
+                : (["list: \(trimmed)"] + remaining).joined(separator: "\n")
+        } else if lines.isEmpty {
+            updated.content = trimmed
+        } else {
+            updated.content = ([trimmed] + remaining).joined(separator: "\n")
+        }
+
+        updated.detectKeyword()
+        updateNote(updated)
+    }
+
+    func convertCurrentNoteToList() {
+        guard var note = currentNote else { return }
+        let normalized = ListModeFormatter.normalizeForListMode(content: note.content, forceListHeader: true)
+        guard normalized != note.content else { return }
+        note.content = normalized
+        note.detectKeyword()
+        updateNote(note)
+    }
+
     func updateNote(_ note: Note) {
         Note.update(note)
+        var updated = note
+        updated.detectKeyword()
+
         if let index = notes.firstIndex(where: { $0.id == note.id }) {
-            var updated = note
-            updated.detectKeyword()
             notes[index] = updated
+        }
+        if let index = archivedNotes.firstIndex(where: { $0.id == note.id }) {
+            archivedNotes[index] = updated
         }
     }
 
     func deleteNote(_ note: Note) {
         let nextSelection = adjacentNoteID(forDeletedNoteID: note.id)
+        if let id = note.id {
+            var ids = archivedNoteIDs
+            ids.remove(id)
+            setArchivedNoteIDs(ids)
+        }
         Note.delete(note)
         reloadNotes(selecting: nextSelection)
     }
@@ -125,7 +208,17 @@ final class NoteStore: ObservableObject {
     }
 
     private func reloadNotes(selecting selectedID: Int64? = nil) {
-        notes = Note.fetchAll()
+        let allNotes = Note.fetchAll()
+        let archivedIDs = archivedNoteIDs
+
+        notes = allNotes.filter { note in
+            guard let id = note.id else { return true }
+            return !archivedIDs.contains(id)
+        }
+        archivedNotes = allNotes.filter { note in
+            guard let id = note.id else { return false }
+            return archivedIDs.contains(id)
+        }
 
         if notes.isEmpty {
             let created = Note.create(Note(position: 0))
@@ -141,6 +234,43 @@ final class NoteStore: ObservableObject {
         }
 
         currentIndex = min(max(currentIndex, 0), notes.count - 1)
+    }
+
+    private var archivedNoteIDs: Set<Int64> {
+        guard let data = archivedNoteIDsStorage.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([Int64].self, from: data) else {
+            return []
+        }
+        return Set(ids)
+    }
+
+    private func setArchivedNoteIDs(_ ids: Set<Int64>) {
+        let sorted = ids.sorted()
+        if let data = try? JSONEncoder().encode(sorted),
+           let json = String(data: data, encoding: .utf8) {
+            archivedNoteIDsStorage = json
+        }
+    }
+
+    private func repairListNotesIfNeeded() {
+        let selectedID = currentNote?.id
+        let candidates = notes + archivedNotes
+        var changed = false
+
+        for note in candidates where note.keyword == "list" {
+            let normalized = ListModeFormatter.normalizeForListMode(content: note.content, forceListHeader: false)
+            guard normalized != note.content else { continue }
+
+            var updated = note
+            updated.content = normalized
+            updated.detectKeyword()
+            Note.update(updated)
+            changed = true
+        }
+
+        if changed {
+            reloadNotes(selecting: selectedID)
+        }
     }
 
     private func adjacentNoteID(forDeletedNoteID noteID: Int64?) -> Int64? {

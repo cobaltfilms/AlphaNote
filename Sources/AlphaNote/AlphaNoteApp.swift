@@ -4,6 +4,8 @@ import AppKit
 @main
 struct AlphaNoteApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("listModeShortcutKey") private var listModeShortcutKey: String = "l"
+    @AppStorage("listModeShortcutModifiers") private var listModeShortcutModifiers: String = "commandShift"
 
     var body: some Scene {
         Settings {
@@ -20,7 +22,33 @@ struct AlphaNoteApp: App {
                     NotificationCenter.default.post(name: .alphaNoteToggleSidebar, object: nil)
                 }
                 .keyboardShortcut("l", modifiers: [.command, .option])
+
+                Button("Convertir en liste") {
+                    NotificationCenter.default.post(name: .alphaNoteConvertToList, object: nil)
+                }
+                .keyboardShortcut(listModeShortcutKeyEquivalent, modifiers: listModeShortcutModifierFlags)
             }
+        }
+    }
+
+    private var listModeShortcutKeyEquivalent: KeyEquivalent {
+        let lower = listModeShortcutKey.lowercased()
+        let first = lower.first ?? "l"
+        return KeyEquivalent(first)
+    }
+
+    private var listModeShortcutModifierFlags: EventModifiers {
+        switch listModeShortcutModifiers {
+        case "command":
+            return [.command]
+        case "commandOption":
+            return [.command, .option]
+        case "commandControl":
+            return [.command, .control]
+        case "commandShift":
+            fallthrough
+        default:
+            return [.command, .shift]
         }
     }
 }
