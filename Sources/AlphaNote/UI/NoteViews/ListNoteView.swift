@@ -4,6 +4,8 @@ struct ListNoteView: View {
     @Binding var note: Note
     @AppStorage("fontSize") private var fontSize: Double = 14
     @AppStorage("listCheckTrigger") private var listCheckTrigger: String = "/x"
+    @State private var isEditing = false
+    @FocusState private var isEditorFocused: Bool
 
     private struct Row: Identifiable {
         let id: Int
@@ -39,20 +41,58 @@ struct ListNoteView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 6) {
-                if let listTitle {
-                    Text(listTitle)
-                        .font(.system(size: fontSize + 4, weight: .semibold))
-                        .padding(.bottom, 4)
+        VStack(spacing: 0) {
+            HStack {
+                Text(isEditing ? "Édition de la liste" : "Liste")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(isEditing ? "Terminer" : "Modifier") {
+                    if isEditing {
+                        let normalized = ListModeFormatter.normalizeForListMode(content: note.content, forceListHeader: true)
+                        if normalized != note.content {
+                            note.content = normalized
+                        }
+                        isEditing = false
+                    } else {
+                        isEditing = true
+                    }
                 }
-
-                ForEach(rows) { row in
-                    listRow(for: row)
-                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .semibold))
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            if isEditing {
+                TextEditor(text: $note.content)
+                    .font(.system(size: fontSize))
+                    .scrollContentBackground(.hidden)
+                    .focused($isEditorFocused)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .onAppear {
+                        isEditorFocused = true
+                    }
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        if let listTitle {
+                            Text(listTitle)
+                                .font(.system(size: fontSize + 4, weight: .semibold))
+                                .padding(.bottom, 4)
+                        }
+
+                        ForEach(rows) { row in
+                            listRow(for: row)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+            }
         }
         .onAppear {
             normalizeContentIfNeeded()

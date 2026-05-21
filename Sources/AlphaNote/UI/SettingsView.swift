@@ -19,6 +19,11 @@ struct SettingsView: View {
                     Label("Keywords", systemImage: "tag")
                 }
 
+            AISettingsView()
+                .tabItem {
+                    Label("AI", systemImage: "sparkles")
+                }
+
             AdvancedSettingsView()
                 .tabItem {
                     Label("Advanced", systemImage: "wrench.and.screwdriver")

@@ -117,6 +117,24 @@ final class DatabaseManager {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_note_updatedAt ON note(updatedAt)")
         }
 
+        migrator.registerMigration("v3_ai") { db in
+            try db.alter(table: "note") { t in
+                t.add(column: "aiSummary", .text).notNull().defaults(to: "")
+                t.add(column: "aiLastProcessedAt", .datetime)
+            }
+
+            try db.create(table: "note_embedding", ifNotExists: true) { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("noteUUID", .text).notNull()
+                t.column("modelID", .text).notNull()
+                t.column("vectorJSON", .text).notNull().defaults(to: "[]")
+                t.column("updatedAt", .datetime).notNull().defaults(to: Date())
+            }
+
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_note_embedding_uuid ON note_embedding(noteUUID)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_note_embedding_updatedAt ON note_embedding(updatedAt)")
+        }
+
         try migrator.migrate(dbQueue)
     }
 }

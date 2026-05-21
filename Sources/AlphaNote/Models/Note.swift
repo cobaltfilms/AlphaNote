@@ -14,6 +14,8 @@ struct Note: Codable, Identifiable, Equatable {
     var deletedAt: Date?
     var lastSyncedAt: Date?
     var lastModifiedByDeviceId: String
+    var aiSummary: String
+    var aiLastProcessedAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -32,6 +34,8 @@ struct Note: Codable, Identifiable, Equatable {
         deletedAt: Date? = nil,
         lastSyncedAt: Date? = nil,
         lastModifiedByDeviceId: String = DeviceIdentity.currentDeviceID,
+        aiSummary: String = "",
+        aiLastProcessedAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -47,6 +51,8 @@ struct Note: Codable, Identifiable, Equatable {
         self.deletedAt = deletedAt
         self.lastSyncedAt = lastSyncedAt
         self.lastModifiedByDeviceId = lastModifiedByDeviceId
+        self.aiSummary = aiSummary
+        self.aiLastProcessedAt = aiLastProcessedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         detectKeyword()
@@ -100,6 +106,8 @@ extension Note: TableRecord, FetchableRecord, MutablePersistableRecord {
         deletedAt = row["deletedAt"]
         lastSyncedAt = row["lastSyncedAt"]
         lastModifiedByDeviceId = row["lastModifiedByDeviceId"] ?? ""
+        aiSummary = row["aiSummary"] ?? ""
+        aiLastProcessedAt = row["aiLastProcessedAt"]
         createdAt = row["createdAt"]
         updatedAt = row["updatedAt"]
     }
@@ -117,6 +125,8 @@ extension Note: TableRecord, FetchableRecord, MutablePersistableRecord {
         container["deletedAt"] = deletedAt
         container["lastSyncedAt"] = lastSyncedAt
         container["lastModifiedByDeviceId"] = lastModifiedByDeviceId
+        container["aiSummary"] = aiSummary
+        container["aiLastProcessedAt"] = aiLastProcessedAt
         container["createdAt"] = createdAt
         container["updatedAt"] = updatedAt
     }
@@ -273,6 +283,12 @@ extension Note {
                     existing.deletedAt = note.deletedAt
                     existing.lastSyncedAt = note.lastSyncedAt
                     existing.lastModifiedByDeviceId = note.lastModifiedByDeviceId
+                    if !note.aiSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        existing.aiSummary = note.aiSummary
+                    }
+                    if note.aiLastProcessedAt != nil {
+                        existing.aiLastProcessedAt = note.aiLastProcessedAt
+                    }
                     existing.createdAt = note.createdAt
                     existing.updatedAt = note.updatedAt
                     try existing.update(db)

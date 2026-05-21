@@ -7,6 +7,12 @@ struct NoteListView: View {
     @State private var showArchived = false
     @State private var renamingNote: Note?
     @State private var renameDraft = ""
+    @State private var semanticQuery = ""
+    @State private var questionDraft = ""
+    @State private var semanticAnswer = ""
+    @State private var perNoteQuestionDraft: [Int64: String] = [:]
+    @State private var perNoteAnswer: [Int64: String] = [:]
+    @State private var isAnswering = false
 
     var body: some View {
         ZStack {
@@ -24,6 +30,7 @@ struct NoteListView: View {
         }
         .onAppear {
             store.loadNotes()
+            syncRightAIPanelWithCurrentNote()
         }
         .onReceive(NotificationCenter.default.publisher(for: .alphaNoteCreateNote)) { _ in
             store.addNote()
@@ -39,6 +46,17 @@ struct NoteListView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .alphaNoteDidSync)) { _ in
             store.loadNotes()
+        }
+        .onChange(of: store.currentNote?.id) {
+            syncRightAIPanelWithCurrentNote()
+        }
+        .onChange(of: questionDraft) {
+            guard let noteID = store.currentNote?.id else { return }
+            perNoteQuestionDraft[noteID] = questionDraft
+        }
+        .onChange(of: semanticAnswer) {
+            guard let noteID = store.currentNote?.id else { return }
+            perNoteAnswer[noteID] = semanticAnswer
         }
     }
 
@@ -65,6 +83,40 @@ struct NoteListView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Recherche IA", text: $semanticQuery)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                            .onChange(of: semanticQuery) {
+                                Task { await store.semanticSearch(query: semanticQuery) }
+                            }
+
+                        if !store.semanticSearchResults.isEmpty {
+                            Text("Résultats IA")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(store.semanticSearchResults.prefix(3)) { hit in
+                                Button {
+                                    if let noteID = hit.note.id {
+                                        store.selectNote(id: noteID)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(title(for: hit.note, index: 0))
+                                            .font(.system(size: 10, weight: .medium))
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text(String(format: "%.2f", hit.score))
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 6)
+
                     ForEach(Array(store.notes.enumerated()), id: \.element.id) { index, note in
                         noteRow(note: note, index: index, isArchived: false)
                     }
@@ -138,6 +190,40 @@ struct NoteListView: View {
             .padding(.vertical, 8)
 
             Divider()
+
+            HStack(spacing: 8) {
+                TextField("Question IA sur tes notes", text: $questionDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+
+                Button(isAnswering ? "..." : "Demander") {
+                    Task {
+                        isAnswering = true
+                        let askedNoteID = store.currentNote?.id
+                        semanticAnswer = await store.askNotes(question: questionDraft)
+                        if let noteID = askedNoteID {
+                            perNoteAnswer[noteID] = semanticAnswer
+                        }
+                        isAnswering = false
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isAnswering || questionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            if !semanticAnswer.isEmpty {
+                ScrollView {
+                    Text(semanticAnswer)
+                        .font(.system(size: 11))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .textSelection(.enabled)
+                }
+                .frame(minHeight: 80, maxHeight: 120)
+            }
 
             ZStack {
                 if store.notes.isEmpty {
@@ -280,6 +366,16 @@ struct NoteListView: View {
         }
         .padding(18)
         .frame(width: 320)
+    }
+
+    private func syncRightAIPanelWithCurrentNote() {
+        guard let noteID = store.currentNote?.id else {
+            questionDraft = ""
+            semanticAnswer = ""
+            return
+        }
+        questionDraft = perNoteQuestionDraft[noteID] ?? ""
+        semanticAnswer = perNoteAnswer[noteID] ?? ""
     }
 }
 
