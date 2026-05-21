@@ -14,6 +14,7 @@ struct SemanticSearchFeature {
     func answerCurrentNoteOnly(
         question: String,
         currentNote: Note,
+        additionalURLs: [URL] = [],
         service: AIServiceProtocol = AIService.shared
     ) async throws -> AIResult {
         let currentTitle = currentNote.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -25,7 +26,9 @@ struct SemanticSearchFeature {
                 content: currentNote.content
             )
         ]
-        let remote = await remoteContext.contexts(from: question, maxCount: 2)
+        let questionURLs = URLDetector.extractURLs(from: question)
+        let mergedURLs = questionURLs + additionalURLs
+        let remote = await remoteContext.contexts(from: mergedURLs, maxCount: 2)
         contexts.append(contentsOf: remote)
         if AIIntentDetector.isWebResearchRequest(question) {
             let web = await remoteContext.webResearchContexts(query: question, maxCount: 3)

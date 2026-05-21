@@ -68,12 +68,22 @@ enum URLDetector {
 }
 
 actor RemoteContextFeature {
+    enum URLProbeOutcome: Sendable {
+        case ingredientsFound(count: Int)
+        case accessibleNoIngredients
+        case unreachable
+    }
+
     func contexts(from question: String, maxCount: Int = 2) async -> [NoteContext] {
         let urls = URLDetector.extractURLs(from: question)
+        return await contexts(from: urls, maxCount: maxCount)
+    }
+
+    func contexts(from urls: [URL], maxCount: Int = 2) async -> [NoteContext] {
         guard !urls.isEmpty else { return [] }
 
         var contexts: [NoteContext] = []
-        for url in urls.prefix(maxCount) {
+        for url in uniqueURLs(urls).prefix(maxCount) {
             if let context = await fetchContext(from: url) {
                 contexts.append(context)
             }
@@ -115,20 +125,91 @@ actor RemoteContextFeature {
 
     func recipeIngredientItems(from question: String, maxItems: Int = 40) async -> [String] {
         let urls = URLDetector.extractURLs(from: question)
+        return await recipeIngredientItems(from: urls, maxItems: maxItems)
+    }
+
+    func recipeIngredientItems(from urls: [URL], maxItems: Int = 40) async -> [String] {
         guard !urls.isEmpty else { return [] }
 
-        for url in urls {
-            guard let html = await fetchHTML(url: url) else { continue }
-            let fromJSONLD = extractRecipeIngredientsFromJSONLD(html)
-            if !fromJSONLD.isEmpty {
-                return Array(fromJSONLD.prefix(maxItems))
+        for url in uniqueURLs(urls) {
+            if let html = await fetchHTML(url: url) {
+                let fromJSONLD = extractRecipeIngredientsFromJSONLD(html)
+                if !fromJSONLD.isEmpty {
+                    return Array(fromJSONLD.prefix(maxItems))
+                }
+                let fallback = extractRecipeIngredientsFromText(sanitizeHTML(html))
+                if !fallback.isEmpty {
+                    return Array(fallback.prefix(maxItems))
+                }
             }
-            let fallback = extractRecipeIngredientsFromText(sanitizeHTML(html))
-            if !fallback.isEmpty {
-                return Array(fallback.prefix(maxItems))
+
+            if let webText = await fetchWebText(from: url) {
+                let fallback = extractRecipeIngredientsFromText(webText)
+                if !fallback.isEmpty {
+                    return Array(fallback.prefix(maxItems))
+                }
             }
         }
         return []
+    }
+
+    func probeRecipeURLs(_ urls: [URL], maxCount: Int = 3) async -> [String] {
+        let targets = Array(uniqueURLs(urls).prefix(maxCount))
+        guard !targets.isEmpty else { return [] }
+
+        var lines: [String] = []
+        for url in targets {
+            let host = url.host ?? url.absoluteString
+            let outcome = await probeRecipeURL(url)
+            switch outcome {
+            case let .ingredientsFound(count):
+                lines.append("- \(host): OK, \(count) ingrédient(s) détecté(s)")
+            case .accessibleNoIngredients:
+                lines.append("- \(host): URL accessible, mais ingrédients non détectés")
+            case .unreachable:
+                lines.append("- \(host): URL non accessible depuis l'app")
+            }
+        }
+        return lines
+    }
+
+    private func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        var result: [URL] = []
+        for url in urls {
+            let key = url.absoluteString
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            result.append(url)
+        }
+        return result
+    }
+
+    private func probeRecipeURL(_ url: URL) async -> URLProbeOutcome {
+        if let html = await fetchHTML(url: url) {
+            let jsonLDCount = extractRecipeIngredientsFromJSONLD(html).count
+            let textCount = extractRecipeIngredientsFromText(sanitizeHTML(html)).count
+            let total = max(jsonLDCount, textCount)
+            if total > 0 {
+                return .ingredientsFound(count: total)
+            }
+            if let webText = await fetchWebText(from: url),
+               !webText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .accessibleNoIngredients
+            }
+            return .unreachable
+        }
+
+        if let webText = await fetchWebText(from: url),
+           !webText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let textCount = extractRecipeIngredientsFromText(webText).count
+            if textCount > 0 {
+                return .ingredientsFound(count: textCount)
+            }
+            return .accessibleNoIngredients
+        }
+
+        return .unreachable
     }
 
     private func fetchContext(from url: URL) async -> NoteContext? {
@@ -147,14 +228,20 @@ actor RemoteContextFeature {
 
     private func sanitizeHTML(_ html: String) -> String {
         var text = html
-        let patterns = [
+        text = text.replacingOccurrences(
+            of: #"(?is)</?(?:br|p|div|li|ul|ol|h[1-6]|section|article|tr|td|th)[^>]*>"#,
+            with: "\n",
+            options: .regularExpression
+        )
+
+        let stripPatterns = [
             "(?is)<script[^>]*>.*?</script>",
             "(?is)<style[^>]*>.*?</style>",
             "(?is)<noscript[^>]*>.*?</noscript>",
             "(?is)<[^>]+>"
         ]
 
-        for pattern in patterns {
+        for pattern in stripPatterns {
             text = text.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
         }
 
@@ -170,7 +257,12 @@ actor RemoteContextFeature {
             text = text.replacingOccurrences(of: entity, with: replacement)
         }
 
-        text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        text = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\t", with: " ")
+            .replacingOccurrences(of: #"[ ]{2,}"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -247,7 +339,11 @@ actor RemoteContextFeature {
             }
             let raw = String(data: data, encoding: .utf8) ?? ""
             return raw
-                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+                .replacingOccurrences(of: "\t", with: " ")
+                .replacingOccurrences(of: #"[ ]{2,}"#, with: " ", options: .regularExpression)
+                .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             return nil
@@ -510,25 +606,73 @@ actor RemoteContextFeature {
             }
 
             if isInIngredientSection {
-                if folded.contains("preparation") || folded.contains("etape") || folded.contains("instructions") {
+                if isIngredientSectionTerminator(folded) {
                     break
                 }
-                if let regex = try? NSRegularExpression(pattern: #"^\s*(?:[-*•]\s+|\d+[.)]\s+)"#),
-                   regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
-                    let cleaned = line.replacingOccurrences(
-                        of: #"^\s*(?:[-*•]\s+|\d+[.)]\s+)"#,
-                        with: "",
-                        options: .regularExpression
-                    ).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let key = cleaned.lowercased()
-                    if !cleaned.isEmpty, !seen.contains(key) {
-                        seen.insert(key)
-                        result.append(cleaned)
-                    }
+
+                let cleaned = line.replacingOccurrences(
+                    of: #"^\s*(?:[-*•]\s+|\d+[.)]\s+)"#,
+                    with: "",
+                    options: .regularExpression
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                guard isLikelyIngredientLine(cleaned) else { continue }
+
+                let key = cleaned.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                if !seen.contains(key) {
+                    seen.insert(key)
+                    result.append(cleaned)
                 }
             }
         }
 
         return result
+    }
+
+    private func isIngredientSectionTerminator(_ foldedLine: String) -> Bool {
+        foldedLine.contains("preparation") ||
+            foldedLine.contains("etape") ||
+            foldedLine.contains("instructions") ||
+            foldedLine.contains("cuisson") ||
+            foldedLine.contains("realisation")
+    }
+
+    private func isLikelyIngredientLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let folded = trimmed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        if folded.hasPrefix("ingredients") || folded.hasPrefix("ingredient") {
+            return false
+        }
+        if folded.hasPrefix("pour ") || folded.hasPrefix("temps ") || folded.hasPrefix("servir ") {
+            return false
+        }
+
+        let words = trimmed.split(whereSeparator: \.isWhitespace).count
+        if words > 18 {
+            return false
+        }
+
+        if folded.hasPrefix("facultatif") {
+            return true
+        }
+
+        let hasQuantity = trimmed.range(
+            of: #"(?i)\b\d+[.,]?\d*\s*(g|kg|mg|ml|cl|l|cuill(?:ere|ères?)|c\.?\s*[àa]\s*caf[eé]|gousse?s?|branche?s?|pinc[ée]e?s?|bo[iî]te?s?|sachet?s?)\b|^\d+[.,]?\d*\b"#,
+            options: .regularExpression
+        ) != nil
+        if hasQuantity {
+            return true
+        }
+
+        let shortFoodLine = words <= 6 &&
+            folded.range(of: #"[a-zàâçéèêëîïôûùüÿñæœ]"#, options: .regularExpression) != nil &&
+            !folded.contains("http")
+        if shortFoodLine {
+            return true
+        }
+
+        return false
     }
 }

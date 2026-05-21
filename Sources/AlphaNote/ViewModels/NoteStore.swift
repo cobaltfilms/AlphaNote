@@ -270,19 +270,24 @@ final class NoteStore: ObservableObject {
         let wantsMath = modes.contains(.math)
         let wantsTransform = modes.contains(.transform)
         let providedURLs = URLDetector.extractURLs(from: trimmed)
+        let noteURLs = URLDetector.extractURLs(from: currentNote.content)
+        let candidateURLs = uniqueURLs(providedURLs + noteURLs)
+        let shouldProbeURLs = !providedURLs.isEmpty || ((wantsWebResearch || wantsList) && !noteURLs.isEmpty)
+        let effectiveWantsWebResearch = wantsWebResearch || !providedURLs.isEmpty
+        var urlProbeDiagnostics: [String] = []
 
-        if wantsMath && !wantsWebResearch,
+        if wantsMath && !effectiveWantsWebResearch,
            let localMathMessage = handleLocalMathRequest(question: trimmed, currentNote: currentNote) {
             return localMathMessage
         }
 
-        if wantsList && !wantsWebResearch,
+        if wantsList && !effectiveWantsWebResearch,
            let localListMessage = handleLocalListRequest(question: trimmed, currentNote: currentNote) {
             return localListMessage
         }
 
-        if wantsWebResearch && wantsList && !providedURLs.isEmpty {
-            let directIngredients = await remoteContext.recipeIngredientItems(from: trimmed, maxItems: 40)
+        if wantsList && shouldProbeURLs && !candidateURLs.isEmpty {
+            let directIngredients = await remoteContext.recipeIngredientItems(from: candidateURLs, maxItems: 40)
             if !directIngredients.isEmpty {
                 let payload = directIngredients.map { "* \($0)" }.joined(separator: "\n")
                 convertSemanticAnswerToListOnCurrentNote(
@@ -292,18 +297,20 @@ final class NoteStore: ObservableObject {
                 )
                 return "Liste générée depuis l'URL fournie."
             }
+            urlProbeDiagnostics = await remoteContext.probeRecipeURLs(candidateURLs, maxCount: 3)
         }
 
         do {
             let answer = try await SemanticSearchFeature().answerCurrentNoteOnly(
                 question: trimmed,
-                currentNote: currentNote
+                currentNote: currentNote,
+                additionalURLs: candidateURLs
             )
             if let appliedMessage = applySemanticOperation(result: answer, question: trimmed) {
                 return appliedMessage
             }
 
-            let shouldAutoApplyList = !wantsWebResearch && (wantsList ||
+            let shouldAutoApplyList = !effectiveWantsWebResearch && (wantsList ||
                 AIIntentDetector.isExplicitListRequest(trimmed) ||
                 (currentNote.keyword == "list" && AIIntentDetector.isListRefinementRequest(trimmed)))
             if shouldAutoApplyList {
@@ -319,7 +326,7 @@ final class NoteStore: ObservableObject {
                 return "Liste mise à jour dans la note courante."
             }
 
-            if wantsWebResearch {
+            if effectiveWantsWebResearch {
                 if wantsList {
                     let listPayload = semanticListPayload(from: answer)
                     if !listPayload.isEmpty {
@@ -339,6 +346,9 @@ final class NoteStore: ObservableObject {
                 }
                 let fallback = cleanedSemanticFallbackText(answer.text)
                 guard !fallback.isEmpty else {
+                    if !urlProbeDiagnostics.isEmpty {
+                        return "Je n'ai pas pu exploiter l'URL.\n\(urlProbeDiagnostics.joined(separator: "\n"))"
+                    }
                     return "Je n'ai pas trouvé de sources web exploitables pour cette demande."
                 }
                 replaceCurrentNoteWithSemanticAnswer(fallback)
@@ -819,6 +829,18 @@ final class NoteStore: ObservableObject {
         let items = listItems(from: cleaned)
         guard !items.isEmpty else { return "" }
         return items.map { "* \($0)" }.joined(separator: "\n")
+    }
+
+    private func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        var result: [URL] = []
+        for url in urls {
+            let key = url.absoluteString
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            result.append(url)
+        }
+        return result
     }
 
     private func resolveRouteModes(question: String, currentNote: Note) async -> Set<ModeRoutingFeature.RouteMode> {
