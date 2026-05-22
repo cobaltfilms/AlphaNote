@@ -13,12 +13,18 @@ struct RemoteFileEntry {
     let etag: String?
 }
 
+struct RemoteTextFile {
+    let path: String
+    let content: String
+}
+
 enum NextcloudClientError: LocalizedError {
     case invalidServerURL
     case unauthorized
     case forbidden
     case httpStatus(Int)
     case invalidResponse
+    case importFolderNotFound(String)
 
     var errorDescription: String? {
         switch self {
@@ -32,6 +38,8 @@ enum NextcloudClientError: LocalizedError {
             return "Unexpected server response (\(code))."
         case .invalidResponse:
             return "Unexpected server response format."
+        case let .importFolderNotFound(path):
+            return "Nextcloud folder not found: \(path)"
         }
     }
 }
@@ -40,6 +48,8 @@ final class NextcloudWebDAVClient {
     private let username: String
     private let password: String
     private let session: URLSession
+    private let serverBaseURL: URL
+    private let webDAVRootURL: URL
     private let alphaFolderURL: URL
     private let notesFolderURL: URL
     private let manifestURL: URL
@@ -59,11 +69,13 @@ final class NextcloudWebDAVClient {
         self.session = URLSession(configuration: config)
 
         let normalizedServer = NextcloudWebDAVClient.removeTrailingSlash(from: baseURL)
+        self.serverBaseURL = normalizedServer
         let webDAVRoot = normalizedServer
             .appendingPathComponent("remote.php", isDirectory: true)
             .appendingPathComponent("dav", isDirectory: true)
             .appendingPathComponent("files", isDirectory: true)
             .appendingPathComponent(username, isDirectory: true)
+        self.webDAVRootURL = webDAVRoot
 
         self.alphaFolderURL = webDAVRoot.appendingPathComponent("AlphaNote", isDirectory: true)
         self.notesFolderURL = alphaFolderURL.appendingPathComponent("notes", isDirectory: true)
@@ -137,11 +149,72 @@ final class NextcloudWebDAVClient {
         _ = try await sendRequest(url: url, method: "DELETE", expectedStatusCodes: [200, 204, 404])
     }
 
+    func listTextFiles(relativeFolderPath: String, recursive: Bool = true) async throws -> [RemoteTextFile] {
+        let trimmedPath = relativeFolderPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else {
+            throw NextcloudClientError.importFolderNotFound(relativeFolderPath)
+        }
+
+        let folderURL = urlForRelativeFolderPath(trimmedPath)
+        var queue: [URL] = [folderURL]
+        var visitedDirectories = Set<String>()
+        var files: [RemoteTextFile] = []
+        let allowedExtensions: Set<String> = ["md", "txt"]
+
+        while !queue.isEmpty {
+            let currentDirectory = queue.removeFirst()
+            let directoryKey = Self.removeTrailingSlash(from: currentDirectory).absoluteString
+            if visitedDirectories.contains(directoryKey) {
+                continue
+            }
+            visitedDirectories.insert(directoryKey)
+
+            let entries: [RemoteFileEntry]
+            do {
+                entries = try await propfind(url: currentDirectory, depth: 1)
+            } catch let NextcloudClientError.httpStatus(code) where code == 404 {
+                throw NextcloudClientError.importFolderNotFound(trimmedPath)
+            }
+
+            for entry in entries {
+                guard let entryURL = resolvedURL(fromHref: entry.href) else { continue }
+                let normalizedEntryURL = Self.removeTrailingSlash(from: entryURL)
+                let normalizedDirectory = Self.removeTrailingSlash(from: currentDirectory)
+                guard normalizedEntryURL != normalizedDirectory else { continue }
+
+                let isDirectory = entry.href.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("/")
+                if isDirectory {
+                    if recursive {
+                        queue.append(entryURL)
+                    }
+                    continue
+                }
+
+                let fileExtension = entryURL.pathExtension.lowercased()
+                guard allowedExtensions.contains(fileExtension) else { continue }
+
+                let content = try await fetchTextFile(at: entryURL)
+                let path = displayPath(for: entryURL, under: folderURL)
+                files.append(RemoteTextFile(path: path, content: content))
+            }
+        }
+
+        return files
+    }
+
     private func ensureDirectory(_ url: URL) async throws {
         let result = try await sendRequest(url: url, method: "MKCOL", expectedStatusCodes: [201, 405, 301])
         if result.statusCode == 301 {
             throw NextcloudClientError.httpStatus(301)
         }
+    }
+
+    private func fetchTextFile(at url: URL) async throws -> String {
+        let result = try await sendRequest(url: url, method: "GET", expectedStatusCodes: [200])
+        if let text = String(data: result.data, encoding: .utf8) {
+            return text
+        }
+        return String(decoding: result.data, as: UTF8.self)
     }
 
     private func propfind(url: URL, depth: Int) async throws -> [RemoteFileEntry] {
@@ -252,6 +325,36 @@ final class NextcloudWebDAVClient {
         let token = "\(username):\(password)"
         let encoded = Data(token.utf8).base64EncodedString()
         return "Basic \(encoded)"
+    }
+
+    private func urlForRelativeFolderPath(_ folderPath: String) -> URL {
+        var sanitized = folderPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        while sanitized.hasPrefix("/") {
+            sanitized.removeFirst()
+        }
+        return webDAVRootURL.appendingPathComponent(sanitized, isDirectory: true)
+    }
+
+    private func resolvedURL(fromHref href: String) -> URL? {
+        let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let absolute = URL(string: trimmed), absolute.scheme?.hasPrefix("http") == true {
+            return absolute
+        }
+
+        if trimmed.hasPrefix("/") {
+            return URL(string: trimmed, relativeTo: serverBaseURL)?.absoluteURL
+        }
+
+        return URL(string: trimmed, relativeTo: serverBaseURL)?.absoluteURL
+    }
+
+    private func displayPath(for fileURL: URL, under folderURL: URL) -> String {
+        let relativeToWebDAVRoot = fileURL.path.replacingOccurrences(of: webDAVRootURL.path, with: "")
+        let relativeToFolder = fileURL.path.replacingOccurrences(of: folderURL.path, with: "")
+        let candidate = relativeToFolder.count < relativeToWebDAVRoot.count ? relativeToFolder : relativeToWebDAVRoot
+        return candidate.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     private static func removeTrailingSlash(from url: URL) -> URL {

@@ -135,6 +135,9 @@ struct AdvancedSettingsView: View {
     @State private var feedbackMessage: String?
     @State private var feedbackIsError = false
     @State private var isTestingConnection = false
+    @State private var nextcloudNotesFolder = "Notes"
+    @State private var isImportingNextcloudNotes = false
+    @State private var isImportingAppleNotes = false
 
     var body: some View {
         Form {
@@ -183,6 +186,32 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(statusColor)
             } header: {
                 Text("Cloud Sync (Nextcloud)")
+            }
+
+            Section {
+                TextField("Nextcloud Notes folder", text: $nextcloudNotesFolder)
+
+                HStack {
+                    Button(isImportingNextcloudNotes ? "Importing Nextcloud Notes..." : "Import Nextcloud Notes") {
+                        Task { await importNextcloudNotes() }
+                    }
+                    .disabled(isImportingNextcloudNotes || isImportingAppleNotes)
+
+                    Button(isImportingAppleNotes ? "Importing Apple Notes..." : "Import Apple Notes") {
+                        Task { await importAppleNotes() }
+                    }
+                    .disabled(isImportingAppleNotes || isImportingNextcloudNotes)
+                }
+
+                if let feedbackMessage {
+                    Text(feedbackMessage)
+                        .font(.system(size: 12))
+                        .foregroundStyle(feedbackIsError ? .red : .green)
+                }
+            } header: {
+                Text("Import")
+            } footer: {
+                Text("Imports skip duplicates automatically.")
             }
 
             HStack {
@@ -246,6 +275,7 @@ struct AdvancedSettingsView: View {
         return .secondary
     }
 
+    @MainActor
     private func loadStoredPassword() {
         do {
             let loaded = try KeychainService.shared.readPassword(serverURL: nextcloudServerURL, username: nextcloudUsername)
@@ -256,6 +286,7 @@ struct AdvancedSettingsView: View {
         }
     }
 
+    @MainActor
     private func persistPasswordIfPossible() throws {
         let server = nextcloudServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let username = nextcloudUsername.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -265,6 +296,7 @@ struct AdvancedSettingsView: View {
         try KeychainService.shared.savePassword(appPassword, serverURL: server, username: username)
     }
 
+    @MainActor
     private func testConnection() async {
         feedbackMessage = nil
         feedbackIsError = false
@@ -282,6 +314,7 @@ struct AdvancedSettingsView: View {
         }
     }
 
+    @MainActor
     private func triggerManualSync() async {
         do {
             feedbackMessage = nil
@@ -292,5 +325,68 @@ struct AdvancedSettingsView: View {
             feedbackMessage = error.localizedDescription
             feedbackIsError = true
         }
+    }
+
+    @MainActor
+    private func importNextcloudNotes() async {
+        feedbackMessage = nil
+        feedbackIsError = false
+        isImportingNextcloudNotes = true
+        defer { isImportingNextcloudNotes = false }
+
+        do {
+            try persistPasswordIfPossible()
+            let password = try resolveNextcloudPasswordForImport()
+            let report = try await NoteImportService.shared.importNextcloudNotes(
+                serverURL: nextcloudServerURL,
+                username: nextcloudUsername,
+                password: password,
+                folderPath: nextcloudNotesFolder
+            )
+            feedbackMessage = report.summary
+            feedbackIsError = false
+        } catch {
+            feedbackMessage = error.localizedDescription
+            feedbackIsError = true
+        }
+    }
+
+    @MainActor
+    private func importAppleNotes() async {
+        feedbackMessage = nil
+        feedbackIsError = false
+        isImportingAppleNotes = true
+        defer { isImportingAppleNotes = false }
+
+        do {
+            let report = try await Task.detached(priority: .userInitiated) {
+                try NoteImportService.shared.importAppleNotes()
+            }.value
+            if report.scanned == 0 {
+                feedbackMessage = "\(report.summary) If you expected notes, open Apple Notes once, wait for sync to finish, then retry import."
+            } else {
+                feedbackMessage = report.summary
+            }
+            feedbackIsError = false
+        } catch {
+            feedbackMessage = error.localizedDescription
+            feedbackIsError = true
+        }
+    }
+
+    @MainActor
+    private func resolveNextcloudPasswordForImport() throws -> String {
+        let inline = appPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !inline.isEmpty {
+            return inline
+        }
+
+        let server = nextcloudServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = nextcloudUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stored = try KeychainService.shared.readPassword(serverURL: server, username: username)
+        guard let stored, !stored.isEmpty else {
+            throw SyncConfigurationError.missingPassword
+        }
+        return stored
     }
 }

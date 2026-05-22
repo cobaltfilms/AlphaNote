@@ -44,7 +44,7 @@ actor VectorIndex {
 
     private func lexicalScore(query: String, note: Note) -> Double {
         let q = query.lowercased()
-        let text = (note.title + "\n" + note.content).lowercased()
+        let text = (note.effectiveTitle + "\n" + note.content).lowercased()
         guard !q.isEmpty else { return 0 }
         if text.contains(q) { return 1.0 }
 

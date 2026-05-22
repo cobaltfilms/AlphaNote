@@ -6,7 +6,7 @@ struct CodeNoteView: View {
     @FocusState private var isEditorFocused: Bool
 
     private var detectedLanguage: String {
-        let titleLine = note.title.lowercased()
+        let titleLine = note.effectiveTitle.lowercased()
         if titleLine.contains("swift") { return "swift" }
         if titleLine.contains("python") || titleLine.contains("py") { return "python" }
         if titleLine.contains("javascript") || titleLine.contains("js") { return "javascript" }

@@ -69,8 +69,8 @@ enum URLDetector {
 
 actor RemoteContextFeature {
     enum URLProbeOutcome: Sendable {
-        case ingredientsFound(count: Int)
-        case accessibleNoIngredients
+        case listItemsFound(count: Int)
+        case accessibleNoListItems
         case unreachable
     }
 
@@ -153,19 +153,57 @@ actor RemoteContextFeature {
         return []
     }
 
-    func probeRecipeURLs(_ urls: [URL], maxCount: Int = 3) async -> [String] {
+    func listItems(from urls: [URL], query: String, maxItems: Int = 40) async -> [String] {
+        guard !urls.isEmpty else { return [] }
+        let ingredientQuery = isIngredientStyleQuery(query)
+
+        for url in uniqueURLs(urls) {
+            var sources: [String] = []
+            if let html = await fetchHTML(url: url) {
+                let focusedHTML = extractPrimaryContentHTML(from: html)
+                if ingredientQuery {
+                    let fromJSONLD = extractRecipeIngredientsFromJSONLD(focusedHTML)
+                    if !fromJSONLD.isEmpty {
+                        return Array(fromJSONLD.prefix(maxItems))
+                    }
+                }
+                sources.append(sanitizeHTML(focusedHTML))
+            }
+            if let webText = await fetchWebText(from: url) {
+                sources.append(webText)
+            }
+
+            for source in sources {
+                if ingredientQuery {
+                    let recipeItems = extractRecipeIngredientsFromText(source)
+                    if !recipeItems.isEmpty {
+                        return Array(recipeItems.prefix(maxItems))
+                    }
+                }
+
+                let genericItems = extractGenericListItems(from: source, query: query, maxItems: maxItems)
+                if !genericItems.isEmpty {
+                    return genericItems
+                }
+            }
+        }
+
+        return []
+    }
+
+    func probeRecipeURLs(_ urls: [URL], query: String = "", maxCount: Int = 3) async -> [String] {
         let targets = Array(uniqueURLs(urls).prefix(maxCount))
         guard !targets.isEmpty else { return [] }
 
         var lines: [String] = []
         for url in targets {
             let host = url.host ?? url.absoluteString
-            let outcome = await probeRecipeURL(url)
+            let outcome = await probeRecipeURL(url, query: query)
             switch outcome {
-            case let .ingredientsFound(count):
-                lines.append("- \(host): OK, \(count) ingrédient(s) détecté(s)")
-            case .accessibleNoIngredients:
-                lines.append("- \(host): URL accessible, mais ingrédients non détectés")
+            case let .listItemsFound(count):
+                lines.append("- \(host): OK, \(count) élément(s) détecté(s)")
+            case .accessibleNoListItems:
+                lines.append("- \(host): URL accessible, mais aucun élément de liste détecté")
             case .unreachable:
                 lines.append("- \(host): URL non accessible depuis l'app")
             }
@@ -185,17 +223,24 @@ actor RemoteContextFeature {
         return result
     }
 
-    private func probeRecipeURL(_ url: URL) async -> URLProbeOutcome {
+    private func probeRecipeURL(_ url: URL, query: String) async -> URLProbeOutcome {
         if let html = await fetchHTML(url: url) {
-            let jsonLDCount = extractRecipeIngredientsFromJSONLD(html).count
-            let textCount = extractRecipeIngredientsFromText(sanitizeHTML(html)).count
-            let total = max(jsonLDCount, textCount)
+            let focusedHTML = extractPrimaryContentHTML(from: html)
+            let jsonLDCount = extractRecipeIngredientsFromJSONLD(focusedHTML).count
+            let normalized = sanitizeHTML(focusedHTML)
+            let textCount = extractRecipeIngredientsFromText(normalized).count
+            let genericCount = extractGenericListItems(from: normalized, query: query, maxItems: 20).count
+            let total = max(jsonLDCount, max(textCount, genericCount))
             if total > 0 {
-                return .ingredientsFound(count: total)
+                return .listItemsFound(count: total)
             }
             if let webText = await fetchWebText(from: url),
                !webText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return .accessibleNoIngredients
+                let generic = extractGenericListItems(from: webText, query: query, maxItems: 20).count
+                if generic > 0 {
+                    return .listItemsFound(count: generic)
+                }
+                return .accessibleNoListItems
             }
             return .unreachable
         }
@@ -203,10 +248,12 @@ actor RemoteContextFeature {
         if let webText = await fetchWebText(from: url),
            !webText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let textCount = extractRecipeIngredientsFromText(webText).count
-            if textCount > 0 {
-                return .ingredientsFound(count: textCount)
+            let genericCount = extractGenericListItems(from: webText, query: query, maxItems: 20).count
+            let total = max(textCount, genericCount)
+            if total > 0 {
+                return .listItemsFound(count: total)
             }
-            return .accessibleNoIngredients
+            return .accessibleNoListItems
         }
 
         return .unreachable
@@ -228,6 +275,16 @@ actor RemoteContextFeature {
 
     private func sanitizeHTML(_ html: String) -> String {
         var text = html
+        text = text.replacingOccurrences(
+            of: #"(?is)<li[^>]*>"#,
+            with: "\n- ",
+            options: .regularExpression
+        )
+        text = text.replacingOccurrences(
+            of: #"(?is)</li>"#,
+            with: "\n",
+            options: .regularExpression
+        )
         text = text.replacingOccurrences(
             of: #"(?is)</?(?:br|p|div|li|ul|ol|h[1-6]|section|article|tr|td|th)[^>]*>"#,
             with: "\n",
@@ -256,6 +313,8 @@ actor RemoteContextFeature {
         for (entity, replacement) in entities {
             text = text.replacingOccurrences(of: entity, with: replacement)
         }
+
+        text = decodeNumericHTMLEntities(text)
 
         text = text
             .replacingOccurrences(of: "\r\n", with: "\n")
@@ -674,5 +733,168 @@ actor RemoteContextFeature {
         }
 
         return false
+    }
+
+    private func extractGenericListItems(from text: String, query: String, maxItems: Int) -> [String] {
+        let lines = text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let keywords = queryKeywords(from: query)
+        let bulletRegex = #"^\s*(?:[-*•]\s+|\d+[.)]\s+)"#
+        var candidates: [(line: String, score: Int)] = []
+        var seen = Set<String>()
+
+        for line in lines {
+            let folded = line.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            if folded.count < 2 || folded.count > 160 { continue }
+            if folded.hasPrefix("http://") || folded.hasPrefix("https://") { continue }
+            if isLikelyNavigationNoise(folded) { continue }
+
+            var score = 0
+            let cleaned = line.replacingOccurrences(of: bulletRegex, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { continue }
+
+            if let componentList = componentSubitems(from: cleaned),
+               !componentList.isEmpty {
+                for item in componentList {
+                    let key = item.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                    if seen.contains(key) { continue }
+                    seen.insert(key)
+                    candidates.append((item, 6))
+                }
+                continue
+            }
+
+            if line.range(of: bulletRegex, options: .regularExpression) != nil {
+                score += 4
+            }
+            if cleaned.split(whereSeparator: \.isWhitespace).count <= 16 {
+                score += 1
+            }
+            if keywords.contains(where: { folded.contains($0) }) {
+                score += 2
+            }
+            if cleaned.range(of: #"(?i)\b(true?nas|unraid|omv|openmediavault|proxmox|casaos|zimaos|umbrel|hexos|zfs|docker|ram|ssd|hdd|nvme|carte mere|motherboard|cpu|processeur)\b"#, options: .regularExpression) != nil {
+                score += 2
+            }
+
+            guard score >= 3 else { continue }
+            let key = cleaned.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            candidates.append((cleaned, score))
+        }
+
+        let sorted = candidates
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    return lhs.line.count < rhs.line.count
+                }
+                return lhs.score > rhs.score
+            }
+            .map(\.line)
+
+        return Array(sorted.prefix(maxItems))
+    }
+
+    private func queryKeywords(from query: String) -> [String] {
+        let stopwords: Set<String> = [
+            "liste", "moi", "les", "des", "de", "du", "la", "le", "un", "une",
+            "pour", "avec", "selon", "site", "web", "internet", "ce", "cet",
+            "cette", "en", "et", "a", "à", "sur", "dans", "2026"
+        ]
+        let normalized = query
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .replacingOccurrences(of: #"https?://\S+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"[^\p{L}\p{N}\s\-]"#, with: " ", options: .regularExpression)
+
+        return normalized
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .filter { token in
+                token.count >= 3 && !stopwords.contains(token)
+            }
+    }
+
+    private func isIngredientStyleQuery(_ query: String) -> Bool {
+        let folded = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        return folded.contains("ingredient") || folded.contains("recette") || folded.contains("cuisine")
+    }
+
+    private func isLikelyNavigationNoise(_ foldedLine: String) -> Bool {
+        let markers = [
+            "accueil", "commentaires", "etiquettes", "étiquettes", "similaire", "image:",
+            "search button", "en train de lire", "copyright", "tutos", "loisirs",
+            "forum", "test du nas", "tous les articles", "guide d'achat", "produits nas",
+            "os / applications pour nas", "nas & stockage"
+        ]
+        return markers.contains(where: { foldedLine.contains($0) })
+    }
+
+    private func extractPrimaryContentHTML(from html: String) -> String {
+        let candidates = [
+            #"(?is)<article\b[^>]*>(.*?)</article>"#,
+            #"(?is)<main\b[^>]*>(.*?)</main>"#,
+            #"(?is)<div\b[^>]*class=["'][^"']*(?:entry-content|post-content|article-content)[^"']*["'][^>]*>(.*?)</div>"#
+        ]
+
+        for pattern in candidates {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: html, range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1,
+               let range = Range(match.range(at: 1), in: html) {
+                let segment = String(html[range])
+                if segment.count >= 300 {
+                    return segment
+                }
+            }
+        }
+
+        return html
+    }
+
+    private func decodeNumericHTMLEntities(_ text: String) -> String {
+        let pattern = #"&#(x[0-9a-fA-F]+|\d+);"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges > 1 else { continue }
+            let token = nsText.substring(with: match.range(at: 1))
+            let value: UInt32?
+            if token.lowercased().hasPrefix("x") {
+                value = UInt32(token.dropFirst(), radix: 16)
+            } else {
+                value = UInt32(token)
+            }
+            guard let scalarValue = value, let scalar = UnicodeScalar(scalarValue) else { continue }
+            if let range = Range(match.range, in: result) {
+                result.replaceSubrange(range, with: String(Character(scalar)))
+            }
+        }
+        return result
+    }
+
+    private func componentSubitems(from line: String) -> [String]? {
+        let folded = line.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        guard folded.contains("composant") || folded.contains("materiel") || folded.contains("matériel") else {
+            return nil
+        }
+        guard let start = line.firstIndex(of: "("), let end = line.firstIndex(of: ")"), start < end else {
+            return nil
+        }
+        let content = String(line[line.index(after: start)..<end])
+        let rawParts = content
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !rawParts.isEmpty else { return nil }
+        return rawParts
     }
 }

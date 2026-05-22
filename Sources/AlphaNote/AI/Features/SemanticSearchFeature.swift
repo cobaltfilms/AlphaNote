@@ -17,7 +17,7 @@ struct SemanticSearchFeature {
         additionalURLs: [URL] = [],
         service: AIServiceProtocol = AIService.shared
     ) async throws -> AIResult {
-        let currentTitle = currentNote.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentTitle = currentNote.effectiveTitle
         let displayTitle = currentTitle.isEmpty ? "Note active" : currentTitle
         var contexts: [NoteContext] = [
             NoteContext(

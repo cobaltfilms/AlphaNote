@@ -64,7 +64,6 @@ struct Note: Codable, Identifiable, Equatable {
 
         if Note.knownKeywords.contains(firstLine) {
             keyword = firstLine
-            title = firstLine
             return
         }
 
@@ -72,15 +71,38 @@ struct Note: Codable, Identifiable, Equatable {
             let possibleKeyword = String(rawFirstLine[..<colonIndex]).trimmingCharacters(in: .whitespaces).lowercased()
             if Note.knownKeywords.contains(possibleKeyword) {
                 keyword = possibleKeyword
-                let customTitle = String(rawFirstLine[rawFirstLine.index(after: colonIndex)...])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                title = customTitle.isEmpty ? possibleKeyword : customTitle
                 return
             }
         }
 
         keyword = ""
-        title = firstLine
+    }
+
+    var effectiveTitle: String {
+        let explicitTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !explicitTitle.isEmpty {
+            return explicitTitle
+        }
+
+        let lines = content.components(separatedBy: .newlines)
+        guard let firstNonEmptyRaw = lines.first(where: {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        })?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return ""
+        }
+
+        if let colonIndex = firstNonEmptyRaw.firstIndex(of: ":") {
+            let possibleKeyword = String(firstNonEmptyRaw[..<colonIndex])
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+            if Note.knownKeywords.contains(possibleKeyword) {
+                let customTitle = String(firstNonEmptyRaw[firstNonEmptyRaw.index(after: colonIndex)...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return customTitle.isEmpty ? possibleKeyword : customTitle
+            }
+        }
+
+        return firstNonEmptyRaw
     }
 }
 

@@ -12,7 +12,7 @@ enum AIPromptBuilder {
     """
 
     static func prompt(for task: AITask, note: Note, context: AIContext) -> String {
-        let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = note.effectiveTitle
         let content = clipped(note.content, maxCharacters: 6000)
 
         switch task {

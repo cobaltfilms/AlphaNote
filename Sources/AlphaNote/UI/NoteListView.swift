@@ -46,7 +46,9 @@ struct NoteListView: View {
             store.convertCurrentNoteToList()
         }
         .onReceive(NotificationCenter.default.publisher(for: .alphaNoteDidSync)) { _ in
-            store.loadNotes()
+            Task { @MainActor in
+                store.loadNotes()
+            }
         }
         .onChange(of: store.currentNote?.id) {
             syncRightAIPanelWithCurrentNote()
@@ -371,13 +373,9 @@ struct NoteListView: View {
     }
 
     private func title(for note: Note, index: Int) -> String {
-        let trimmedTitle = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTitle.isEmpty {
-            return trimmedTitle
-        }
-        let lines = note.content.components(separatedBy: .newlines)
-        if let firstNonEmpty = lines.first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-            return firstNonEmpty.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayTitle = note.effectiveTitle
+        if !displayTitle.isEmpty {
+            return displayTitle
         }
         return "Note \(index + 1)"
     }

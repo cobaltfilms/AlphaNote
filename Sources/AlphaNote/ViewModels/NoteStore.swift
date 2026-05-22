@@ -105,21 +105,7 @@ final class NoteStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
 
         var updated = note
-        let lines = updated.content.components(separatedBy: .newlines)
-        let firstLine = lines.first ?? ""
-        let remaining = Array(lines.dropFirst())
-
-        if ListModeFormatter.isListHeader(firstLine) {
-            updated.content = remaining.isEmpty
-                ? "list: \(trimmed)"
-                : (["list: \(trimmed)"] + remaining).joined(separator: "\n")
-        } else if lines.isEmpty {
-            updated.content = trimmed
-        } else {
-            updated.content = ([trimmed] + remaining).joined(separator: "\n")
-        }
-
-        updated.detectKeyword()
+        updated.title = trimmed
         updateNote(updated)
     }
 
@@ -287,17 +273,24 @@ final class NoteStore: ObservableObject {
         }
 
         if wantsList && shouldProbeURLs && !candidateURLs.isEmpty {
-            let directIngredients = await remoteContext.recipeIngredientItems(from: candidateURLs, maxItems: 40)
-            if !directIngredients.isEmpty {
-                let payload = directIngredients.map { "* \($0)" }.joined(separator: "\n")
-                convertSemanticAnswerToListOnCurrentNote(
+            let directItems = await remoteContext.listItems(from: candidateURLs, query: trimmed, maxItems: 40)
+            if !directItems.isEmpty {
+                let payload = directItems.map { "* \($0)" }.joined(separator: "\n")
+                let applied = convertSemanticAnswerToListOnCurrentNote(
                     payload,
                     titleHint: trimmed,
                     refinementPrompt: trimmed
                 )
-                return "Liste générée depuis l'URL fournie."
+                guard applied else {
+                    urlProbeDiagnostics = await remoteContext.probeRecipeURLs(candidateURLs, query: trimmed, maxCount: 3)
+                    return "Je n'ai pas trouvé de composants pertinents dans cette URL pour ta demande."
+                }
+                return withSourceCitations(
+                    "Liste générée depuis l'URL fournie.",
+                    urls: candidateURLs.map(\.absoluteString)
+                )
             }
-            urlProbeDiagnostics = await remoteContext.probeRecipeURLs(candidateURLs, maxCount: 3)
+            urlProbeDiagnostics = await remoteContext.probeRecipeURLs(candidateURLs, query: trimmed, maxCount: 3)
         }
 
         do {
@@ -306,8 +299,9 @@ final class NoteStore: ObservableObject {
                 currentNote: currentNote,
                 additionalURLs: candidateURLs
             )
+            let sourceURLs = citationURLs(from: answer, fallbackURLs: candidateURLs)
             if let appliedMessage = applySemanticOperation(result: answer, question: trimmed) {
-                return appliedMessage
+                return withSourceCitations(appliedMessage, urls: sourceURLs)
             }
 
             let shouldAutoApplyList = !effectiveWantsWebResearch && (wantsList ||
@@ -318,41 +312,46 @@ final class NoteStore: ObservableObject {
                 guard !listPayload.isEmpty else {
                     return "Je n'ai pas pu générer une liste propre. Donne 2-3 éléments clés et je la construis."
                 }
-                convertSemanticAnswerToListOnCurrentNote(
+                let applied = convertSemanticAnswerToListOnCurrentNote(
                     listPayload,
                     titleHint: trimmed,
                     refinementPrompt: trimmed
                 )
-                return "Liste mise à jour dans la note courante."
+                guard applied else {
+                    return "La réponse trouvée ne correspondait pas assez à ta demande. Reformule le besoin ciblé (ex: composants matériels, budget, nombre de baies)."
+                }
+                return withSourceCitations("Liste mise à jour dans la note courante.", urls: sourceURLs)
             }
 
             if effectiveWantsWebResearch {
                 if wantsList {
                     let listPayload = semanticListPayload(from: answer)
                     if !listPayload.isEmpty {
-                        convertSemanticAnswerToListOnCurrentNote(
+                        let applied = convertSemanticAnswerToListOnCurrentNote(
                             listPayload,
                             titleHint: trimmed,
                             refinementPrompt: trimmed
                         )
-                        return "Liste web générée dans la note courante."
+                        if applied {
+                            return withSourceCitations("Liste web générée dans la note courante.", urls: sourceURLs)
+                        }
                     }
                 }
 
                 let research = composedWebResearchText(from: answer)
                 if !research.isEmpty {
                     replaceCurrentNoteWithSemanticAnswer(research)
-                    return "Recherche web générée dans la note courante."
+                    return withSourceCitations("Recherche web générée dans la note courante.", urls: sourceURLs)
                 }
                 let fallback = cleanedSemanticFallbackText(answer.text)
                 guard !fallback.isEmpty else {
                     if !urlProbeDiagnostics.isEmpty {
                         return "Je n'ai pas pu exploiter l'URL.\n\(urlProbeDiagnostics.joined(separator: "\n"))"
                     }
-                    return "Je n'ai pas trouvé de sources web exploitables pour cette demande."
+                    return withSourceCitations("Je n'ai pas trouvé de sources web exploitables pour cette demande.", urls: sourceURLs)
                 }
                 replaceCurrentNoteWithSemanticAnswer(fallback)
-                return "Réponse générée, mais sans sources web exploitables."
+                return withSourceCitations("Réponse générée, mais sans sources web exploitables.", urls: sourceURLs)
             }
 
             if wantsTransform {
@@ -361,7 +360,7 @@ final class NoteStore: ObservableObject {
                     return "Aucun résultat exploitable. Reformule avec une demande plus directe."
                 }
                 replaceCurrentNoteWithSemanticAnswer(cleaned)
-                return "Note mise à jour automatiquement."
+                return withSourceCitations("Note mise à jour automatiquement.", urls: sourceURLs)
             }
 
             let cleaned = cleanedSemanticFallbackText(answer.text)
@@ -369,7 +368,7 @@ final class NoteStore: ObservableObject {
                 return "Aucun résultat exploitable. Reformule avec une demande plus directe."
             }
 
-            return cleaned
+            return withSourceCitations(cleaned, urls: sourceURLs)
         } catch {
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -400,10 +399,12 @@ final class NoteStore: ObservableObject {
         updateNote(note)
     }
 
-    func convertSemanticAnswerToListOnCurrentNote(_ answer: String, titleHint: String?, refinementPrompt: String? = nil) {
-        guard var note = currentNote else { return }
+    func convertSemanticAnswerToListOnCurrentNote(_ answer: String, titleHint: String?, refinementPrompt: String? = nil) -> Bool {
+        guard var note = currentNote else { return false }
         var items = listItems(from: answer)
-        guard !items.isEmpty else { return }
+        let relevanceQuery = (refinementPrompt ?? titleHint ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        items = postProcessListItems(items, question: relevanceQuery)
+        guard !items.isEmpty else { return false }
 
         let oldItems = existingListItems(note)
         if AIIntentDetector.asksForQuantityDetails(refinementPrompt ?? ""),
@@ -413,7 +414,7 @@ final class NoteStore: ObservableObject {
         }
 
         let cleanedHint = inferredListTitle(from: titleHint, answer: answer, currentNote: note)
-        let currentTitle = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentTitle = note.effectiveTitle
         let title: String
         if !currentTitle.isEmpty, note.keyword == "list", shouldKeepCurrentListTitle(currentTitle, inferred: cleanedHint) {
             title = currentTitle
@@ -429,6 +430,7 @@ final class NoteStore: ObservableObject {
         note.aiLastProcessedAt = Date()
         note.detectKeyword()
         updateNote(note)
+        return true
     }
 
     private func inferredListTitle(from question: String?, answer: String, currentNote: Note?) -> String {
@@ -437,7 +439,7 @@ final class NoteStore: ObservableObject {
             .replacingOccurrences(of: "\n", with: " ")
 
         if let currentNote, currentNote.keyword == "list" {
-            let currentTitle = currentNote.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let currentTitle = currentNote.effectiveTitle
             let foldedCurrent = currentTitle.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             if !currentTitle.isEmpty && foldedCurrent != "liste ia" && foldedCurrent != "ingredients" {
                 return currentTitle
@@ -632,6 +634,7 @@ final class NoteStore: ObservableObject {
             )
             line = line.replacingOccurrences(of: #"^\[(.*?)\]$"#, with: "$1", options: .regularExpression)
             line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            line = decodeCommonHTMLEntities(in: line)
             guard !line.isEmpty else { continue }
 
             let lower = line.lowercased()
@@ -661,6 +664,95 @@ final class NoteStore: ObservableObject {
         }
 
         return items
+    }
+
+    private func postProcessListItems(_ items: [String], question: String) -> [String] {
+        guard !items.isEmpty else { return [] }
+        let foldedQuestion = question.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let componentMode = isComponentQuery(foldedQuestion)
+
+        var result: [String] = []
+        var seen = Set<String>()
+
+        for raw in items {
+            let cleaned = decodeCommonHTMLEntities(in: raw)
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { continue }
+            let folded = cleaned.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+
+            if isLikelyGenericNoiseLine(folded) {
+                continue
+            }
+            if componentMode, !isLikelyComponentLine(folded) {
+                continue
+            }
+
+            let key = folded
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            result.append(cleaned)
+        }
+
+        return result
+    }
+
+    private func isComponentQuery(_ foldedQuestion: String) -> Bool {
+        let markers = [
+            "composant", "materiel", "matériel", "hardware", "config", "configuration",
+            "piece", "pièce", "build", "monter", "assembl"
+        ]
+        return markers.contains(where: { foldedQuestion.contains($0) })
+    }
+
+    private func isLikelyComponentLine(_ foldedLine: String) -> Bool {
+        let mustNotContain = [
+            "forum", "comparatif", "guide d'achat", "tous les articles", "comment choisir",
+            "test du nas", "produits nas", "os / applications", "en train de lire"
+        ]
+        if mustNotContain.contains(where: { foldedLine.contains($0) }) {
+            return false
+        }
+
+        let componentMarkers = [
+            "boitier", "boîtier", "processeur", "cpu", "ram", "ecc", "carte mere", "carte mère",
+            "controleur", "contrôleur", "sata", "nvme", "ssd", "hdd", "alimentation", "psu",
+            "reseau", "réseau", "2.5gbe", "10gbe", "os", "truenas", "unraid", "omv", "proxmox"
+        ]
+        return componentMarkers.contains(where: { foldedLine.contains($0) })
+    }
+
+    private func isLikelyGenericNoiseLine(_ foldedLine: String) -> Bool {
+        let markers = [
+            "search button", "copyright", "image:", "similaire", "etiquettes", "étiquettes",
+            "accueil", "commentaires", "loisirs", "tutos"
+        ]
+        return markers.contains(where: { foldedLine.contains($0) })
+    }
+
+    private func decodeCommonHTMLEntities(in text: String) -> String {
+        var value = text
+        let replacements: [String: String] = [
+            "&rsquo;": "'",
+            "&lsquo;": "'",
+            "&quot;": "\"",
+            "&amp;": "&",
+            "&nbsp;": " ",
+            "&eacute;": "é",
+            "&egrave;": "è",
+            "&ecirc;": "ê",
+            "&agrave;": "à",
+            "&ccedil;": "ç",
+            "&#8230;": "…",
+            "&#8211;": "–",
+            "&#8212;": "—",
+            "&#8217;": "'",
+            "&#038;": "&"
+        ]
+        for (entity, replacement) in replacements {
+            value = value.replacingOccurrences(of: entity, with: replacement)
+        }
+        return value
     }
 
     private func isLikelyPromptLeakLine(_ line: String) -> Bool {
@@ -735,12 +827,12 @@ final class NoteStore: ObservableObject {
             let items = listItems(from: payload)
             guard !items.isEmpty else { return nil }
             let normalizedList = items.map { "* \($0)" }.joined(separator: "\n")
-            convertSemanticAnswerToListOnCurrentNote(
+            let applied = convertSemanticAnswerToListOnCurrentNote(
                 normalizedList,
                 titleHint: title.isEmpty ? question : title,
                 refinementPrompt: question
             )
-            return "Liste générée dans la note."
+            return applied ? "Liste générée dans la note." : nil
         case "none", "":
             return nil
         default:
@@ -843,6 +935,49 @@ final class NoteStore: ObservableObject {
         return result
     }
 
+    private func citationURLs(from result: AIResult, fallbackURLs: [URL]) -> [String] {
+        let metadataSources = (result.metadata["sources"] ?? "")
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var rawURLs: [String] = []
+        for source in metadataSources {
+            if source.hasPrefix("url:") {
+                let encoded = String(source.dropFirst(4))
+                rawURLs.append(encoded.removingPercentEncoding ?? encoded)
+                continue
+            }
+            if source.hasPrefix("http://") || source.hasPrefix("https://") {
+                rawURLs.append(source)
+            }
+        }
+
+        rawURLs.append(contentsOf: URLDetector.extractURLs(from: result.text).map(\.absoluteString))
+        rawURLs.append(contentsOf: fallbackURLs.map(\.absoluteString))
+
+        var seen = Set<String>()
+        var unique: [String] = []
+        for url in rawURLs {
+            let cleaned = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { continue }
+            if seen.contains(cleaned) { continue }
+            seen.insert(cleaned)
+            unique.append(cleaned)
+        }
+        return unique
+    }
+
+    private func withSourceCitations(_ message: String, urls: [String]) -> String {
+        guard !urls.isEmpty else {
+            return "\(message)\n\nSources:\n[local] Notes locales (note active et contexte IA)"
+        }
+        let formatted = urls.enumerated()
+            .map { index, url in "[\(index + 1)] \(url)" }
+            .joined(separator: "\n")
+        return "\(message)\n\nSources:\n\(formatted)"
+    }
+
     private func resolveRouteModes(question: String, currentNote: Note) async -> Set<ModeRoutingFeature.RouteMode> {
         let aiModes = await ModeRoutingFeature().routeModes(question: question, noteKeyword: currentNote.keyword)
         var modes = aiModes
@@ -917,7 +1052,9 @@ final class NoteStore: ObservableObject {
 
         if !allSources.isEmpty {
             let unique = Array(NSOrderedSet(array: allSources)) as? [String] ?? allSources
-            let formatted = unique.map { "- \($0)" }.joined(separator: "\n")
+            let formatted = unique.enumerated()
+                .map { index, url in "[\(index + 1)] \(url)" }
+                .joined(separator: "\n")
             sections.append("Sources:\n\(formatted)")
         }
 
@@ -935,12 +1072,12 @@ final class NoteStore: ObservableObject {
         }
 
         let payload = directItems.map { "* \($0)" }.joined(separator: "\n")
-        convertSemanticAnswerToListOnCurrentNote(
+        let applied = convertSemanticAnswerToListOnCurrentNote(
             payload,
             titleHint: question,
             refinementPrompt: question
         )
-        return "Liste générée dans la note courante."
+        return applied ? "Liste générée dans la note courante." : nil
     }
 
     private func localListItems(from question: String) -> [String] {
