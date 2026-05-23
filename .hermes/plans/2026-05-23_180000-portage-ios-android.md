@@ -172,9 +172,9 @@ Le paradigme « fenêtre flottante one-keystroke » n'existe pas sur iOS. Altern
 - Modèles Core ML téléchargeables (HuggingFace → coremltools)
 - Au minimum : fallback heuristique (déjà portable)
 - Modèles recommandés pour iOS :
-  - `apple/OpenELM-270M` → rapide, < 200 MB
-  - `google/gemma-2b-it` (Core ML) → bonne qualité, ~1.5 GB
-  - `Qwen2.5-1.5B-Instruct` (Core ML) → bon compromis
+  - **Gemma 4 E2B IT** (Core ML) → 2.3B params effectifs, ~2.7 GB, rapide, multimodal — idéal par défaut
+  - **Gemma 4 E4B IT** (Core ML) → 4.5B params effectifs, ~5.2 GB, équilibré, multimodal — recommandé en mode Qualité
+  - `Qwen2.5-1.5B-Instruct` (Core ML) → fallback léger si Gemma 4 pas dispo en Core ML
 
 **Tâche 3.3 — Semantic Search iOS**
 - `VectorIndex` : remplacer MLX par Core ML embeddings (`NLEmbedding` ou modèle sentence-transformers converti)

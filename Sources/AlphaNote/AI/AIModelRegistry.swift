@@ -112,6 +112,30 @@ struct AIModelProfile: Identifiable, Hashable, Sendable {
         recommendedMinMemoryGB: 32,
         stabilityTier: .experimental
     )
+
+    static let gemma4E2B = AIModelProfile(
+        id: "mlx-community/gemma-4-e2b-it-4bit",
+        displayName: "Gemma 4 E2B IT (MLX)",
+        displayFormat: "MLX 4-bit",
+        recommendedMaxTokens: 640,
+        qualityTier: .fast,
+        memoryHint: "Petit (multimodal)",
+        estimatedDownloadGB: 2.7,
+        recommendedMinMemoryGB: 8,
+        stabilityTier: .default
+    )
+
+    static let gemma4E4B = AIModelProfile(
+        id: "mlx-community/gemma-4-e4b-it-4bit",
+        displayName: "Gemma 4 E4B IT (MLX)",
+        displayFormat: "MLX 4-bit",
+        recommendedMaxTokens: 700,
+        qualityTier: .balanced,
+        memoryHint: "Petit (multimodal)",
+        estimatedDownloadGB: 5.2,
+        recommendedMinMemoryGB: 8,
+        stabilityTier: .default
+    )
 }
 
 enum AIQualityTier: String, CaseIterable, Codable, Sendable {
@@ -142,6 +166,8 @@ enum AISettingsKeys {
 
 enum AIModelRegistry {
     static let allProfiles: [AIModelProfile] = [
+        .gemma4E2B,
+        .gemma4E4B,
         .qwen31_7B,
         .gemma34B,
         .gemma3Text4B,
@@ -152,15 +178,15 @@ enum AIModelRegistry {
     ]
 
     static func profile(for id: String) -> AIModelProfile {
-        allProfiles.first(where: { $0.id == id }) ?? .qwen31_7B
+        allProfiles.first(where: { $0.id == id }) ?? .gemma4E2B
     }
 
     static func defaultProfile(for tier: AIQualityTier) -> AIModelProfile {
         switch tier {
         case .fast:
-            return .qwen31_7B
+            return .gemma4E2B
         case .balanced:
-            return .gemma34B
+            return .gemma4E4B
         case .quality:
             return .qwen3_14B4bitDWQ
         }
