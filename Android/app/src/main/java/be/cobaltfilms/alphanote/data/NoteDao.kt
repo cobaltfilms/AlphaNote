@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import be.cobaltfilms.alphanote.model.Note
 import kotlinx.coroutines.flow.Flow
 
 /**
