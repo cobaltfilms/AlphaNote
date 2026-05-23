@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AlphaNote</string>
+    <string name="new_note">Nouvelle note</string>
+    <string name="delete_note">Supprimer</string>
+    <string name="empty_notes">Aucune note</string>
+    <string name="empty_notes_hint">Appuyez sur + pour créer votre première note</string>
+    <string name="settings">Paramètres</string>
+    <string name="ai_enabled">Activer l\'IA locale</string>
+    <string name="sync_enabled">Activer la synchronisation</string>
+    <string name="mode_math">Mode Math</string>
+    <string name="mode_list">Mode Liste</string>
+    <string name="mode_code">Mode Code</string>
+    <string name="mode_timer">Mode Minuteur</string>
+    <string name="mode_plain">Note simple</string>
+</resources>
