@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Fond : cercle -->
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
+    <!-- Icône note/stylo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,28 L70,28 C72.2,28 74,29.8 74,32 L74,76 C74,78.2 72.2,80 70,80 L38,80 C35.8,80 34,78.2 34,76 L34,32 C34,29.8 35.8,28 38,28 Z M42,40 L66,40 M42,50 L66,50 M42,60 L58,60" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:pathData="M42,40 L66,40 M42,50 L66,50 M42,60 L58,60" />
+</vector>
