@@ -11,7 +11,7 @@ import be.cobaltfilms.alphanote.model.Note
 object AIPromptBuilder {
 
     /** Prompt système commun à toutes les tâches */
-    const val SYSTEM_PROMPT = """
+    val SYSTEM_PROMPT = """
 Tu es l'assistant local d'AlphaNote.
 Contraintes non négociables:
 - Réponds en français clair, utile, précis.
