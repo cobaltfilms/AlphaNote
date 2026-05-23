@@ -58,7 +58,7 @@ fun SettingsScreen(
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
             // Section Apparence
             SettingsSection(title = "Apparence") {
@@ -79,7 +79,7 @@ fun SettingsScreen(
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
             // Section IA
             SettingsSection(title = "Intelligence Artificielle") {
@@ -100,7 +100,7 @@ fun SettingsScreen(
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
             // Section À propos
             SettingsSection(title = "À propos") {
