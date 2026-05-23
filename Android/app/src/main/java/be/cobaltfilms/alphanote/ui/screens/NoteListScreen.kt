@@ -215,6 +215,7 @@ private fun NoteListItem(
 /**
  * Retourne la couleur associée à un mot-clé.
  */
+@Composable
 fun keywordToColor(keyword: String): androidx.compose.ui.graphics.Color {
     return when (keyword.lowercase()) {
         "math" -> MathColor
