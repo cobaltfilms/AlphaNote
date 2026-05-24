@@ -2,26 +2,22 @@ package be.cobaltfilms.alphanote.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Couleurs primaires — palette AlphaNote (bleu profond)
-val Blue10 = Color(0xFF001A40)
-val Blue20 = Color(0xFF002D6E)
-val Blue30 = Color(0xFF00419C)
-val Blue40 = Color(0xFF1A5BC6)
-val Blue80 = Color(0xFFA8C8FF)
-val Blue90 = Color(0xFFD5E3FF)
+val Blue10 = Color(0xFF101A2C)
+val Blue20 = Color(0xFF193154)
+val Blue30 = Color(0xFF225086)
+val Blue40 = Color(0xFF2F6FC4)
+val Blue80 = Color(0xFFB9D3FF)
+val Blue90 = Color(0xFFE0ECFF)
 
-// Surfaces
-val WarmGray10 = Color(0xFF1C1B1F)
-val WarmGray20 = Color(0xFF2A292D)
-val WarmGray90 = Color(0xFFF4F3F6)
-val WarmGray95 = Color(0xFFFBFAFD)
+val WarmGray10 = Color(0xFF16181D)
+val WarmGray20 = Color(0xFF242831)
+val WarmGray90 = Color(0xFFEDEFF5)
+val WarmGray95 = Color(0xFFF7F8FC)
 
-// Couleurs de mode
-val MathColor = Color(0xFF4CAF50)
-val ListColor = Color(0xFFFF9800)
-val CodeColor = Color(0xFF2196F3)
-val TimerColor = Color(0xFFE91E63)
+val MathColor = Color(0xFF239A57)
+val ListColor = Color(0xFFDF7F0A)
+val CodeColor = Color(0xFF2C76D2)
+val TimerColor = Color(0xFFD3557E)
 
-// Erreur / succès
-val ErrorRed = Color(0xFFB00020)
-val SuccessGreen = Color(0xFF388E3C)
+val ErrorRed = Color(0xFFB42318)
+val SuccessGreen = Color(0xFF1F7A4A)

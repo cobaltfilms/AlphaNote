@@ -82,9 +82,15 @@ class Converter {
     // ---- Conversion d'unités ----
 
     private fun convertUnit(value: Double, from: String, to: String): String? {
+        val fromTemp = temperatureUnit(from)
+        val toTemp = temperatureUnit(to)
+        if (fromTemp != null && toTemp != null) {
+            return convertTemperature(value, from, to)
+        }
+
         // Chaque catégorie teste from et to dans le même espace
         val categories = listOf(
-            ::lengthUnit, ::areaUnit, ::volumeUnit, ::massUnit, ::temperatureUnit
+            ::lengthUnit, ::areaUnit, ::volumeUnit, ::massUnit
         )
 
         for (categoryFn in categories) {
@@ -198,14 +204,6 @@ class Converter {
         "kelvins" to UnitDef("K", 1.0)
     )
 
-    // Redéfinition pour les températures (conversion avec offset)
-    private fun convertUnit(value: Double, from: String, to: String, isTemperature: Boolean): String? {
-        return when {
-            isTemperature -> convertTemperature(value, from, to)
-            else -> null
-        }
-    }
-
     private fun convertTemperature(value: Double, fromRaw: String, toRaw: String): String? {
         val from = normalizeToken(fromRaw)
         val to = normalizeToken(toRaw)
@@ -224,7 +222,16 @@ class Converter {
             "k", "kelvin", "kelvins" -> kelvin
             else -> return null
         }
-        return formatResult(result, to)
+        return formatResult(result, temperatureDisplaySymbol(to))
+    }
+
+    private fun temperatureDisplaySymbol(to: String): String {
+        return when (to) {
+            "c", "°c", "celsius", "centigrade" -> "°C"
+            "f", "°f", "fahrenheit" -> "°F"
+            "k", "kelvin", "kelvins" -> "K"
+            else -> to
+        }
     }
 
     // ---- Conversion de devises ----

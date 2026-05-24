@@ -1,150 +1,101 @@
 package be.cobaltfilms.alphanote.ui.screens
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import be.cobaltfilms.alphanote.domain.ListModeFormatter
-import be.cobaltfilms.alphanote.ui.theme.ListColor
+import be.cobaltfilms.alphanote.ui.theme.AlphaSpacing
 
-/**
- * Écran note checklist — mode liste avec checkboxes.
- * Portage de UI/NoteViews/ListNoteView.swift (macOS).
- *
- * Parse le contenu avec ListModeFormatter et affiche chaque élément
- * avec une checkbox. Supporte les commentaires (//) et les headings (#).
- */
 @Composable
 fun ListNoteScreen(
-    text: String,
-    onTextChange: (String) -> Unit,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier
 ) {
-    // Normaliser le contenu pour le parsing
-    val normalizedContent = remember(text) {
-        ListModeFormatter.normalizeForListMode(text)
+    val normalized = remember(value.text) {
+        ListModeFormatter.normalizeForListMode(value.text)
     }
 
-    val lines = remember(normalizedContent) {
-        normalizedContent.lines().filter { it.isNotEmpty() }
+    val headerLine = remember(normalized) {
+        normalized.lines().firstOrNull()?.takeIf { ListModeFormatter.isListHeader(it) } ?: "list"
     }
 
-    // État des checkboxes (index → coché)
-    val checkedState = remember { mutableStateMapOf<Int, Boolean>() }
-
-    // Sauter le header "list"
-    val displayLines = remember(lines) {
-        if (lines.isNotEmpty() && ListModeFormatter.isListHeader(lines[0])) {
-            lines.drop(1)
+    val initialBody = remember(normalized) {
+        val lines = normalized.lines()
+        if (lines.isNotEmpty() && ListModeFormatter.isListHeader(lines.first())) {
+            lines.drop(1).joinToString("\n")
         } else {
-            lines
+            lines.joinToString("\n")
         }
     }
 
-    LazyColumn(
+    var body by remember { mutableStateOf(initialBody) }
+
+    LaunchedEffect(initialBody) {
+        if (initialBody != body) {
+            body = initialBody
+        }
+    }
+
+    fun rebuildNoteContent(nextBody: String): String {
+        val trimmedTrailing = nextBody.trimEnd()
+        return if (trimmedTrailing.isBlank()) {
+            headerLine
+        } else {
+            "$headerLine\n$trimmedTrailing"
+        }
+    }
+
+    BasicTextField(
+        value = body,
+        onValueChange = { updated ->
+            body = updated
+            val newContent = rebuildNoteContent(updated)
+            onValueChange(TextFieldValue(newContent, TextRange(newContent.length)))
+        },
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        // Champ d'édition
-        item {
-            BasicTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = TextStyle(
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (text.isEmpty()) {
-                            Text(
-                                "Mode liste — chaque ligne = un élément.\n// pour un commentaire, # pour un titre.\nSéparez par des virgules pour créer plusieurs éléments.",
-                                style = TextStyle(
-                                    fontSize = 16.sp,
-                                    lineHeight = 24.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
-        }
-
-        item { Spacer(modifier = Modifier.height(16.dp)) }
-
-        // Vue interactive avec checkboxes
-        itemsIndexed(displayLines) { index, line ->
-            val isComment = ListModeFormatter.isComment(line)
-            val isHeading = ListModeFormatter.isHeading(line)
-
-            when {
-                isComment -> {
+            .padding(horizontal = AlphaSpacing.screenHorizontal, vertical = 12.dp)
+            .focusRequester(focusRequester),
+        textStyle = TextStyle(
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        ),
+        decorationBox = { innerTextField ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (body.isBlank()) {
                     Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            fontSize = 13.sp
-                        ),
-                        modifier = Modifier.padding(vertical = 2.dp)
+                        text = "Nouvelle liste\n\nUtilise Entree pour ajouter une nouvelle ligne.",
+                        style = TextStyle(
+                            fontSize = 16.sp,
+                            lineHeight = 24.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
                     )
                 }
-                isHeading -> {
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 16.sp
-                        ),
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-                else -> {
-                    val isChecked = checkedState[index] ?: false
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = isChecked,
-                            onCheckedChange = { checkedState[index] = it },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = ListColor,
-                                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = line,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                textDecoration = if (isChecked) TextDecoration.LineThrough else TextDecoration.None,
-                                color = if (isChecked) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+                innerTextField()
             }
         }
-    }
+    )
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 }

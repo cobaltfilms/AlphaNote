@@ -1,25 +1,44 @@
 package be.cobaltfilms.alphanote.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import be.cobaltfilms.alphanote.ui.components.AIAssistantBar
+import be.cobaltfilms.alphanote.ui.theme.AlphaSpacing
+import kotlinx.coroutines.launch
 
-/**
- * Écran d'édition de note — dispatch vers le mode approprié.
- * Portage de UI/NoteViews/PlainNoteView.swift + NoteWindowController.swift (macOS).
- *
- * Détecte le keyword à partir de la première ligne et affiche le bon mode.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditScreen(
@@ -28,47 +47,93 @@ fun NoteEditScreen(
     onBack: () -> Unit
 ) {
     val currentNote by viewModel.currentNote.collectAsState()
-    var text by remember { mutableStateOf("") }
-    var isNew by remember { mutableStateOf(true) }
+    val mathResults by viewModel.mathResult.collectAsState()
+    val mathVariables by viewModel.mathVariables.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    var editorValue by remember { mutableStateOf(TextFieldValue("")) }
+    var loadedNoteId by remember { mutableLongStateOf(-1L) }
     val focusRequester = remember { FocusRequester() }
 
-    // Charger la note
     LaunchedEffect(noteId) {
+        loadedNoteId = -1L
         viewModel.loadNote(noteId)
     }
 
-    // Synchroniser le contenu
-    LaunchedEffect(currentNote) {
-        currentNote?.let { note ->
-            if (isNew) {
-                text = note.content
-                isNew = false
-            }
+    LaunchedEffect(currentNote?.id, currentNote?.updatedAt) {
+        val note = currentNote ?: return@LaunchedEffect
+        if (loadedNoteId != note.id) {
+            editorValue = TextFieldValue(note.content, TextRange(note.content.length))
+            viewModel.updateNoteContent(note.content)
+            loadedNoteId = note.id
         }
     }
 
-    val keyword = currentNote?.keyword ?: ""
-    val note = currentNote
+    val keyword = currentNote?.keyword.orEmpty()
+
+    LaunchedEffect(keyword, editorValue.text) {
+        if (keyword.lowercase() == "math") {
+            viewModel.evaluateMathLines(editorValue.text)
+        }
+    }
+
+    fun processInput(newValue: TextFieldValue) {
+        val previousText = editorValue.text
+        var processed = newValue
+
+        // Android UX: taper "math " en première ligne passe automatiquement à la ligne suivante.
+        val firstLine = newValue.text.lineSequence().firstOrNull()?.trim().orEmpty()
+        if (keyword.lowercase() != "math" &&
+            newValue.text.lines().size == 1 &&
+            firstLine == "math" &&
+            newValue.text.endsWith(" ")
+        ) {
+            val forced = "math\n"
+            processed = TextFieldValue(forced, TextRange(forced.length))
+        }
+
+        // En mode math, '=' calcule sur la ligne en cours ; espace après '=' valide et passe à la ligne.
+        val currentMode = currentNote?.keyword.orEmpty().lowercase()
+        if (currentMode == "math") {
+            val transform = viewModel.applyMathInputTransform(
+                previousContent = previousText,
+                newContent = processed.text,
+                cursorPosition = processed.selection.end
+            )
+            if (transform.transformed) {
+                processed = TextFieldValue(transform.content, TextRange(transform.cursorPosition))
+            }
+        }
+
+        editorValue = processed
+        viewModel.updateNoteContent(processed.text)
+    }
+
+    val persistAndBack: () -> Unit = {
+        scope.launch {
+            viewModel.saveCurrentText(editorValue.text)
+            onBack()
+        }
+    }
+
+    BackHandler { persistAndBack() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        note?.effectiveTitle?.ifEmpty { "Nouvelle note" } ?: "Nouvelle note"
+                        text = currentNote?.effectiveTitle?.ifEmpty { "Nouvelle note" } ?: "Nouvelle note",
+                        style = MaterialTheme.typography.titleLarge
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        viewModel.updateNoteContent(text)
-                        viewModel.saveNote()
-                        onBack()
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = persistAndBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 },
                 actions = {
-                    if (keyword.isNotEmpty()) {
+                    if (keyword.isNotBlank()) {
                         BadgeKeyword(keyword = keyword)
                     }
                 }
@@ -76,57 +141,49 @@ fun NoteEditScreen(
         },
         bottomBar = {
             AIAssistantBar(
-                noteContent = text,
-                onUpdateContent = { newText ->
-                    text = newText
-                    viewModel.updateNoteContent(newText)
+                noteContent = editorValue.text,
+                onUpdateContent = { updatedText ->
+                    editorValue = TextFieldValue(updatedText, TextRange(updatedText.length))
+                    viewModel.updateNoteContent(updatedText)
                 },
                 evaluator = viewModel.mathEvaluator
             )
         }
     ) { padding ->
-        // Router vers le bon écran de mode
         when (keyword.lowercase()) {
             "math" -> MathNoteScreen(
-                text = text,
-                onTextChange = { newText ->
-                    text = newText
-                    viewModel.updateNoteContent(newText)
-                    viewModel.evaluateMathLines(newText)
-                },
-                mathResults = viewModel.mathResult.collectAsState().value,
+                value = editorValue,
+                onValueChange = { processInput(it) },
+                mathResults = mathResults,
+                mathVariables = mathVariables,
+                focusRequester = focusRequester,
                 modifier = Modifier.padding(padding)
             )
+
             "list" -> ListNoteScreen(
-                text = text,
-                onTextChange = { newText ->
-                    text = newText
-                    viewModel.updateNoteContent(newText)
-                },
+                value = editorValue,
+                onValueChange = { processInput(it) },
+                focusRequester = focusRequester,
                 modifier = Modifier.padding(padding)
             )
+
             "code" -> CodeNoteScreen(
-                text = text,
-                onTextChange = { newText ->
-                    text = newText
-                    viewModel.updateNoteContent(newText)
-                },
+                value = editorValue,
+                onValueChange = { processInput(it) },
+                focusRequester = focusRequester,
                 modifier = Modifier.padding(padding)
             )
+
             "timer" -> TimerNoteScreen(
-                text = text,
-                onTextChange = { newText ->
-                    text = newText
-                    viewModel.updateNoteContent(newText)
-                },
+                value = editorValue,
+                onValueChange = { processInput(it) },
+                focusRequester = focusRequester,
                 modifier = Modifier.padding(padding)
             )
+
             else -> PlainNoteScreen(
-                text = text,
-                onTextChange = { newText ->
-                    text = newText
-                    viewModel.updateNoteContent(newText)
-                },
+                value = editorValue,
+                onValueChange = { processInput(it) },
                 focusRequester = focusRequester,
                 modifier = Modifier.padding(padding)
             )
@@ -134,38 +191,34 @@ fun NoteEditScreen(
     }
 }
 
-/**
- * Écran de note simple (mode par défaut).
- * BasicTextField multiligne, plein écran.
- */
 @Composable
 fun PlainNoteScreen(
-    text: String,
-    onTextChange: (String) -> Unit,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     focusRequester: FocusRequester = remember { FocusRequester() },
     modifier: Modifier = Modifier
 ) {
     BasicTextField(
-        value = text,
-        onValueChange = onTextChange,
+        value = value,
+        onValueChange = onValueChange,
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = AlphaSpacing.screenHorizontal, vertical = 14.dp)
             .focusRequester(focusRequester),
         textStyle = TextStyle(
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
+            fontSize = 17.sp,
+            lineHeight = 25.sp,
             color = MaterialTheme.colorScheme.onSurface
         ),
         decorationBox = { innerTextField ->
             Box {
-                if (text.isEmpty()) {
+                if (value.text.isEmpty()) {
                     Text(
-                        "Commencez à écrire...\n\nAstuce : tapez math, list, code ou timer\nen première ligne pour activer un mode.",
+                        "Commencez à écrire…\n\nAstuce: utilisez `math`, `list`, `code` ou `timer` en première ligne.",
                         style = TextStyle(
-                            fontSize = 16.sp,
-                            lineHeight = 24.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            fontSize = 17.sp,
+                            lineHeight = 25.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     )
                 }
@@ -174,15 +227,9 @@ fun PlainNoteScreen(
         }
     )
 
-    // Focus auto
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 }
 
-/**
- * Badge coloré affichant le mot-clé dans la top bar.
- */
 @Composable
 fun BadgeKeyword(keyword: String) {
     val color = keywordToColor(keyword)
@@ -190,7 +237,7 @@ fun BadgeKeyword(keyword: String) {
         onClick = {},
         label = { Text(keyword.uppercase(), style = MaterialTheme.typography.labelSmall) },
         colors = SuggestionChipDefaults.suggestionChipColors(
-            containerColor = color.copy(alpha = 0.15f),
+            containerColor = color.copy(alpha = 0.14f),
             labelColor = color
         )
     )

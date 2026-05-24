@@ -16,6 +16,9 @@ class NoteRepository(context: Context) {
     /** Flux réactif de toutes les notes actives */
     val activeNotes: Flow<List<Note>> = dao.observeActiveNotes()
 
+    /** Flux réactif des notes archivées */
+    val archivedNotes: Flow<List<Note>> = dao.observeArchivedNotes()
+
     /** Flux du nombre de notes actives */
     val activeNoteCount: Flow<Int> = dao.observeActiveCount()
 
@@ -30,19 +33,18 @@ class NoteRepository(context: Context) {
      * Détecte automatiquement le keyword à partir du contenu.
      */
     suspend fun createNote(content: String = "", keyword: String = "", title: String = ""): Note {
+        val resolvedKeyword = if (keyword.isNotEmpty()) keyword else inferKeywordFromContent(content)
         val note = Note(
             uuid = UUID.randomUUID().toString().lowercase(),
             content = content,
-            keyword = keyword.ifEmpty { content.let { Note(content = content).let { n -> n.detectKeyword() } } },
+            keyword = resolvedKeyword,
             title = title,
-            position = dao.count().toInt(),
+            position = dao.countNotDeleted(),
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
-        val correctedKeyword = if (keyword.isEmpty()) note.detectKeyword() else keyword
-        val corrected = note.copy(keyword = correctedKeyword)
-        val id = dao.insert(corrected)
-        return corrected.copy(id = id)
+        val id = dao.insert(note)
+        return note.copy(id = id)
     }
 
     /**
@@ -50,7 +52,7 @@ class NoteRepository(context: Context) {
      * Le keyword est automatiquement détecté et mis à jour.
      */
     suspend fun updateNote(note: Note): Note {
-        val updatedKeyword = note.detectKeyword()
+        val updatedKeyword = if (note.keyword.isNotBlank()) note.keyword else inferKeywordFromContent(note.content)
         val updated = note.copy(
             keyword = updatedKeyword,
             updatedAt = System.currentTimeMillis()
@@ -63,6 +65,18 @@ class NoteRepository(context: Context) {
     suspend fun deleteNote(note: Note) {
         if (note.id > 0) {
             dao.softDelete(note.id)
+        }
+    }
+
+    suspend fun archiveNote(note: Note) {
+        if (note.id > 0) {
+            dao.setArchived(note.id, true)
+        }
+    }
+
+    suspend fun unarchiveNote(note: Note) {
+        if (note.id > 0) {
+            dao.setArchived(note.id, false)
         }
     }
 
@@ -101,5 +115,17 @@ class NoteRepository(context: Context) {
 
     suspend fun deleteEmpty() {
         dao.softDeleteEmpty()
+    }
+
+    private fun inferKeywordFromContent(content: String): String {
+        val explicit = Note(content = content).detectKeyword()
+        if (explicit.isNotBlank()) return explicit
+
+        val lines = content.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (lines.isEmpty()) return ""
+        if (lines.any { it.endsWith("=") }) return "math"
+        if (lines.any { Regex("\\d\\s*[+\\-*/^]\\s*\\d").containsMatchIn(it) }) return "math"
+
+        return ""
     }
 }

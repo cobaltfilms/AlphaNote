@@ -18,7 +18,7 @@ interface NoteDao {
     /** Toutes les notes non supprimées, triées par épinglé puis position */
     @Query("""
         SELECT * FROM note 
-        WHERE isDeleted = 0 
+        WHERE isDeleted = 0 AND archived = 0
         ORDER BY isPinned DESC, position ASC
     """)
     fun observeActiveNotes(): Flow<List<Note>>
@@ -26,10 +26,17 @@ interface NoteDao {
     /** Récupération directe (hors Flow) pour les opérations ponctuelles */
     @Query("""
         SELECT * FROM note 
-        WHERE isDeleted = 0 
+        WHERE isDeleted = 0 AND archived = 0
         ORDER BY isPinned DESC, position ASC
     """)
     suspend fun getActiveNotes(): List<Note>
+
+    @Query("""
+        SELECT * FROM note
+        WHERE isDeleted = 0 AND archived = 1
+        ORDER BY updatedAt DESC
+    """)
+    fun observeArchivedNotes(): Flow<List<Note>>
 
     @Query("SELECT * FROM note WHERE id = :id")
     suspend fun getById(id: Long): Note?
@@ -40,8 +47,11 @@ interface NoteDao {
     @Query("SELECT COUNT(*) FROM note")
     suspend fun count(): Int
 
-    /** Nombre de notes non supprimées */
     @Query("SELECT COUNT(*) FROM note WHERE isDeleted = 0")
+    suspend fun countNotDeleted(): Int
+
+    /** Nombre de notes non supprimées */
+    @Query("SELECT COUNT(*) FROM note WHERE isDeleted = 0 AND archived = 0")
     fun observeActiveCount(): Flow<Int>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -56,6 +66,13 @@ interface NoteDao {
         WHERE id = :id
     """)
     suspend fun softDelete(id: Long, now: Long = System.currentTimeMillis())
+
+    @Query("""
+        UPDATE note
+        SET archived = :archived, updatedAt = :now
+        WHERE id = :id
+    """)
+    suspend fun setArchived(id: Long, archived: Boolean, now: Long = System.currentTimeMillis())
 
     @Query("""
         DELETE FROM note 

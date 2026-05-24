@@ -1,6 +1,7 @@
 package be.cobaltfilms.alphanote.ui.screens
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -11,20 +12,31 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 
 /**
+ * Evénement de partage texte injecté depuis Activity.
+ */
+data class SharedTextEvent(
+    val id: Long,
+    val text: String
+)
+
+/**
  * Navigation principale AlphaNote.
- * Routes :
- * - "notes" : liste des notes
- * - "note/{noteId}" : édition d'une note
- * - "note/new" : création d'une nouvelle note
- * - "settings" : paramètres
  */
 @Composable
 fun AlphaNoteNavHost(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
-    initialSharedText: String? = null,
+    sharedTextEvent: SharedTextEvent? = null,
+    onSharedTextConsumed: (Long) -> Unit = {},
     noteViewModel: NoteViewModel = viewModel()
 ) {
+    LaunchedEffect(sharedTextEvent?.id) {
+        val payload = sharedTextEvent ?: return@LaunchedEffect
+        val noteId = noteViewModel.createNoteAndGetId(content = payload.text)
+        navController.navigate("note/$noteId")
+        onSharedTextConsumed(payload.id)
+    }
+
     NavHost(
         navController = navController,
         startDestination = "notes",
@@ -34,8 +46,7 @@ fun AlphaNoteNavHost(
             NoteListScreen(
                 viewModel = noteViewModel,
                 onCreateNote = { text ->
-                    noteViewModel.createNote(text)
-                    val noteId = noteViewModel.activeNotes.value.firstOrNull()?.id ?: return@NoteListScreen
+                    val noteId = noteViewModel.createNoteAndGetId(content = text)
                     navController.navigate("note/$noteId")
                 },
                 onNoteClick = { noteId ->
@@ -62,6 +73,7 @@ fun AlphaNoteNavHost(
 
         composable("settings") {
             SettingsScreen(
+                viewModel = noteViewModel,
                 onBack = { navController.popBackStack() }
             )
         }

@@ -9,3 +9,10 @@ Package.resolved
 .swiftpm/
 *~
 .idea/
+Android/.gradle/
+Android/build/
+Android/app/build/
+Android/local.properties
+Android/.idea/
+Android/**/.DS_Store
+**/build/

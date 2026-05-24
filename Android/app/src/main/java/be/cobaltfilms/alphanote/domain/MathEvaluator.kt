@@ -25,20 +25,26 @@ class MathEvaluator {
             get() = this is Operator && op.isNotEmpty()
     }
 
+    private enum class BufferKind {
+        NONE,
+        NUMBER,
+        IDENTIFIER
+    }
+
     // ---- Public API ----
 
     /**
      * Évalue une expression mathématique.
      * @return Le résultat, ou null si l'expression est invalide.
      */
-    fun evaluate(expression: String): Double? {
+    fun evaluate(expression: String, variables: Map<String, Double> = emptyMap()): Double? {
         val normalized = normalize(expression)
         val tokens = tokenize(normalized)
         if (tokens.isEmpty()) return null
-        var pos = 0
+        val posRef = IntRef(0)
         return try {
-            val result = parseExpression(tokens, posRef = IntRef(pos))
-            if (pos == tokens.size) result else null
+            val result = parseExpression(tokens, posRef = posRef, variables = variables)
+            if (posRef.value == tokens.size) result else null
         } catch (e: Exception) {
             null
         }
@@ -66,83 +72,81 @@ class MathEvaluator {
         val tokens = mutableListOf<Token>()
         var i = 0
         var buffer = ""
+        var bufferKind = BufferKind.NONE
 
-        fun flushNumber() {
-            buffer.toDoubleOrNull()?.let { tokens.add(Token.Number(it)) }
-            buffer = ""
-        }
-
-        fun flushIdentifier() {
-            if (buffer.isNotEmpty()) {
-                tokens.add(Token.Identifier(buffer))
-                buffer = ""
+        fun flushBuffer() {
+            if (buffer.isEmpty()) return
+            when (bufferKind) {
+                BufferKind.NUMBER -> buffer.toDoubleOrNull()?.let { tokens.add(Token.Number(it)) }
+                BufferKind.IDENTIFIER -> tokens.add(Token.Identifier(buffer))
+                BufferKind.NONE -> {}
             }
+            buffer = ""
+            bufferKind = BufferKind.NONE
         }
 
         while (i < input.length) {
             val ch = input[i]
             when {
-                ch in '0'..'9' || ch == '.' -> {
-                    flushIdentifier()
+                ch in '0'..'9' -> {
+                    if (bufferKind == BufferKind.NONE) bufferKind = BufferKind.NUMBER
+                    buffer += ch
+                }
+                ch == '.' -> {
+                    if (bufferKind == BufferKind.IDENTIFIER) {
+                        flushBuffer()
+                    }
+                    if (bufferKind == BufferKind.NONE) bufferKind = BufferKind.NUMBER
                     buffer += ch
                 }
                 ch == '%' -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                     tokens.add(Token.Percent)
                 }
                 ch == '+' || ch == '*' || ch == '/' -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                     tokens.add(Token.Operator(ch.toString()))
                 }
                 ch == '^' -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                     tokens.add(Token.Operator("^"))
                 }
                 ch == '-' -> {
-                    flushIdentifier()
-                    if (buffer.isNotEmpty()) {
-                        flushNumber()
+                    if (bufferKind == BufferKind.NUMBER || bufferKind == BufferKind.IDENTIFIER) {
+                        flushBuffer()
                         tokens.add(Token.Operator("-"))
                     } else if (tokens.isEmpty() || tokens.last().isBinaryOperator || tokens.last() is Token.LParen) {
                         // Nombre négatif
+                        bufferKind = BufferKind.NUMBER
                         buffer += ch
                     } else {
                         tokens.add(Token.Operator("-"))
                     }
                 }
                 ch == '(' -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                     tokens.add(Token.LParen)
                 }
                 ch == ')' -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                     tokens.add(Token.RParen)
                 }
                 ch == ' ' || ch == '\t' -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                 }
                 ch.isLetter() || ch == '_' -> {
-                    if (buffer.isNotEmpty() && buffer[0].isDigit()) flushNumber()
+                    if (bufferKind == BufferKind.NUMBER) flushBuffer()
+                    if (bufferKind == BufferKind.NONE) bufferKind = BufferKind.IDENTIFIER
                     buffer += ch
                 }
                 else -> {
-                    if (buffer.isNotEmpty()) flushNumber()
-                    flushIdentifier()
+                    flushBuffer()
                 }
             }
             i++
         }
 
-        if (buffer.isNotEmpty()) {
-            if (buffer[0].isDigit() || buffer[0] == '.' || buffer[0] == '-') flushNumber()
-            else flushIdentifier()
-        }
+        flushBuffer()
 
         // Traiter "50% of 200" → convertir "of" en "*"
         val cleaned = mutableListOf<Token>()
@@ -189,14 +193,14 @@ class MathEvaluator {
     /** Référence mutable pour la position (remplace `inout` de Swift) */
     private class IntRef(var value: Int)
 
-    private fun parseExpression(tokens: List<Token>, posRef: IntRef): Double {
-        var result = parseTerm(tokens, posRef)
+    private fun parseExpression(tokens: List<Token>, posRef: IntRef, variables: Map<String, Double>): Double {
+        var result = parseTerm(tokens, posRef, variables)
 
         while (posRef.value < tokens.size) {
             val t = tokens[posRef.value]
             if (t is Token.Operator && (t.op == "+" || t.op == "-")) {
                 posRef.value++
-                val rhs = parseTerm(tokens, posRef)
+                val rhs = parseTerm(tokens, posRef, variables)
                 when (t.op) {
                     "+" -> result += rhs
                     "-" -> result -= rhs
@@ -208,14 +212,14 @@ class MathEvaluator {
         return result
     }
 
-    private fun parseTerm(tokens: List<Token>, posRef: IntRef): Double {
-        var result = parsePower(tokens, posRef)
+    private fun parseTerm(tokens: List<Token>, posRef: IntRef, variables: Map<String, Double>): Double {
+        var result = parsePower(tokens, posRef, variables)
 
         while (posRef.value < tokens.size) {
             val t = tokens[posRef.value]
             if (t is Token.Operator && (t.op == "*" || t.op == "/")) {
                 posRef.value++
-                val rhs = parsePower(tokens, posRef)
+                val rhs = parsePower(tokens, posRef, variables)
                 when (t.op) {
                     "*" -> result *= rhs
                     "/" -> result /= rhs
@@ -227,34 +231,34 @@ class MathEvaluator {
         return result
     }
 
-    private fun parsePower(tokens: List<Token>, posRef: IntRef): Double {
-        var result = parseUnary(tokens, posRef)
+    private fun parsePower(tokens: List<Token>, posRef: IntRef, variables: Map<String, Double>): Double {
+        var result = parseUnary(tokens, posRef, variables)
 
         if (posRef.value < tokens.size) {
             val t = tokens[posRef.value]
             if (t is Token.Operator && t.op == "^") {
                 posRef.value++
                 // Right-associative
-                val rhs = parsePower(tokens, posRef)
+                val rhs = parsePower(tokens, posRef, variables)
                 result = result.pow(rhs)
             }
         }
         return result
     }
 
-    private fun parseUnary(tokens: List<Token>, posRef: IntRef): Double {
+    private fun parseUnary(tokens: List<Token>, posRef: IntRef, variables: Map<String, Double>): Double {
         if (posRef.value < tokens.size) {
             val t = tokens[posRef.value]
             if (t is Token.Operator && t.op == "-") {
                 posRef.value++
-                val value = parsePrimary(tokens, posRef)
+                val value = parsePrimary(tokens, posRef, variables)
                 return -value
             }
         }
-        return parsePrimary(tokens, posRef)
+        return parsePrimary(tokens, posRef, variables)
     }
 
-    private fun parsePrimary(tokens: List<Token>, posRef: IntRef): Double {
+    private fun parsePrimary(tokens: List<Token>, posRef: IntRef, variables: Map<String, Double>): Double {
         require(posRef.value < tokens.size) { "Fin d'expression inattendue" }
 
         return when (val t = tokens[posRef.value]) {
@@ -264,7 +268,7 @@ class MathEvaluator {
             }
             is Token.LParen -> {
                 posRef.value++
-                val result = parseExpression(tokens, posRef)
+                val result = parseExpression(tokens, posRef, variables)
                 require(posRef.value < tokens.size && tokens[posRef.value] is Token.RParen) {
                     "Parenthèse fermante manquante"
                 }
@@ -273,8 +277,8 @@ class MathEvaluator {
             }
             is Token.Identifier -> {
                 posRef.value++
-                // Futur : lookup de variables
-                0.0
+                variables[t.name] ?: variables[t.name.lowercase()]
+                ?: throw IllegalArgumentException("Variable inconnue: ${t.name}")
             }
             else -> throw IllegalArgumentException("Token inattendu : $t")
         }

@@ -72,21 +72,10 @@ fun AIAssistantBar(
                 icon = Icons.Default.Checklist,
                 label = "Liste",
                 onClick = {
-                    if (!noteContent.lines().firstOrNull()?.trim()?.lowercase()?.startsWith("list")!!) {
+                    val firstLine = noteContent.lines().firstOrNull()?.trim()?.lowercase().orEmpty()
+                    if (!firstLine.startsWith("list")) {
                         onUpdateContent("list\n$noteContent")
                     }
-                }
-            )
-
-            // Résumer (placeholder IA)
-            AssistButton(
-                icon = Icons.Default.Summarize,
-                label = "Résumer",
-                onClick = {
-                    // TODO: intégrer le pipeline IA local
-                    val lines = noteContent.lines().take(3)
-                    val summary = lines.joinToString("\n") + "\n..."
-                    onUpdateContent("$noteContent\n\n--- Résumé ---\n$summary")
                 }
             )
         }

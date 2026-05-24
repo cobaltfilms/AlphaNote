@@ -1,26 +1,44 @@
 package be.cobaltfilms.alphanote.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import be.cobaltfilms.alphanote.ui.theme.AlphaSpacing
 
-/**
- * Écran de paramètres.
- * Portage de UI/SettingsView.swift (macOS).
- *
- * Sections : Général, Apparence, IA, À propos
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    viewModel: NoteViewModel,
     onBack: () -> Unit
 ) {
+    val confirmDelete by viewModel.confirmDelete.collectAsState()
+    val autoDetectMode by viewModel.autoDetectMode.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -38,109 +56,46 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
+                .padding(horizontal = AlphaSpacing.screenHorizontal, vertical = AlphaSpacing.sectionVertical),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Section Général
-            SettingsSection(title = "Général") {
-                var autoDetectMode by remember { mutableStateOf(true) }
-                SwitchSetting(
-                    title = "Détection automatique du mode",
-                    subtitle = "Analyse la première ligne pour activer math, list, code ou timer",
-                    checked = autoDetectMode,
-                    onCheckedChange = { autoDetectMode = it }
-                )
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Édition", style = MaterialTheme.typography.titleMedium)
 
-                var confirmDelete by remember { mutableStateOf(true) }
-                SwitchSetting(
-                    title = "Confirmer la suppression",
-                    subtitle = "Demander confirmation avant de supprimer une note",
-                    checked = confirmDelete,
-                    onCheckedChange = { confirmDelete = it }
-                )
+                    SwitchSetting(
+                        title = "Détection automatique du mode",
+                        subtitle = "Active automatiquement math, list, code ou timer à partir de la première ligne.",
+                        checked = autoDetectMode,
+                        onCheckedChange = viewModel::setAutoDetectMode
+                    )
+
+                    SwitchSetting(
+                        title = "Confirmer la suppression",
+                        subtitle = "Demande une confirmation avant suppression logique d'une note.",
+                        checked = confirmDelete,
+                        onCheckedChange = viewModel::setConfirmDelete
+                    )
+                }
             }
 
-            Divider(modifier = Modifier.padding(horizontal = 16.dp))
-
-            // Section Apparence
-            SettingsSection(title = "Apparence") {
-                var darkTheme by remember { mutableStateOf(false) }
-                SwitchSetting(
-                    title = "Thème sombre",
-                    subtitle = "Utiliser le thème sombre par défaut",
-                    checked = darkTheme,
-                    onCheckedChange = { darkTheme = it }
-                )
-
-                var monospace by remember { mutableStateOf(false) }
-                SwitchSetting(
-                    title = "Police monospace",
-                    subtitle = "Utiliser une police à chasse fixe dans toutes les notes",
-                    checked = monospace,
-                    onCheckedChange = { monospace = it }
-                )
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("À propos", style = MaterialTheme.typography.titleMedium)
+                    Text("AlphaNote Android", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Portage orienté parité fonctionnelle macOS. Version 1.0.0.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
-            Divider(modifier = Modifier.padding(horizontal = 16.dp))
-
-            // Section IA
-            SettingsSection(title = "Intelligence Artificielle") {
-                var enableAI by remember { mutableStateOf(true) }
-                SwitchSetting(
-                    title = "Assistant IA",
-                    subtitle = "Activer les suggestions IA dans la barre d'outils",
-                    checked = enableAI,
-                    onCheckedChange = { enableAI = it }
-                )
-
-                var localOnly by remember { mutableStateOf(true) }
-                SwitchSetting(
-                    title = "IA locale uniquement",
-                    subtitle = "Utiliser uniquement le moteur d'inférence local (MediaPipe)",
-                    checked = localOnly,
-                    onCheckedChange = { localOnly = it }
-                )
-            }
-
-            Divider(modifier = Modifier.padding(horizontal = 16.dp))
-
-            // Section À propos
-            SettingsSection(title = "À propos") {
-                Text(
-                    text = "AlphaNote v1.0.0 (Android)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-
-                Text(
-                    text = "Application de prise de notes éphémères.\nPortage Android depuis macOS Swift/SwiftUI.\n\n© 2026 Cobalt Films. Tous droits réservés.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
-/** Titre de section */
-@Composable
-private fun SettingsSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(modifier = Modifier.padding(top = 16.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        content()
-    }
-}
-
-/** Composant switch avec titre et sous-titre */
 @Composable
 private fun SwitchSetting(
     title: String,
@@ -148,26 +103,17 @@ private fun SwitchSetting(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
+    Row(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                text = subtitle,
+                subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
