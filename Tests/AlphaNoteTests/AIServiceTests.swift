@@ -24,7 +24,7 @@ final class AIServiceTests: XCTestCase {
 
     func testSummarizeReturnsText() async throws {
         let service = AIService(
-            mlxEngine: MockEngine(output: "Résumé court de la note"),
+            ggufEngine: MockEngine(output: "Résumé court de la note"),
             fallbackEngine: MockEngine(output: "fallback")
         )
 
@@ -39,7 +39,7 @@ final class AIServiceTests: XCTestCase {
         """
 
         let service = AIService(
-            mlxEngine: MockEngine(output: json),
+            ggufEngine: MockEngine(output: json),
             fallbackEngine: MockEngine(output: "fallback")
         )
 
@@ -51,7 +51,7 @@ final class AIServiceTests: XCTestCase {
 
     func testFallbackEngineIsUsedWhenPrimaryFails() async throws {
         let service = AIService(
-            mlxEngine: MockFailingEngine(),
+            ggufEngine: MockFailingEngine(),
             fallbackEngine: MockEngine(output: "fallback output")
         )
 
@@ -75,7 +75,7 @@ final class AIServiceTests: XCTestCase {
         """
 
         let service = AIService(
-            mlxEngine: MockEngine(output: json),
+            ggufEngine: MockEngine(output: json),
             fallbackEngine: MockEngine(output: "fallback")
         )
 
@@ -101,7 +101,7 @@ final class AIServiceTests: XCTestCase {
         """
 
         let service = AIService(
-            mlxEngine: MockEngine(output: json),
+            ggufEngine: MockEngine(output: json),
             fallbackEngine: MockEngine(output: "fallback")
         )
 

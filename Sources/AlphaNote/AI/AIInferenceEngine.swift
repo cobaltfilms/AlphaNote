@@ -101,7 +101,7 @@ actor MLXCommandRunner {
         }
 
         let process = Process()
-        let command = resolveMLXGenerateCommand()
+        let command = resolveMLXGenerateCommand(for: modelID)
         process.executableURL = URL(fileURLWithPath: command.executable)
         process.arguments = command.argumentsPrefix + [
             "--model", modelID,
@@ -172,7 +172,9 @@ actor MLXCommandRunner {
     private func finalizeOutput(output: String, errorOutput: String, status: Int32) throws -> String {
         guard status == 0 else {
             if errorOutput.localizedCaseInsensitiveContains("no module named mlx_lm") ||
+                errorOutput.localizedCaseInsensitiveContains("no module named mlx_vlm") ||
                 errorOutput.localizedCaseInsensitiveContains("mlx_lm.generate: command not found") ||
+                errorOutput.localizedCaseInsensitiveContains("mlx_vlm.generate: command not found") ||
                 errorOutput.localizedCaseInsensitiveContains("not found") {
                 throw AIError.modelUnavailable
             }
@@ -208,8 +210,8 @@ actor MLXCommandRunner {
         self.activeProcess = nil
     }
 
-    private func resolveMLXGenerateCommand() -> (executable: String, argumentsPrefix: [String]) {
-        AIManagedRuntime.preferredGenerateCommand()
+    private func resolveMLXGenerateCommand(for modelID: String) -> (executable: String, argumentsPrefix: [String]) {
+        AIManagedRuntime.preferredGenerateCommand(for: modelID)
     }
 
     private func sanitizeMLXOutput(_ output: String) -> String {

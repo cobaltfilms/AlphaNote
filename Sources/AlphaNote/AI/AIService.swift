@@ -9,14 +9,14 @@ struct AIFeatureGate {
 actor AIService: AIServiceProtocol {
     static let shared = AIService()
 
-    private let mlxEngine: AIInferenceEngineProtocol
+    private let ggufEngine: AIInferenceEngineProtocol
     private let fallbackEngine: AIInferenceEngineProtocol
 
     init(
-        mlxEngine: AIInferenceEngineProtocol = MLXSwiftInferenceEngine(),
+        ggufEngine: AIInferenceEngineProtocol = LlamaCppInferenceEngine(),
         fallbackEngine: AIInferenceEngineProtocol = HeuristicFallbackInferenceEngine()
     ) {
-        self.mlxEngine = mlxEngine
+        self.ggufEngine = ggufEngine
         self.fallbackEngine = fallbackEngine
     }
 
@@ -62,7 +62,7 @@ actor AIService: AIServiceProtocol {
 
         do {
             let raw = try await collect(
-                stream: mlxEngine.generate(
+                stream: ggufEngine.generate(
                     prompt: prompt,
                     system: AIPromptBuilder.systemPrompt,
                     modelID: effectiveModelID,
@@ -99,11 +99,16 @@ actor AIService: AIServiceProtocol {
             return .failure(.internalFailure("ID de modèle vide."))
         }
 
+        let modelPath = GGUFDownloadManager.localPath(for: AIModelRegistry.profile(for: normalized))
+        if !FileManager.default.fileExists(atPath: modelPath) {
+            return .failure(.internalFailure("Modèle non téléchargé. Clique sur « Télécharger / Préparer »."))
+        }
+
         do {
             let raw = try await collect(
-                stream: mlxEngine.generate(
+                stream: ggufEngine.generate(
                     prompt: "Réponds uniquement OK",
-                    system: "Test de disponibilité modèle local.",
+                    system: "Test.",
                     modelID: normalized,
                     options: AIRequestOptions(temperature: 0, maxTokens: 12, topP: 1, stop: [])
                 ),
@@ -126,51 +131,91 @@ actor AIService: AIServiceProtocol {
         guard !normalized.isEmpty else {
             return .failure(.internalFailure("ID de modèle vide."))
         }
-        guard let mlxEngine = mlxEngine as? MLXSwiftInferenceEngine else {
-            return .failure(.modelUnavailable)
+
+        let profile = AIModelRegistry.profile(for: normalized)
+        let modelPath = GGUFDownloadManager.localPath(for: profile)
+
+        if FileManager.default.fileExists(atPath: modelPath) {
+            return .success("Modèle déjà téléchargé: \(profile.displayName)")
         }
 
         do {
-            let output = try await mlxEngine.prepareModel(modelID: normalized) { rawLine in
-                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !line.isEmpty else { return }
-                let percent = AIModelDiagnostics.parseProgressPercent(from: line)
-                if let friendly = AIModelDiagnostics.userFriendlyProgressLine(line) {
-                    onProgress(friendly, percent)
-                }
-            }
-            return .success(output)
+            try await GGUFDownloadManager.shared.download(modelID: normalized, onProgress: onProgress)
+            return .success("Modèle téléchargé: \(profile.displayName)")
         } catch {
             return .failure(mapError(error))
         }
     }
 
-    func unloadCurrentModel() async {
-        guard let mlxEngine = mlxEngine as? MLXSwiftInferenceEngine else {
-            return
-        }
-        await mlxEngine.unloadActiveModel()
-    }
+    func unloadCurrentModel() async {}
 
     func localModelStatus(modelID: String) -> AIModelLocalStatus {
-        AIModelDiagnostics.localStatus(for: modelID)
+        let profile = AIModelRegistry.profile(for: modelID)
+
+        let customPath = UserDefaults.standard
+            .string(forKey: AISettingsKeys.ggufCustomPath)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !customPath.isEmpty, FileManager.default.fileExists(atPath: customPath) {
+            return modelStatusAtPath(customPath, modelID: modelID)
+        }
+
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        let cotypistPath = home + "/Library/Application Support/app.cotypist.Cotypist/Models/gemma-4-E2B-i1-Q4_K_M.gguf"
+        if profile.id == "gemma-4-e2b", FileManager.default.fileExists(atPath: cotypistPath) {
+            return modelStatusAtPath(cotypistPath, modelID: modelID)
+        }
+
+        let path = GGUFDownloadManager.localPath(for: profile)
+        return modelStatusAtPath(path, modelID: modelID)
     }
 
-    nonisolated func runtimeInfo() -> AIManagedRuntimeInfo {
-        AIManagedRuntime.diagnose()
+    private func modelStatusAtPath(_ path: String, modelID: String) -> AIModelLocalStatus {
+        let fm = FileManager.default
+        let isDownloaded = fm.fileExists(atPath: path)
+        var size: Int64 = 0
+        var updatedAt: Date? = nil
+        if let attrs = try? fm.attributesOfItem(atPath: path) {
+            size = (attrs[.size] as? Int64) ?? 0
+            updatedAt = attrs[.modificationDate] as? Date
+        }
+        return AIModelLocalStatus(
+            modelID: modelID,
+            isDownloaded: isDownloaded,
+            cachePath: path,
+            cachedSizeBytes: size,
+            updatedAt: updatedAt
+        )
+    }
+
+    nonisolated func runtimeInfo(modelID: String) -> AIManagedRuntimeInfo {
+        if LlamaCppInferenceEngine.isAvailable {
+            let path = LlamaCppInferenceEngine.serverPath ?? "llama-server"
+            return AIManagedRuntimeInfo(
+                mode: "llamacpp",
+                pythonPath: nil,
+                torchVersion: nil,
+                isTorchCompatible: true,
+                hasMLXLMModule: true,
+                hasMLXVLMModule: true,
+                summary: "llama.cpp détecté: \(path)"
+            )
+        }
+        return AIManagedRuntimeInfo(
+            mode: "indisponible",
+            pythonPath: nil,
+            torchVersion: nil,
+            isTorchCompatible: false,
+            hasMLXLMModule: false,
+            hasMLXVLMModule: false,
+            summary: "llama.cpp non détecté."
+        )
     }
 
     func repairRuntimeWithUV(onProgress: @escaping @Sendable (String) -> Void) async -> Result<String, AIError> {
-        let result = await Task.detached(priority: .userInitiated) {
-            AIManagedRuntime.repairWithUV(onProgress: onProgress)
-        }.value
-
-        switch result {
-        case let .success(info):
-            return .success("Runtime IA prêt. \(info.summary)")
-        case let .failure(error):
-            return .failure(.internalFailure(error.localizedDescription))
+        if LlamaCppInferenceEngine.isAvailable {
+            return .success("llama.cpp détecté, prêt à l'emploi.")
         }
+        return .failure(.internalFailure("llama.cpp introuvable. Installe-le avec: brew install llama.cpp"))
     }
 
     private func collect(stream: AsyncThrowingStream<String, Error>, timeout: TimeInterval) async throws -> String {
@@ -178,13 +223,9 @@ actor AIService: AIServiceProtocol {
             group.addTask {
                 var buffer = ""
                 for try await chunk in stream {
-                    if Task.isCancelled {
-                        throw AIError.cancelled
-                    }
+                    if Task.isCancelled { throw AIError.cancelled }
                     buffer.append(chunk)
-                    if !buffer.hasSuffix("\n") {
-                        buffer.append("\n")
-                    }
+                    if !buffer.hasSuffix("\n") { buffer.append("\n") }
                 }
                 return buffer.trimmingCharacters(in: .whitespacesAndNewlines)
             }

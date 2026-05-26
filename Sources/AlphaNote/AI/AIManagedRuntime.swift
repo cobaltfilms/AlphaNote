@@ -6,6 +6,7 @@ struct AIManagedRuntimeInfo: Sendable {
     let torchVersion: String?
     let isTorchCompatible: Bool
     let hasMLXLMModule: Bool
+    let hasMLXVLMModule: Bool
     let summary: String
 }
 
@@ -24,61 +25,70 @@ enum AIManagedRuntime {
     private static let minTorchMajor = 2
     private static let minTorchMinor = 4
 
-    static func preferredGenerateCommand() -> (executable: String, argumentsPrefix: [String]) {
+    static func preferredGenerateCommand(for modelID: String) -> (executable: String, argumentsPrefix: [String]) {
+        let useVLM = AIModelRegistry.requiresVLMRuntime(modelID: modelID)
+        let moduleEntryPoint = useVLM ? "mlx_vlm.generate" : "mlx_lm.generate"
+        let managedScript = useVLM ? managedVLMGenerateScriptPath() : managedGenerateScriptPath()
         let managedInfo = diagnoseManagedRuntime()
-        if let managedScript = managedGenerateScriptPath(),
+        let hasRequiredModule = useVLM ? managedInfo.hasMLXVLMModule : managedInfo.hasMLXLMModule
+        if let managedScript,
            managedInfo.isTorchCompatible,
-           managedInfo.hasMLXLMModule {
+           hasRequiredModule {
             return (managedScript, [])
         }
 
         if let managedPython = managedInfo.pythonPath,
            managedInfo.isTorchCompatible,
-           managedInfo.hasMLXLMModule {
-            return (managedPython, ["-m", "mlx_lm.generate"])
+           hasRequiredModule {
+            return (managedPython, ["-m", moduleEntryPoint])
         }
 
         let fm = FileManager.default
-        let directCandidates = [
-            "/opt/homebrew/bin/mlx_lm.generate",
-            "/usr/local/bin/mlx_lm.generate"
-        ]
+        let directCandidates = useVLM
+            ? ["/opt/homebrew/bin/mlx_vlm.generate", "/usr/local/bin/mlx_vlm.generate"]
+            : ["/opt/homebrew/bin/mlx_lm.generate", "/usr/local/bin/mlx_lm.generate"]
         if let direct = directCandidates.first(where: { fm.isExecutableFile(atPath: $0) }) {
             return (direct, [])
         }
-        return ("/usr/bin/env", ["mlx_lm.generate"])
+        return ("/usr/bin/env", [moduleEntryPoint])
     }
 
-    static func diagnose() -> AIManagedRuntimeInfo {
+    static func diagnose(for modelID: String = AIModelProfile.qwen31_7B.id) -> AIManagedRuntimeInfo {
+        let needsVLM = AIModelRegistry.requiresVLMRuntime(modelID: modelID)
+        let requiredModuleLabel = needsVLM ? "mlx-vlm" : "mlx-lm"
         let managedInfo = diagnoseManagedRuntime()
-        if managedInfo.mode == "runtime-isole" && managedInfo.isTorchCompatible && managedInfo.hasMLXLMModule {
+        let hasRequiredManagedModule = needsVLM ? managedInfo.hasMLXVLMModule : managedInfo.hasMLXLMModule
+        if managedInfo.mode == "runtime-isole" && managedInfo.isTorchCompatible && hasRequiredManagedModule {
             return managedInfo
         }
 
-        if managedInfo.mode == "runtime-isole" && (!managedInfo.isTorchCompatible || !managedInfo.hasMLXLMModule) {
+        if managedInfo.mode == "runtime-isole" && (!managedInfo.isTorchCompatible || !hasRequiredManagedModule) {
             return AIManagedRuntimeInfo(
                 mode: managedInfo.mode,
                 pythonPath: managedInfo.pythonPath,
                 torchVersion: managedInfo.torchVersion,
                 isTorchCompatible: managedInfo.isTorchCompatible,
                 hasMLXLMModule: managedInfo.hasMLXLMModule,
-                summary: "Runtime IA isolé incomplet (torch ou mlx-lm). Fallback auto vers runtime système."
+                hasMLXVLMModule: managedInfo.hasMLXVLMModule,
+                summary: "Runtime IA isolé incomplet (torch ou \(requiredModuleLabel)). Fallback auto vers runtime système."
             )
         }
 
-        if let script = resolveMLXGenerateScriptPath(),
+        if let script = resolveMLXGenerateScriptPath(forVLM: needsVLM),
            let python = runtimePythonFromScript(script),
            !python.isEmpty {
             let torch = readTorchVersion(pythonPath: python)
             let compatible = isTorchCompatible(version: torch)
-            let hasModule = hasMLXLMModule(pythonPath: python)
+            let hasLMModule = hasModule(pythonPath: python, moduleName: "mlx_lm")
+            let hasVLMModule = hasModule(pythonPath: python, moduleName: "mlx_vlm")
             let torchLabel = torch ?? "inconnue"
             return AIManagedRuntimeInfo(
                 mode: "systeme",
                 pythonPath: python,
                 torchVersion: torch,
                 isTorchCompatible: compatible,
-                hasMLXLMModule: hasModule,
+                hasMLXLMModule: hasLMModule,
+                hasMLXVLMModule: hasVLMModule,
                 summary: "Runtime IA système: \(python) (torch \(torchLabel))."
             )
         }
@@ -89,6 +99,7 @@ enum AIManagedRuntime {
             torchVersion: nil,
             isTorchCompatible: false,
             hasMLXLMModule: false,
+            hasMLXVLMModule: false,
             summary: "Runtime IA non détecté."
         )
     }
@@ -120,17 +131,22 @@ enum AIManagedRuntime {
             return .failure(.message("Impossible de créer le dossier runtime IA: \(error.localizedDescription)"))
         }
 
-        onProgress("Création du runtime IA isolé...")
-        let venvResult = runCommand(
-            executable: uvPath,
-            arguments: ["venv", runtimeDir, "--python", "3.11"]
-        )
-        guard venvResult.status == 0 else {
-            return .failure(.message("Échec création runtime IA: \(venvResult.output)"))
-        }
-
-        guard let managedPython = managedPythonPath() else {
-            return .failure(.message("Runtime IA créé mais Python introuvable."))
+        let managedPython: String
+        if let existing = managedPythonPath() {
+            managedPython = existing
+        } else {
+            onProgress("Création du runtime IA isolé...")
+            let venvResult = runCommand(
+                executable: uvPath,
+                arguments: ["venv", runtimeDir, "--python", "3.11"]
+            )
+            guard venvResult.status == 0 else {
+                return .failure(.message("Échec création runtime IA: \(venvResult.output)"))
+            }
+            guard let created = managedPythonPath() else {
+                return .failure(.message("Runtime IA créé mais Python introuvable."))
+            }
+            managedPython = created
         }
 
         onProgress("Installation des dépendances IA (peut prendre quelques minutes)...")
@@ -142,7 +158,7 @@ enum AIManagedRuntime {
                 "--upgrade",
                 "pip", "setuptools", "wheel",
                 "torch>=2.4,<3",
-                "mlx", "mlx-metal", "mlx-lm"
+                "mlx", "mlx-metal", "mlx-lm", "mlx-vlm"
             ]
         )
         guard installResult.status == 0 else {
@@ -150,8 +166,11 @@ enum AIManagedRuntime {
         }
 
         let info = diagnose()
-        if info.mode != "runtime-isole" || !info.isTorchCompatible || !info.hasMLXLMModule {
-            return .failure(.message("Runtime IA créé mais incomplet (torch/mlx-lm). \(info.summary)"))
+        if info.mode != "runtime-isole" ||
+            !info.isTorchCompatible ||
+            !info.hasMLXLMModule ||
+            !info.hasMLXVLMModule {
+            return .failure(.message("Runtime IA créé mais incomplet (torch/mlx-lm/mlx-vlm). \(info.summary)"))
         }
         return .success(info)
     }
@@ -166,6 +185,11 @@ enum AIManagedRuntime {
 
     static func managedGenerateScriptPath() -> String? {
         let candidate = managedRuntimeDirectory() + "/bin/mlx_lm.generate"
+        return FileManager.default.isExecutableFile(atPath: candidate) ? candidate : nil
+    }
+
+    static func managedVLMGenerateScriptPath() -> String? {
+        let candidate = managedRuntimeDirectory() + "/bin/mlx_vlm.generate"
         return FileManager.default.isExecutableFile(atPath: candidate) ? candidate : nil
     }
 
@@ -194,15 +218,14 @@ enum AIManagedRuntime {
         return minor >= minTorchMinor
     }
 
-    private static func resolveMLXGenerateScriptPath() -> String? {
-        let candidates = [
-            "/opt/homebrew/bin/mlx_lm.generate",
-            "/usr/local/bin/mlx_lm.generate"
-        ]
+    private static func resolveMLXGenerateScriptPath(forVLM: Bool) -> String? {
+        let candidates = forVLM
+            ? ["/opt/homebrew/bin/mlx_vlm.generate", "/usr/local/bin/mlx_vlm.generate"]
+            : ["/opt/homebrew/bin/mlx_lm.generate", "/usr/local/bin/mlx_lm.generate"]
         if let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
             return found
         }
-        return resolveCommandPath("mlx_lm.generate")
+        return resolveCommandPath(forVLM ? "mlx_vlm.generate" : "mlx_lm.generate")
     }
 
     private static func readShebang(from scriptPath: String) -> String? {
@@ -257,12 +280,12 @@ enum AIManagedRuntime {
         return version.isEmpty ? nil : version
     }
 
-    private static func hasMLXLMModule(pythonPath: String) -> Bool {
+    private static func hasModule(pythonPath: String, moduleName: String) -> Bool {
         let result = runCommand(
             executable: pythonPath,
             arguments: [
                 "-c",
-                "import importlib.util; print('1' if importlib.util.find_spec('mlx_lm') else '0')"
+                "import importlib.util; print('1' if importlib.util.find_spec('\(moduleName)') else '0')"
             ]
         )
         guard result.status == 0 else { return false }
@@ -277,19 +300,22 @@ enum AIManagedRuntime {
                 torchVersion: nil,
                 isTorchCompatible: false,
                 hasMLXLMModule: false,
+                hasMLXVLMModule: false,
                 summary: "Runtime IA non détecté."
             )
         }
         let torch = readTorchVersion(pythonPath: managedPython)
         let compatible = isTorchCompatible(version: torch)
-        let hasModule = hasMLXLMModule(pythonPath: managedPython)
+        let hasLMModule = hasModule(pythonPath: managedPython, moduleName: "mlx_lm")
+        let hasVLMModule = hasModule(pythonPath: managedPython, moduleName: "mlx_vlm")
         let torchLabel = torch ?? "inconnue"
         return AIManagedRuntimeInfo(
             mode: "runtime-isole",
             pythonPath: managedPython,
             torchVersion: torch,
             isTorchCompatible: compatible,
-            hasMLXLMModule: hasModule,
+            hasMLXLMModule: hasLMModule,
+            hasMLXVLMModule: hasVLMModule,
             summary: "Runtime IA isolé: \(managedPython) (torch \(torchLabel))."
         )
     }

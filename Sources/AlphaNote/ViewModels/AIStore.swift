@@ -16,6 +16,48 @@ final class AIStore {
         self.noteStore = noteStore
     }
 
+    private var notes: [Note] {
+        get { noteStore.notes }
+        set { noteStore.notes = newValue }
+    }
+
+    private var archivedNotes: [Note] {
+        get { noteStore.archivedNotes }
+        set { noteStore.archivedNotes = newValue }
+    }
+
+    private var currentNote: Note? {
+        noteStore.currentNote
+    }
+
+    private var isAIProcessing: Bool {
+        get { noteStore.isAIProcessing }
+        set { noteStore.isAIProcessing = newValue }
+    }
+
+    private var aiError: String? {
+        get { noteStore.aiError }
+        set { noteStore.aiError = newValue }
+    }
+
+    private var lastAIResult: AIResultEnvelope? {
+        get { noteStore.lastAIResult }
+        set { noteStore.lastAIResult = newValue }
+    }
+
+    private var semanticSearchResults: [SemanticSearchHit] {
+        get { noteStore.semanticSearchResults }
+        set { noteStore.semanticSearchResults = newValue }
+    }
+
+    private var aiEnabled: Bool {
+        noteStore.isAIEnabled
+    }
+
+    private func updateNote(_ note: Note) {
+        noteStore.updateNote(note)
+    }
+
     // MARK: - Public API (appelée depuis NoteStore)
 
     func summarizeCurrentNote() async {
@@ -1297,3 +1339,4 @@ final class AIStore {
         currentAITask = nil
     }
 
+}

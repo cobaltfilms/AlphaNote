@@ -19,6 +19,10 @@ final class NoteStore: ObservableObject {
 
     lazy var aiStore = AIStore(noteStore: self)
 
+    var isAIEnabled: Bool {
+        aiEnabled
+    }
+
     var currentNote: Note? {
         guard !notes.isEmpty, currentIndex >= 0, currentIndex < notes.count else {
             return nil
@@ -386,6 +390,7 @@ final class NoteStore: ObservableObject {
         reloadNotes(selecting: preferredID ?? fallbackID)
         return true
     }
+}
 
 
 private extension Array {

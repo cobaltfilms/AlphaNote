@@ -176,8 +176,14 @@ enum AIModelDiagnostics {
         if lower.contains("module specification for 'mlx_lm") || lower.contains("no module named 'mlx_lm") {
             return "Runtime IA incomplet: le module mlx-lm est absent. Clique sur « Réparer runtime IA »."
         }
-        if lower.contains("no module named mlx_lm") || lower.contains("command not found") {
+        if lower.contains("module specification for 'mlx_vlm") || lower.contains("no module named 'mlx_vlm") {
+            return "Runtime IA incomplet: le module mlx-vlm est absent pour ce modèle Gemma 4. Clique sur « Réparer runtime IA »."
+        }
+        if lower.contains("no module named mlx_lm") || lower.contains("mlx_lm.generate: command not found") {
             return "MLX-LM n'est pas disponible sur ce Mac. Vérifie l'installation locale."
+        }
+        if lower.contains("no module named mlx_vlm") || lower.contains("mlx_vlm.generate: command not found") {
+            return "MLX-VLM n'est pas disponible sur ce Mac. Clique sur « Réparer runtime IA »."
         }
         return message
     }

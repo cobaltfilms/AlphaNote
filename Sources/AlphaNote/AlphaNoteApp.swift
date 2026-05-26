@@ -70,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var observedSettingsWindows = Set<ObjectIdentifier>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        PreferencesMigration.migrateLegacyDefaultsIfNeeded()
         DatabaseManager.shared.setup()
         SyncEngine.shared.start()
         _ = NSApp.setActivationPolicy(.regular)

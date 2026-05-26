@@ -1,5 +1,10 @@
 import Foundation
 
+enum AIRuntimeFamily: String, Codable, Sendable {
+    case gguf
+    case vlm
+}
+
 enum AIModelStabilityTier: String, Codable, Sendable {
     case `default`
     case quality
@@ -24,117 +29,148 @@ struct AIModelProfile: Identifiable, Hashable, Sendable {
     let estimatedDownloadGB: Double
     let recommendedMinMemoryGB: Int
     let stabilityTier: AIModelStabilityTier
+    let runtimeFamily: AIRuntimeFamily
+
+    let hfRepo: String
+    let ggufFilename: String
 
     var isHeavyForNotes: Bool {
         estimatedDownloadGB >= 8 || stabilityTier == .experimental
     }
 
-    static let qwen31_7B = AIModelProfile(
-        id: "mlx-community/Qwen3-1.7B-4bit",
-        displayName: "Qwen 3 1.7B (MLX)",
-        displayFormat: "MLX 4-bit",
-        recommendedMaxTokens: 500,
-        qualityTier: .fast,
-        memoryHint: "Petit",
-        estimatedDownloadGB: 1.6,
-        recommendedMinMemoryGB: 8,
-        stabilityTier: .default
-    )
-
-    static let gemma34B = AIModelProfile(
-        id: "mlx-community/gemma-3-4b-it-4bit",
-        displayName: "Gemma 3 4B IT (MLX)",
-        displayFormat: "MLX 4-bit",
-        recommendedMaxTokens: 640,
-        qualityTier: .balanced,
-        memoryHint: "Petit",
-        estimatedDownloadGB: 3.2,
-        recommendedMinMemoryGB: 8,
-        stabilityTier: .default
-    )
-
-    static let gemma3Text4B = AIModelProfile(
-        id: "mlx-community/gemma-3-text-4b-it-4bit",
-        displayName: "Gemma 3 Text 4B IT (MLX)",
-        displayFormat: "MLX 4-bit",
+    static let gemma4E4B = AIModelProfile(
+        id: "gemma-4-e4b",
+        displayName: "Gemma 4 E4B",
+        displayFormat: "GGUF Q4_K_M",
         recommendedMaxTokens: 700,
         qualityTier: .balanced,
-        memoryHint: "Petit",
-        estimatedDownloadGB: 3.2,
+        memoryHint: "6.2 GB",
+        estimatedDownloadGB: 6.2,
         recommendedMinMemoryGB: 8,
-        stabilityTier: .default
-    )
-
-    static let qwen3_14B4bitDWQ = AIModelProfile(
-        id: "mlx-community/Qwen3-14B-4bit-DWQ-053125",
-        displayName: "Qwen 3 14B (MLX)",
-        displayFormat: "MLX 4-bit (DWQ)",
-        recommendedMaxTokens: 160,
-        qualityTier: .quality,
-        memoryHint: "Qualité+ macOS (contexte court)",
-        estimatedDownloadGB: 9.5,
-        recommendedMinMemoryGB: 24,
-        stabilityTier: .quality
-    )
-
-    static let qwen36_27BMoE = AIModelProfile(
-        id: "mlx-community/Qwen3.6-27B-4bit",
-        displayName: "Qwen 3.6 27B MoE (MLX)",
-        displayFormat: "MLX 4-bit",
-        recommendedMaxTokens: 384,
-        qualityTier: .quality,
-        memoryHint: "16 GB+ (contexte court)",
-        estimatedDownloadGB: 16.8,
-        recommendedMinMemoryGB: 24,
-        stabilityTier: .experimental
-    )
-
-    static let qwen36_35BA3BMoE = AIModelProfile(
-        id: "mlx-community/Qwen3.6-35B-A3B-4bit",
-        displayName: "Qwen 3.6 35B A3B MoE (MLX)",
-        displayFormat: "MLX 4-bit",
-        recommendedMaxTokens: 256,
-        qualityTier: .quality,
-        memoryHint: "24 GB+",
-        estimatedDownloadGB: 24.0,
-        recommendedMinMemoryGB: 32,
-        stabilityTier: .experimental
-    )
-
-    static let gemma4_26BA4BMoE = AIModelProfile(
-        id: "mlx-community/gemma-4-26b-a4b-4bit",
-        displayName: "Gemma 4 26B A4B MoE (MLX)",
-        displayFormat: "MLX 4-bit",
-        recommendedMaxTokens: 320,
-        qualityTier: .quality,
-        memoryHint: "24 GB+",
-        estimatedDownloadGB: 18.0,
-        recommendedMinMemoryGB: 32,
-        stabilityTier: .experimental
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/gemma-4-E4B-it-GGUF",
+        ggufFilename: "gemma-4-E4B-it-Q4_K_M.gguf"
     )
 
     static let gemma4E2B = AIModelProfile(
-        id: "mlx-community/gemma-4-e2b-it-4bit",
-        displayName: "Gemma 4 E2B IT (MLX)",
-        displayFormat: "MLX 4-bit",
+        id: "gemma-4-e2b",
+        displayName: "Gemma 4 E2B",
+        displayFormat: "GGUF Q4_K_M",
         recommendedMaxTokens: 640,
         qualityTier: .fast,
-        memoryHint: "Petit (multimodal)",
-        estimatedDownloadGB: 2.7,
+        memoryHint: "3.2 GB",
+        estimatedDownloadGB: 3.2,
         recommendedMinMemoryGB: 8,
-        stabilityTier: .default
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/gemma-4-E2B-it-GGUF",
+        ggufFilename: "gemma-4-E2B-it-Q4_K_M.gguf"
     )
 
-    static let gemma4E4B = AIModelProfile(
-        id: "mlx-community/gemma-4-e4b-it-4bit",
-        displayName: "Gemma 4 E4B IT (MLX)",
-        displayFormat: "MLX 4-bit",
-        recommendedMaxTokens: 700,
+    static let gemma34B = AIModelProfile(
+        id: "gemma-3-4b",
+        displayName: "Gemma 3 4B",
+        displayFormat: "GGUF Q4_K_M",
+        recommendedMaxTokens: 640,
         qualityTier: .balanced,
-        memoryHint: "Petit (multimodal)",
-        estimatedDownloadGB: 5.2,
+        memoryHint: "2.3 GB",
+        estimatedDownloadGB: 2.3,
         recommendedMinMemoryGB: 8,
-        stabilityTier: .default
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/gemma-3-4b-it-GGUF",
+        ggufFilename: "gemma-3-4b-it-Q4_K_M.gguf"
+    )
+
+    static let qwen31_7B = AIModelProfile(
+        id: "qwen3-1.7b",
+        displayName: "Qwen 3 1.7B",
+        displayFormat: "GGUF Q4_K_M",
+        recommendedMaxTokens: 500,
+        qualityTier: .fast,
+        memoryHint: "1.2 GB",
+        estimatedDownloadGB: 1.2,
+        recommendedMinMemoryGB: 8,
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/Qwen3-1.7B-GGUF",
+        ggufFilename: "Qwen3-1.7B-Q4_K_M.gguf"
+    )
+
+    static let gemma31B = AIModelProfile(
+        id: "gemma-3-1b",
+        displayName: "Gemma 3 1B",
+        displayFormat: "GGUF Q4_K_M",
+        recommendedMaxTokens: 400,
+        qualityTier: .fast,
+        memoryHint: "0.8 GB",
+        estimatedDownloadGB: 0.8,
+        recommendedMinMemoryGB: 4,
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/gemma-3-1b-it-GGUF",
+        ggufFilename: "gemma-3-1b-it-Q4_K_M.gguf"
+    )
+
+    static let gemma4_26BA4BMoE = AIModelProfile(
+        id: "gemma-4-26b-a4b",
+        displayName: "Gemma 4 26B A4B",
+        displayFormat: "GGUF Q4_K_M (UD)",
+        recommendedMaxTokens: 320,
+        qualityTier: .quality,
+        memoryHint: "15.7 GB",
+        estimatedDownloadGB: 15.7,
+        recommendedMinMemoryGB: 32,
+        stabilityTier: .experimental,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/gemma-4-26B-A4B-it-GGUF",
+        ggufFilename: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf"
+    )
+
+    static let qwen34B = AIModelProfile(
+        id: "qwen3-4b",
+        displayName: "Qwen 3 4B",
+        displayFormat: "GGUF Q4_K_M",
+        recommendedMaxTokens: 550,
+        qualityTier: .balanced,
+        memoryHint: "2.3 GB",
+        estimatedDownloadGB: 2.3,
+        recommendedMinMemoryGB: 8,
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/Qwen3-4B-GGUF",
+        ggufFilename: "Qwen3-4B-Q4_K_M.gguf"
+    )
+
+    static let qwen38B = AIModelProfile(
+        id: "qwen3-8b",
+        displayName: "Qwen 3 8B",
+        displayFormat: "GGUF Q4_K_M",
+        recommendedMaxTokens: 500,
+        qualityTier: .quality,
+        memoryHint: "4.7 GB",
+        estimatedDownloadGB: 4.7,
+        recommendedMinMemoryGB: 8,
+        stabilityTier: .default,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/Qwen3-8B-GGUF",
+        ggufFilename: "Qwen3-8B-Q4_K_M.gguf"
+    )
+
+    static let qwen330BA3BMoE = AIModelProfile(
+        id: "qwen3-30b-a3b",
+        displayName: "Qwen 3 30B A3B",
+        displayFormat: "GGUF Q4_K_M",
+        recommendedMaxTokens: 320,
+        qualityTier: .quality,
+        memoryHint: "13.7 GB",
+        estimatedDownloadGB: 13.7,
+        recommendedMinMemoryGB: 24,
+        stabilityTier: .experimental,
+        runtimeFamily: .gguf,
+        hfRepo: "unsloth/Qwen3-30B-A3B-GGUF",
+        ggufFilename: "Qwen3-30B-A3B-Q4_K_M.gguf"
     )
 }
 
@@ -162,33 +198,49 @@ enum AISettingsKeys {
     static let conservativePolicyEnabled = "aiConservativePolicyEnabled"
     static let companionAwarenessEnabled = "aiCompanionAwarenessEnabled"
     static let cotypistAwarenessEnabledLegacy = "aiCotypistAwarenessEnabled"
+    static let ggufCustomPath = "aiGGUFCustomPath"
 }
 
 enum AIModelRegistry {
     static let allProfiles: [AIModelProfile] = [
-        .gemma4E2B,
         .gemma4E4B,
-        .qwen31_7B,
+        .gemma4E2B,
         .gemma34B,
-        .gemma3Text4B,
-        .qwen3_14B4bitDWQ,
-        .qwen36_27BMoE,
-        .qwen36_35BA3BMoE,
-        .gemma4_26BA4BMoE
+        .qwen31_7B,
+        .gemma31B,
+        .gemma4_26BA4BMoE,
+        .qwen34B,
+        .qwen38B,
+        .qwen330BA3BMoE
     ]
 
     static func profile(for id: String) -> AIModelProfile {
-        allProfiles.first(where: { $0.id == id }) ?? .gemma4E2B
+        let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        return allProfiles.first(where: { $0.id == normalized }) ?? .gemma4E2B
     }
+
+    static let bestAvailableModelID: String = {
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        let cotypistPath = home + "/Library/Application Support/app.cotypist.Cotypist/Models/gemma-4-E2B-i1-Q4_K_M.gguf"
+        if FileManager.default.fileExists(atPath: cotypistPath) {
+            return AIModelProfile.gemma4E2B.id
+        }
+        for profile in allProfiles {
+            if GGUFDownloadManager.isModelDownloaded(profile.id) {
+                return profile.id
+            }
+        }
+        return AIModelProfile.gemma4E2B.id
+    }()
 
     static func defaultProfile(for tier: AIQualityTier) -> AIModelProfile {
         switch tier {
         case .fast:
             return .gemma4E2B
         case .balanced:
-            return .gemma4E4B
+            return .gemma34B
         case .quality:
-            return .qwen3_14B4bitDWQ
+            return .qwen38B
         }
     }
 
@@ -202,12 +254,12 @@ enum AIModelRegistry {
 
     static func machineRecommendation(physicalMemoryGB: Int) -> String {
         if physicalMemoryGB < 16 {
-            return "Machine détectée: \(physicalMemoryGB) GB. Recommandation: petits modèles MLX par défaut."
+            return "Machine détectée: \(physicalMemoryGB) GB. Modèles 1B–4B recommandés."
         }
         if physicalMemoryGB < 24 {
-            return "Machine détectée: \(physicalMemoryGB) GB. Qwen 14B possible en contexte court, MoE déconseillés."
+            return "Machine détectée: \(physicalMemoryGB) GB. Modèles jusqu'à 8B possibles."
         }
-        return "Machine détectée: \(physicalMemoryGB) GB. Recommandation: petits modèles par défaut; MoE uniquement en mode avancé."
+        return "Machine détectée: \(physicalMemoryGB) GB. Modèles MoE accessibles en mode avancé."
     }
 
     static func memorySafeMaxTokens(
@@ -225,24 +277,23 @@ enum AIModelRegistry {
 
         if profile.isHeavyForNotes {
             cap = min(cap, 192)
-
-            if companionLLMRunning {
-                cap = min(cap, 128)
-            }
-
-            if swapUsedGB >= 2 {
-                cap = min(cap, 160)
-            }
-            if swapUsedGB >= 8 {
-                cap = min(cap, 128)
-            }
-            if swapUsedGB >= 16 {
-                cap = min(cap, 96)
-            }
+            if companionLLMRunning { cap = min(cap, 128) }
+            if swapUsedGB >= 2 { cap = min(cap, 160) }
+            if swapUsedGB >= 8 { cap = min(cap, 128) }
+            if swapUsedGB >= 16 { cap = min(cap, 96) }
         } else if swapUsedGB >= 16 {
             cap = min(cap, 256)
         }
 
         return max(64, min(requested, cap))
+    }
+
+    static func requiresVLMRuntime(modelID: String) -> Bool {
+        let normalized = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+        if let profile = allProfiles.first(where: { $0.id == normalized }) {
+            return profile.runtimeFamily == .vlm
+        }
+        return false
     }
 }

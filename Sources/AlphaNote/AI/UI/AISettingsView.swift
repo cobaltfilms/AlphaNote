@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AISettingsView: View {
     @AppStorage(AISettingsKeys.enabled) private var aiEnabled = false
-    @AppStorage(AISettingsKeys.selectedModelID) private var selectedModelID = AIModelProfile.qwen31_7B.id
+    @AppStorage(AISettingsKeys.selectedModelID) private var selectedModelID = AIModelRegistry.bestAvailableModelID
     @AppStorage(AISettingsKeys.customModelID) private var customModelID = ""
     @AppStorage(AISettingsKeys.qualityMode) private var qualityMode = AIQualityTier.fast.rawValue
     @AppStorage(AISettingsKeys.maxTokens) private var maxTokens = 500
@@ -29,6 +29,7 @@ struct AISettingsView: View {
         torchVersion: nil,
         isTorchCompatible: true,
         hasMLXLMModule: false,
+        hasMLXVLMModule: false,
         summary: "Analyse du runtime IA en cours..."
     )
 
@@ -108,7 +109,7 @@ struct AISettingsView: View {
                 Text(localStatus.isDownloaded ? "Modèle téléchargé localement" : "Modèle non téléchargé")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(localStatus.isDownloaded ? .green : .secondary)
-                Text("Cache: \(AIModelDiagnostics.formatSize(localStatus.cachedSizeBytes))")
+                Text("Taille: \(AIModelDiagnostics.formatSize(localStatus.cachedSizeBytes))")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 if let updatedAt = localStatus.updatedAt {
@@ -125,8 +126,8 @@ struct AISettingsView: View {
             Text(runtimeInfo.summary)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-            if !runtimeInfo.isTorchCompatible || !runtimeInfo.hasMLXLMModule {
-                Text("Runtime IA incomplet (torch/mlx-lm). Réparation conseillée.")
+            if runtimeIsMissingRequiredDependencies {
+                Text("Runtime IA incomplet (torch/\(requiredRuntimeLabel)). Réparation conseillée.")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.orange)
             }
@@ -297,12 +298,18 @@ struct AISettingsView: View {
     }
 
     private func refreshLocalStatus() {
-        localStatus = AIModelDiagnostics.localStatus(for: effectiveModelID)
+        Task.detached(priority: .utility) {
+            let status = await AIService.shared.localModelStatus(modelID: effectiveModelID)
+            await MainActor.run {
+                localStatus = status
+            }
+        }
     }
 
     private func refreshRuntimeInfo() {
+        let currentModelID = effectiveModelID
         Task.detached(priority: .utility) {
-            let info = AIService.shared.runtimeInfo()
+            let info = AIService.shared.runtimeInfo(modelID: currentModelID)
             await MainActor.run {
                 runtimeInfo = info
             }
@@ -412,5 +419,13 @@ struct AISettingsView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+
+    private var runtimeIsMissingRequiredDependencies: Bool {
+        !LlamaCppInferenceEngine.isAvailable
+    }
+
+    private var requiredRuntimeLabel: String {
+        "llama.cpp"
     }
 }

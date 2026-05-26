@@ -98,16 +98,16 @@ final class AlphaNoteTests: XCTestCase {
             note: Note(
                 uuid: "11111111-1111-1111-1111-111111111111",
                 content: "old",
-                updatedAt: Date(timeIntervalSince1970: 100),
-                lastModifiedByDeviceId: "device-a"
+                lastModifiedByDeviceId: "device-a",
+                updatedAt: Date(timeIntervalSince1970: 100)
             )
         )
         let newer = CloudNoteDTO(
             note: Note(
                 uuid: "11111111-1111-1111-1111-111111111111",
                 content: "new",
-                updatedAt: Date(timeIntervalSince1970: 200),
-                lastModifiedByDeviceId: "device-b"
+                lastModifiedByDeviceId: "device-b",
+                updatedAt: Date(timeIntervalSince1970: 200)
             )
         )
 
@@ -121,16 +121,16 @@ final class AlphaNoteTests: XCTestCase {
             note: Note(
                 uuid: "22222222-2222-2222-2222-222222222222",
                 content: "from-a",
-                updatedAt: sameDate,
-                lastModifiedByDeviceId: "aaa-device"
+                lastModifiedByDeviceId: "aaa-device",
+                updatedAt: sameDate
             )
         )
         let rhs = CloudNoteDTO(
             note: Note(
                 uuid: "22222222-2222-2222-2222-222222222222",
                 content: "from-z",
-                updatedAt: sameDate,
-                lastModifiedByDeviceId: "zzz-device"
+                lastModifiedByDeviceId: "zzz-device",
+                updatedAt: sameDate
             )
         )
 
@@ -145,8 +145,8 @@ final class AlphaNoteTests: XCTestCase {
                 uuid: "33333333-3333-3333-3333-333333333333",
                 content: "active",
                 isDeleted: false,
-                updatedAt: sameDate,
-                lastModifiedByDeviceId: "same-device"
+                lastModifiedByDeviceId: "same-device",
+                updatedAt: sameDate
             )
         )
         let deleted = CloudNoteDTO(
@@ -155,8 +155,8 @@ final class AlphaNoteTests: XCTestCase {
                 content: "active",
                 isDeleted: true,
                 deletedAt: sameDate,
-                updatedAt: sameDate,
-                lastModifiedByDeviceId: "same-device"
+                lastModifiedByDeviceId: "same-device",
+                updatedAt: sameDate
             )
         )
 
