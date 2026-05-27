@@ -228,6 +228,84 @@ enum AIIntentDetector {
         return false
     }
 
+    enum TimerType: String, Sendable {
+        case countdown
+        case stopwatch
+        case pomodoro
+    }
+
+    static func isTimerRequest(_ question: String, noteKeyword: String?) -> Bool {
+        if (noteKeyword ?? "").lowercased() == "timer" {
+            return true
+        }
+
+        let query = normalized(question)
+        let compact = compactNormalized(question)
+
+        let markers = [
+            "timer", "minuteur", "chronometre", "chronomètre",
+            "pomodoro", "countdown", "stopwatch"
+        ]
+        if markers.contains(where: { query.contains($0) }) {
+            return true
+        }
+
+        let typoMarkers = ["tim", "minut", "chrono", "pomod"]
+        if typoMarkers.contains(where: { compact.contains($0) }) {
+            return true
+        }
+
+        // Detect time-based requests: "10 min timer", "5 minute countdown", etc.
+        let timePatterns = [
+            #"\d+\s*(min|minute|mn)"#,
+            #"\d+\s*(sec|seconde|s)"#,
+            #"\d+\s*(h|heure|hour)"#
+        ]
+        for pattern in timePatterns {
+            if query.range(of: pattern, options: .regularExpression) != nil {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    static func parseTimerRequest(_ question: String) -> (type: TimerType, minutes: Int)? {
+        let query = normalized(question)
+
+        let type: TimerType
+        if query.contains("pomodoro") {
+            type = .pomodoro
+        } else if query.contains("stopwatch") || query.contains("chronometre") || query.contains("chronomètre") {
+            type = .stopwatch
+        } else {
+            type = .countdown
+        }
+
+        let minutePatterns = [
+            #"(\d+)\s*(?:min|minute|mn)"#,
+            #"(\d+)\s*(?:sec|seconde|s)"#,
+            #"(\d+)\s*(?:h|heure|hour)"#
+        ]
+
+        for pattern in minutePatterns {
+            if let range = query.range(of: pattern, options: .regularExpression) {
+                let match = String(query[range])
+                let digits = match.filter { $0.isNumber }
+                if let minutes = Int(digits) {
+                    if match.contains("h") || match.contains("heure") || match.contains("hour") {
+                        return (type, minutes * 60)
+                    } else if match.contains("sec") || match.contains("seconde") || match.contains("s)") {
+                        return (type, max(1, minutes / 60))
+                    }
+                    return (type, minutes)
+                }
+            }
+        }
+
+        return (type, 10)
+    }
+
     private static func normalized(_ text: String) -> String {
         text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
     }

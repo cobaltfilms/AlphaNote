@@ -7,6 +7,7 @@ struct ModeRoutingFeature {
         case web
         case qa
         case transform
+        case timer
     }
 
     let service: AIServiceProtocol

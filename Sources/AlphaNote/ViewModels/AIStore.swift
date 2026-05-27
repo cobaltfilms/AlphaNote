@@ -150,6 +150,10 @@ final class AIStore {
             return localListMessage
         }
 
+        if let timerMessage = handleLocalTimerRequest(question: trimmed, currentNote: currentNote) {
+            return timerMessage
+        }
+
         if wantsList && shouldProbeURLs && !candidateURLs.isEmpty {
             let directItems = await remoteContext.listItems(from: candidateURLs, query: trimmed, maxItems: 40)
             if !directItems.isEmpty {
@@ -884,6 +888,11 @@ final class AIStore {
             modes.insert(.list)
         }
 
+        let heuristicTimer = AIIntentDetector.isTimerRequest(question, noteKeyword: currentNote.keyword)
+        if heuristicTimer {
+            modes.insert(.timer)
+        }
+
         if heuristicTransform {
             modes.insert(.transform)
         }
@@ -1029,6 +1038,56 @@ final class AIStore {
         }
 
         return nil
+    }
+
+    private func handleLocalTimerRequest(question: String, currentNote: Note) -> String? {
+        guard AIIntentDetector.isTimerRequest(question, noteKeyword: currentNote.keyword) else {
+            return nil
+        }
+
+        guard let (timerType, minutes) = AIIntentDetector.parseTimerRequest(question) else {
+            return nil
+        }
+
+        let noteContent: String
+        switch timerType {
+        case .countdown:
+            noteContent = "timer: Countdown \(minutes) min\n\n"
+        case .stopwatch:
+            noteContent = "timer: Stopwatch\n\n"
+        case .pomodoro:
+            noteContent = "timer: Pomodoro \(minutes) min\n\n"
+        }
+
+        let applied = createTimerNote(content: noteContent, mode: timerType, minutes: minutes)
+        if applied {
+            switch timerType {
+            case .countdown:
+                return "Minuteur de \(minutes) min créé."
+            case .stopwatch:
+                return "Chronomètre créé."
+            case .pomodoro:
+                return "Pomodoro de \(minutes) min créé."
+            }
+        }
+
+        return nil
+    }
+
+    private func createTimerNote(content: String, mode: AIIntentDetector.TimerType, minutes: Int) -> Bool {
+        let allPositions = (notes + archivedNotes).map(\.position)
+        let position = (allPositions.max() ?? -1) + 1
+
+        var newNote = Note(
+            content: content,
+            keyword: "timer",
+            position: position
+        )
+        newNote = Note.create(newNote)
+        guard let noteID = newNote.id else { return false }
+
+        noteStore.selectNote(id: noteID)
+        return true
     }
 
     private func percentageReductionResult(question: String, noteContent: String) -> (noteContent: String, userMessage: String)? {
