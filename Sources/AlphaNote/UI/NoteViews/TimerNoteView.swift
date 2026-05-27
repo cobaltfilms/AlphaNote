@@ -159,16 +159,8 @@ struct TimerNoteView: View {
     }
 
     private func sendNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = mode == .pomodoro ? "Pomodoro Complete" : "Timer Complete"
-        content.body = "Your \(mode.rawValue.lowercased()) timer has finished."
-        content.sound = .default
-
-        let request = UNNotificationRequest(identifier: "timerComplete", content: content, trigger: nil)
         DispatchQueue.main.async {
-            UNUserNotificationCenter.current().add(request) { _ in
-                NSSound.beep()
-            }
+            NSSound.beep()
         }
     }
 
