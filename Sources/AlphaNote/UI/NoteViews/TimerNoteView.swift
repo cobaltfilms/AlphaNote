@@ -1,5 +1,5 @@
 import SwiftUI
-import UserNotifications
+import AVFoundation
 
 struct TimerNoteView: View {
     enum TimerMode: String, CaseIterable {
@@ -25,6 +25,7 @@ struct TimerNoteView: View {
         case stopped
         case running
         case paused
+        case finished
     }
 
     var initialSeconds: Int = 600
@@ -35,6 +36,8 @@ struct TimerNoteView: View {
     @State private var elapsed: TimeInterval = 0
     @State private var targetDuration: TimeInterval = 600
     @State private var timer: Timer?
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var isSoundPlaying = false
 
     @AppStorage("fontSize") private var fontSize: Double = 14
 
@@ -61,6 +64,10 @@ struct TimerNoteView: View {
 
     var body: some View {
         VStack(spacing: 24) {
+            Text(mode.rawValue)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+
             Picker("Mode", selection: $mode) {
                 ForEach(TimerMode.allCases, id: \.self) { m in
                     Text(m.rawValue).tag(m)
@@ -84,7 +91,7 @@ struct TimerNoteView: View {
 
                 Text(displayTime)
                     .font(.system(size: 40, design: .monospaced))
-                    .foregroundStyle(mode == .pomodoro && progress >= 1 ? .red : .primary)
+                    .foregroundStyle(state == .finished ? .red : .primary)
             }
 
             if mode == .countdown {
@@ -99,6 +106,14 @@ struct TimerNoteView: View {
                     Button("25 min") { targetDuration = 25 * 60 }
                     Button("15 min") { targetDuration = 15 * 60 }
                     Button("5 min") { targetDuration = 5 * 60 }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if isSoundPlaying {
+                Button(action: stopSound) {
+                    Label("Arrêter la sonnerie", systemImage: "speaker.slash.fill")
+                        .foregroundStyle(.red)
                 }
                 .buttonStyle(.bordered)
             }
@@ -130,13 +145,13 @@ struct TimerNoteView: View {
 
     private func startOrResume() {
         switch state {
-        case .stopped, .paused:
+        case .stopped, .paused, .finished:
             state = .running
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
                 elapsed += 0.1
                 if (mode == .countdown || mode == .pomodoro) && elapsed >= targetDuration {
                     stopTimer()
-                    state = .stopped
+                    state = .finished
                     sendNotification()
                 }
             }
@@ -149,6 +164,7 @@ struct TimerNoteView: View {
 
     private func resetTimer() {
         stopTimer()
+        stopSound()
         elapsed = 0
         state = .stopped
     }
@@ -158,9 +174,36 @@ struct TimerNoteView: View {
         timer = nil
     }
 
+    private func stopSound() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+        isSoundPlaying = false
+    }
+
     private func sendNotification() {
-        DispatchQueue.main.async {
-            NSSound.beep()
+        stopSound()
+
+        DispatchQueue.main.async { [self] in
+            do {
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                try AVAudioSession.sharedInstance().setActive(true)
+            } catch {
+                NSSound.beep()
+                return
+            }
+
+            if let url = Bundle.main.url(forResource: "timer_sound", withExtension: "mp3") {
+                do {
+                    audioPlayer = try AVAudioPlayer(contentsOf: url)
+                    audioPlayer?.numberOfLoops = -1
+                    audioPlayer?.play()
+                    isSoundPlaying = true
+                } catch {
+                    NSSound.beep()
+                }
+            } else {
+                NSSound.beep()
+            }
         }
     }
 
