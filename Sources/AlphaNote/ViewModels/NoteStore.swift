@@ -255,10 +255,24 @@ final class NoteStore: ObservableObject {
         case "code":
             return AnyView(CodeNoteView(note: noteBinding))
         case "timer":
-            return AnyView(TimerNoteView())
+            let seconds = parseTimerDuration(from: note.content)
+            return AnyView(TimerNoteView(initialSeconds: seconds))
         default:
             return AnyView(PlainNoteView(note: noteBinding, store: self))
         }
+    }
+
+    private func parseTimerDuration(from content: String) -> Int {
+        let pattern = #"timer:\s*\w+\s*(\d+):(\d+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)),
+              let minRange = Range(match.range(at: 1), in: content),
+              let secRange = Range(match.range(at: 2), in: content),
+              let minutes = Int(content[minRange]),
+              let seconds = Int(content[secRange]) else {
+            return 600
+        }
+        return minutes * 60 + seconds
     }
 
     private func binding(for note: Note) -> Binding<Note> {

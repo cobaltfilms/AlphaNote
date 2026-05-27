@@ -14,10 +14,12 @@ struct TimerNoteView: View {
         case paused
     }
 
+    var initialSeconds: Int = 600
+
     @State private var mode: TimerMode = .stopwatch
     @State private var state: TimerState = .stopped
     @State private var elapsed: TimeInterval = 0
-    @State private var targetDuration: TimeInterval = 25 * 60
+    @State private var targetDuration: TimeInterval = 600
     @State private var timer: Timer?
 
     @AppStorage("fontSize") private var fontSize: Double = 14
@@ -103,6 +105,9 @@ struct TimerNoteView: View {
             }
         }
         .padding(20)
+        .onAppear {
+            targetDuration = TimeInterval(initialSeconds)
+        }
         .onChange(of: mode) {
             resetTimer()
         }
