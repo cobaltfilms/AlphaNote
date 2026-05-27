@@ -7,6 +7,7 @@ enum AIIntentDetector {
         case transform
         case webResearch
         case question
+        case timer
     }
 
     static func classifyIntent(_ question: String, noteKeyword: String?) -> NoteIntent {
@@ -18,6 +19,9 @@ enum AIIntentDetector {
         let web = isWebResearchRequest(question)
         if web {
             return .webResearch
+        }
+        if isTimerRequest(question, noteKeyword: noteKeyword) {
+            return .timer
         }
         if isMathRequest(question, noteKeyword: noteKeyword) {
             return .math

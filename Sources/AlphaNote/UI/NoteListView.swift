@@ -369,6 +369,8 @@ struct NoteListView: View {
             return IntentBadgeSpec(id: "web", label: "WEB", foreground: .mint, background: Color.mint.opacity(0.20))
         case .question:
             return IntentBadgeSpec(id: "qa", label: "Q/R", foreground: .secondary, background: Color.secondary.opacity(0.15))
+        case .timer:
+            return IntentBadgeSpec(id: "timer", label: "TIMER", foreground: .red, background: Color.red.opacity(0.18))
         }
     }
 
