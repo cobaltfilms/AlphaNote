@@ -53,6 +53,17 @@ final class NoteStore: ObservableObject {
         reloadNotes(selecting: createdID)
     }
 
+    func createNote(keyword: String, content: String) -> Bool {
+        let allPositions = (notes + archivedNotes).map(\.position)
+        let position = (allPositions.max() ?? -1) + 1
+        var note = Note(content: content, keyword: keyword, position: position)
+        note = Note.create(note)
+        guard let createdID = note.id else { return false }
+        SyncEngine.shared.notifyLocalChange()
+        reloadNotes(selecting: createdID)
+        return true
+    }
+
     func selectNote(id: Int64) {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         currentIndex = index
