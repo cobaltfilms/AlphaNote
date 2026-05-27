@@ -184,14 +184,6 @@ struct TimerNoteView: View {
         stopSound()
 
         DispatchQueue.main.async { [self] in
-            do {
-                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-                try AVAudioSession.sharedInstance().setActive(true)
-            } catch {
-                NSSound.beep()
-                return
-            }
-
             if let url = Bundle.main.url(forResource: "timer_sound", withExtension: "mp3") {
                 do {
                     audioPlayer = try AVAudioPlayer(contentsOf: url)
