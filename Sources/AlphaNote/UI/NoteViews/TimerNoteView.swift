@@ -6,6 +6,19 @@ struct TimerNoteView: View {
         case stopwatch = "Stopwatch"
         case countdown = "Countdown"
         case pomodoro = "Pomodoro"
+
+        init?(from content: String) {
+            let lower = content.lowercased()
+            if lower.contains("countdown") {
+                self = .countdown
+            } else if lower.contains("pomodoro") {
+                self = .pomodoro
+            } else if lower.contains("stopwatch") || lower.contains("chronometre") || lower.contains("chronomètre") {
+                self = .stopwatch
+            } else {
+                return nil
+            }
+        }
     }
 
     enum TimerState {
@@ -15,8 +28,9 @@ struct TimerNoteView: View {
     }
 
     var initialSeconds: Int = 600
+    var initialMode: TimerMode = .countdown
 
-    @State private var mode: TimerMode = .stopwatch
+    @State private var mode: TimerMode = .countdown
     @State private var state: TimerState = .stopped
     @State private var elapsed: TimeInterval = 0
     @State private var targetDuration: TimeInterval = 600
@@ -106,6 +120,7 @@ struct TimerNoteView: View {
         }
         .padding(20)
         .onAppear {
+            mode = initialMode
             targetDuration = TimeInterval(initialSeconds)
         }
         .onChange(of: mode) {

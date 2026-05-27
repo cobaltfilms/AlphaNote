@@ -255,24 +255,40 @@ final class NoteStore: ObservableObject {
         case "code":
             return AnyView(CodeNoteView(note: noteBinding))
         case "timer":
-            let seconds = parseTimerDuration(from: note.content)
-            return AnyView(TimerNoteView(initialSeconds: seconds))
+            let (mode, seconds) = parseTimerContent(from: note.content)
+            return AnyView(TimerNoteView(initialSeconds: seconds, initialMode: mode))
         default:
             return AnyView(PlainNoteView(note: noteBinding, store: self))
         }
     }
 
-    private func parseTimerDuration(from content: String) -> Int {
-        let pattern = #"timer:\s*\w+\s*(\d+):(\d+)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)),
-              let minRange = Range(match.range(at: 1), in: content),
-              let secRange = Range(match.range(at: 2), in: content),
-              let minutes = Int(content[minRange]),
-              let seconds = Int(content[secRange]) else {
-            return 600
+    private func parseTimerContent(from content: String) -> (TimerNoteView.TimerMode, Int) {
+        let lines = content.components(separatedBy: .newlines)
+        var mode: TimerNoteView.TimerMode = .countdown
+        var seconds = 600
+
+        for line in lines {
+            let lower = line.lowercased()
+            if lower.contains("countdown") {
+                mode = .countdown
+            } else if lower.contains("pomodoro") {
+                mode = .pomodoro
+            } else if lower.contains("stopwatch") || lower.contains("chronometre") || lower.contains("chronomètre") {
+                mode = .stopwatch
+            }
+
+            let pattern = #"(\d+):(\d+)"#
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+               let minRange = Range(match.range(at: 1), in: line),
+               let secRange = Range(match.range(at: 2), in: line),
+               let minutes = Int(line[minRange]),
+               let sec = Int(line[secRange]) {
+                seconds = minutes * 60 + sec
+            }
         }
-        return minutes * 60 + seconds
+
+        return (mode, seconds)
     }
 
     private func binding(for note: Note) -> Binding<Note> {

@@ -1060,14 +1060,14 @@ final class AIStore {
             } else {
                 formattedTime = "\(min) min \(sec) sec"
             }
-            noteContent = "timer: Countdown \(min):\(String(format: "%02d", sec))\n\n"
+            noteContent = "timer\ncountdown \(min):\(String(format: "%02d", sec))"
         case .stopwatch:
             formattedTime = "Chronomètre"
-            noteContent = "timer: Stopwatch\n\n"
+            noteContent = "timer\nstopwatch"
         case .pomodoro:
             let min = totalSeconds / 60
             formattedTime = "\(min) min"
-            noteContent = "timer: Pomodoro \(min):00\n\n"
+            noteContent = "timer\npomodoro \(min):00"
         }
 
         let applied = createTimerNote(content: noteContent, mode: timerType, seconds: totalSeconds)
