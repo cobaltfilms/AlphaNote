@@ -140,6 +140,10 @@ final class AIStore {
         let effectiveWantsWebResearch = wantsWebResearch || !providedURLs.isEmpty
         var urlProbeDiagnostics: [String] = []
 
+        if let timerMessage = handleLocalTimerRequest(question: trimmed, currentNote: currentNote) {
+            return timerMessage
+        }
+
         if wantsMath && !effectiveWantsWebResearch,
            let localMathMessage = handleLocalMathRequest(question: trimmed, currentNote: currentNote) {
             return localMathMessage
