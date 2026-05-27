@@ -270,7 +270,7 @@ enum AIIntentDetector {
         return false
     }
 
-    static func parseTimerRequest(_ question: String) -> (type: TimerType, minutes: Int)? {
+    static func parseTimerRequest(_ question: String) -> (type: TimerType, totalSeconds: Int)? {
         let query = normalized(question)
 
         let type: TimerType
@@ -282,28 +282,37 @@ enum AIIntentDetector {
             type = .countdown
         }
 
-        let minutePatterns = [
-            #"(\d+)\s*(?:min|minute|mn)"#,
-            #"(\d+)\s*(?:sec|seconde|s)"#,
-            #"(\d+)\s*(?:h|heure|hour)"#
+        var totalSeconds = 0
+
+        let patterns: [(pattern: String, unit: String)] = [
+            (#"(\d+)\s*(?:h|heure|hour)"#, "hour"),
+            (#"(\d+)\s*(?:min|minute|mn)"#, "min"),
+            (#"(\d+)\s*(?:sec|seconde)"#, "sec"),
+            (#"(\d+)s"#, "sec")
         ]
 
-        for pattern in minutePatterns {
+        for (pattern, unit) in patterns {
             if let range = query.range(of: pattern, options: .regularExpression) {
                 let match = String(query[range])
-                let digits = match.filter { $0.isNumber }
-                if let minutes = Int(digits) {
-                    if match.contains("h") || match.contains("heure") || match.contains("hour") {
-                        return (type, minutes * 60)
-                    } else if match.contains("sec") || match.contains("seconde") || match.contains("s)") {
-                        return (type, max(1, minutes / 60))
-                    }
-                    return (type, minutes)
+                let digits = Int(match.filter { $0.isNumber }) ?? 0
+                switch unit {
+                case "hour":
+                    totalSeconds += digits * 3600
+                case "min":
+                    totalSeconds += digits * 60
+                case "sec":
+                    totalSeconds += digits
+                default:
+                    break
                 }
             }
         }
 
-        return (type, 10)
+        if totalSeconds == 0 {
+            totalSeconds = 10 * 60
+        }
+
+        return (type, totalSeconds)
     }
 
     private static func normalized(_ text: String) -> String {

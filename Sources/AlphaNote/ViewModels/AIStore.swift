@@ -1045,49 +1045,48 @@ final class AIStore {
             return nil
         }
 
-        guard let (timerType, minutes) = AIIntentDetector.parseTimerRequest(question) else {
+        guard let (timerType, totalSeconds) = AIIntentDetector.parseTimerRequest(question) else {
             return nil
         }
 
         let noteContent: String
+        let formattedTime: String
         switch timerType {
         case .countdown:
-            noteContent = "timer: Countdown \(minutes) min\n\n"
+            let min = totalSeconds / 60
+            let sec = totalSeconds % 60
+            if sec == 0 {
+                formattedTime = "\(min) min"
+            } else {
+                formattedTime = "\(min) min \(sec) sec"
+            }
+            noteContent = "timer: Countdown\n\n"
         case .stopwatch:
+            formattedTime = "Chronomètre"
             noteContent = "timer: Stopwatch\n\n"
         case .pomodoro:
-            noteContent = "timer: Pomodoro \(minutes) min\n\n"
+            let min = totalSeconds / 60
+            formattedTime = "\(min) min"
+            noteContent = "timer: Pomodoro\n\n"
         }
 
-        let applied = createTimerNote(content: noteContent, mode: timerType, minutes: minutes)
+        let applied = createTimerNote(content: noteContent, mode: timerType, seconds: totalSeconds)
         if applied {
             switch timerType {
             case .countdown:
-                return "Minuteur de \(minutes) min créé."
+                return "Minuteur de \(formattedTime) créé."
             case .stopwatch:
                 return "Chronomètre créé."
             case .pomodoro:
-                return "Pomodoro de \(minutes) min créé."
+                return "Pomodoro de \(formattedTime) créé."
             }
         }
 
         return nil
     }
 
-    private func createTimerNote(content: String, mode: AIIntentDetector.TimerType, minutes: Int) -> Bool {
-        let allPositions = (notes + archivedNotes).map(\.position)
-        let position = (allPositions.max() ?? -1) + 1
-
-        var newNote = Note(
-            content: content,
-            keyword: "timer",
-            position: position
-        )
-        newNote = Note.create(newNote)
-        guard let noteID = newNote.id else { return false }
-
-        noteStore.selectNote(id: noteID)
-        return true
+    private func createTimerNote(content: String, mode: AIIntentDetector.TimerType, seconds: Int) -> Bool {
+        return noteStore.createNote(keyword: "timer", content: content)
     }
 
     private func percentageReductionResult(question: String, noteContent: String) -> (noteContent: String, userMessage: String)? {
