@@ -165,7 +165,11 @@ struct TimerNoteView: View {
         content.sound = .default
 
         let request = UNNotificationRequest(identifier: "timerComplete", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        DispatchQueue.main.async {
+            UNUserNotificationCenter.current().add(request) { _ in
+                NSSound.beep()
+            }
+        }
     }
 
     private func formatTime(_ interval: TimeInterval) -> String {
