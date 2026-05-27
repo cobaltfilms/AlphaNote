@@ -37,6 +37,7 @@ struct TimerNoteView: View {
     @State private var targetDuration: TimeInterval = 600
     @State private var timer: Timer?
     @State private var audioPlayer: AVAudioPlayer?
+    @State private var nsSound: NSSound?
     @State private var isSoundPlaying = false
 
     @AppStorage("fontSize") private var fontSize: Double = 14
@@ -177,6 +178,8 @@ struct TimerNoteView: View {
     private func stopSound() {
         audioPlayer?.stop()
         audioPlayer = nil
+        nsSound?.stop()
+        nsSound = nil
         isSoundPlaying = false
     }
 
@@ -201,7 +204,12 @@ struct TimerNoteView: View {
     }
 
     private func playFallbackSound() {
-        NSSound(named: "Ping")?.play()
+        if let sound = NSSound(named: "Ping") {
+            sound.loops = true
+            sound.play()
+            nsSound = sound
+            isSoundPlaying = true
+        }
     }
 
     private func formatTime(_ interval: TimeInterval) -> String {
