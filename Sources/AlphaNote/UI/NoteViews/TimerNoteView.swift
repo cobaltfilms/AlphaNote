@@ -187,16 +187,20 @@ struct TimerNoteView: View {
             if let url = Bundle.main.url(forResource: "timer_sound", withExtension: "mp3") {
                 do {
                     audioPlayer = try AVAudioPlayer(contentsOf: url)
-                    audioPlayer?.numberOfLoops = -1
+                    audioPlayer?.prepareToPlay()
                     audioPlayer?.play()
                     isSoundPlaying = true
                 } catch {
-                    NSSound.beep()
+                    playFallbackSound()
                 }
             } else {
-                NSSound.beep()
+                playFallbackSound()
             }
         }
+    }
+
+    private func playFallbackSound() {
+        NSSound(named: "Ping")?.play()
     }
 
     private func formatTime(_ interval: TimeInterval) -> String {
