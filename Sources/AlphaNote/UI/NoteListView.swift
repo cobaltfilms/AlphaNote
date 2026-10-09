@@ -9,11 +9,12 @@ struct NoteListView: View {
     @State private var renameDraft = ""
     @State private var semanticQuery = ""
     @State private var questionDraft = ""
-    @State private var semanticAnswer = ""
     @State private var perNoteQuestionDraft: [Int64: String] = [:]
-    @State private var perNoteAnswer: [Int64: String] = [:]
+    @State private var lastRoutedQuestion = ""
     @State private var isAnswering = false
+    @State private var showMicPermissionAlert = false
     @FocusState private var isAIQuestionFocused: Bool
+    @StateObject private var speechRecognizer = SpeechRecognizer()
 
     var body: some View {
         ZStack {
@@ -57,9 +58,25 @@ struct NoteListView: View {
             guard let noteID = store.currentNote?.id else { return }
             perNoteQuestionDraft[noteID] = questionDraft
         }
-        .onChange(of: semanticAnswer) {
-            guard let noteID = store.currentNote?.id else { return }
-            perNoteAnswer[noteID] = semanticAnswer
+        .onChange(of: speechRecognizer.transcript) { _, newValue in
+            if !newValue.isEmpty {
+                questionDraft = newValue
+            }
+        }
+        .onChange(of: speechRecognizer.isListening) { _, isListening in
+            if !isListening && !questionDraft.isEmpty && !isAnswering {
+                askQuestionToCurrentNote()
+            }
+        }
+        .alert("Reconnaissance vocale", isPresented: $showMicPermissionAlert) {
+            Button("Ouvrir les Préférences Système") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            Button("Annuler", role: .cancel) { }
+        } message: {
+            Text("AlphaNote a besoin d'accéder au microphone et à la reconnaissance vocale. Veuillez activer ces permissions dans les Préférences Système.")
         }
     }
 
@@ -86,42 +103,37 @@ struct NoteListView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("Recherche IA", text: $semanticQuery)
+                    VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        TextField("Rechercher", text: $semanticQuery)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11))
-                            .onChange(of: semanticQuery) {
+                            .onSubmit {
                                 Task { await store.semanticSearch(query: semanticQuery) }
                             }
-
-                        if !store.semanticSearchResults.isEmpty {
-                            Text("Résultats IA")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            ForEach(store.semanticSearchResults.prefix(3)) { hit in
-                                Button {
-                                    if let noteID = hit.note.id {
-                                        store.selectNote(id: noteID)
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text(title(for: hit.note, index: 0))
-                                            .font(.system(size: 10, weight: .medium))
-                                            .lineLimit(1)
-                                        Spacer()
-                                        Text(String(format: "%.2f", hit.score))
-                                            .font(.system(size: 9, weight: .semibold))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .buttonStyle(.plain)
+                        if !semanticQuery.isEmpty {
+                            Button {
+                                semanticQuery = ""
+                                store.semanticSearchResults = []
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
+
+                    if !semanticQuery.isEmpty && filteredNotes.isEmpty {
+                        Text("Aucun résultat")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
                     .padding(.bottom, 6)
 
-                    ForEach(Array(store.notes.enumerated()), id: \.element.id) { index, note in
-                        noteRow(note: note, index: index, isArchived: false)
+                    ForEach(Array(filteredNotes.enumerated()), id: \.element.id) { index, note in
+                        noteRow(note: note, index: store.notes.firstIndex(where: { $0.id == note.id }) ?? index, isArchived: false)
                     }
 
                     if !store.archivedNotes.isEmpty {
@@ -196,7 +208,7 @@ struct NoteListView: View {
 
             HStack(spacing: 8) {
                 ZStack(alignment: .trailing) {
-                    TextField("IA — demande de modifier cette note…", text: $questionDraft)
+                    TextField("Détection du mode — tape ou dicte, puis Entrée…", text: $questionDraft)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
                         .padding(.leading, 88)
@@ -231,6 +243,7 @@ struct NoteListView: View {
                             intentBadge(badge)
                         }
                         Spacer()
+                        micButton
                     }
                     .padding(.leading, 8)
 
@@ -238,22 +251,29 @@ struct NoteListView: View {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.trailing, 10)
+                    } else if speechRecognizer.isListening {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.red)
+                            .padding(.trailing, 10)
                     }
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
-            if !semanticAnswer.isEmpty {
-                ScrollView {
-                    Text(semanticAnswer)
+            if let status = store.aiStatusMessage, !status.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: store.lastRoute?.source == .jev ? "sparkles" : "text.magnifyingglass")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Text(status)
                         .font(.system(size: 11))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+                    Spacer()
                 }
-                .frame(minHeight: 80, maxHeight: 120)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
 
             ZStack {
@@ -290,18 +310,40 @@ struct NoteListView: View {
         guard !question.isEmpty else { return }
         Task {
             isAnswering = true
-            let askedNoteID = store.currentNote?.id
-            semanticAnswer = await store.askNotes(question: question)
-            if let noteID = askedNoteID {
-                perNoteAnswer[noteID] = semanticAnswer
-            }
+            lastRoutedQuestion = question
+            await store.routeQuestion(question)
             isAnswering = false
         }
     }
 
+    @ViewBuilder
+    private var micButton: some View {
+        Button {
+            Task {
+                if speechRecognizer.isListening {
+                    speechRecognizer.stopListening()
+                } else {
+                    do {
+                        try await speechRecognizer.startListening()
+                    } catch {
+                        showMicPermissionAlert = true
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: speechRecognizer.isListening ? "waveform.circle.fill" : "mic.fill")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(speechRecognizer.isListening ? .red : .secondary)
+                .symbolEffect(.pulse, isActive: speechRecognizer.isListening)
+        }
+        .buttonStyle(.plain)
+        .help(speechRecognizer.isListening ? "Arrêter l'écoute" : "Dictée vocale")
+        .disabled(isAnswering)
+    }
+
     private struct IntentBadgeSpec {
         let id: String
-        let label: String
+        var label: String
         let foreground: Color
         let background: Color
     }
@@ -310,38 +352,20 @@ struct NoteListView: View {
         let question = questionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else { return [] }
         let keyword = store.currentNote?.keyword
-        let intent = AIIntentDetector.classifyIntent(question, noteKeyword: keyword)
-        let web = AIIntentDetector.isWebResearchRequest(question)
-        let list = AIIntentDetector.isListRequest(question, noteKeyword: keyword)
-        var badges: [IntentBadgeSpec] = []
 
-        if web {
-            badges.append(IntentBadgeSpec(
-                id: "web",
-                label: "WEB",
-                foreground: .mint,
-                background: Color.mint.opacity(0.20)
-            ))
-            if list {
-                badges.append(IntentBadgeSpec(
-                    id: "list",
-                    label: "LISTE",
-                    foreground: .green,
-                    background: Color.green.opacity(0.18)
-                ))
-            } else {
-                badges.append(IntentBadgeSpec(
-                    id: "qa",
-                    label: "Q/R",
-                    foreground: .secondary,
-                    background: Color.secondary.opacity(0.15)
-                ))
-            }
-            return badges
+        if let route = store.lastRoute,
+           store.aiStatusMessage != nil,
+           question == lastRoutedQuestion {
+            var spec = badgeSpec(for: route.mode)
+            spec.label = "\(route.mode.label) · \(route.source.label)"
+            return [spec]
         }
 
-        badges.append(intentBadgeSpec(intent))
-        return badges
+        let preview = KeywordIntentRouter.classify(question, noteKeyword: keyword)
+        guard preview != .plain else { return [] }
+        var spec = badgeSpec(for: preview)
+        spec.label = "\(preview.label) ?"
+        return [spec]
     }
 
     @ViewBuilder
@@ -357,21 +381,13 @@ struct NoteListView: View {
             )
     }
 
-    private func intentBadgeSpec(_ intent: AIIntentDetector.NoteIntent) -> IntentBadgeSpec {
-        switch intent {
-        case .math:
-            return IntentBadgeSpec(id: "math", label: "MATH", foreground: .orange, background: Color.orange.opacity(0.18))
-        case .list:
-            return IntentBadgeSpec(id: "list", label: "LISTE", foreground: .green, background: Color.green.opacity(0.18))
-        case .transform:
-            return IntentBadgeSpec(id: "action", label: "ACTION", foreground: .blue, background: Color.blue.opacity(0.18))
-        case .webResearch:
-            return IntentBadgeSpec(id: "web", label: "WEB", foreground: .mint, background: Color.mint.opacity(0.20))
-        case .question:
-            return IntentBadgeSpec(id: "qa", label: "Q/R", foreground: .secondary, background: Color.secondary.opacity(0.15))
-        case .timer:
-            return IntentBadgeSpec(id: "timer", label: "TIMER", foreground: .red, background: Color.red.opacity(0.18))
-        }
+    private func badgeSpec(for mode: NoteMode) -> IntentBadgeSpec {
+        IntentBadgeSpec(
+            id: mode.rawValue,
+            label: mode.label,
+            foreground: ModePalette.foreground(mode),
+            background: ModePalette.background(mode)
+        )
     }
 
     private func title(for note: Note, index: Int) -> String {
@@ -485,14 +501,34 @@ struct NoteListView: View {
         .frame(width: 320)
     }
 
+    private var filteredNotes: [Note] {
+        let query = semanticQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return store.notes }
+        let lower = query.lowercased()
+        let textMatches = store.notes.filter { note in
+            note.content.lowercased().contains(lower) ||
+            note.title.lowercased().contains(lower)
+        }
+        let hitIDs = Set(store.semanticSearchResults.map { $0.note.id })
+        if hitIDs.isEmpty {
+            return textMatches
+        }
+        let textIDs = Set(textMatches.map { $0.id })
+        let semanticOnly = store.notes.filter { hitIDs.contains($0.id) && !textIDs.contains($0.id) }
+        var merged = textMatches
+        for note in semanticOnly {
+            merged.append(note)
+        }
+        let ordered = Set(merged.map { $0.id })
+        return store.notes.filter { ordered.contains($0.id) }
+    }
+
     private func syncRightAIPanelWithCurrentNote() {
         guard let noteID = store.currentNote?.id else {
             questionDraft = ""
-            semanticAnswer = ""
             return
         }
         questionDraft = perNoteQuestionDraft[noteID] ?? ""
-        semanticAnswer = perNoteAnswer[noteID] ?? ""
     }
 }
 
@@ -634,4 +670,5 @@ extension Notification.Name {
     static let alphaNoteConvertToList = Notification.Name("alphaNoteConvertToList")
     static let alphaNoteDidSync = Notification.Name("alphaNoteDidSync")
     static let alphaNoteOpenHelpCenter = Notification.Name("alphaNoteOpenHelpCenter")
+    static let alphaNoteCheckForUpdates = Notification.Name("alphaNoteCheckForUpdates")
 }

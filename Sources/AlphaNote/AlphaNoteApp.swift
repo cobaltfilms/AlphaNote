@@ -35,6 +35,12 @@ struct AlphaNoteApp: App {
                 }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
             }
+
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    NotificationCenter.default.post(name: .alphaNoteCheckForUpdates, object: nil)
+                }
+            }
         }
     }
 
@@ -94,6 +100,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .alphaNoteOpenHelpCenter,
             object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(checkForUpdates),
+            name: .alphaNoteCheckForUpdates,
+            object: nil
+        )
+
+        Task { @MainActor in
+            UpdateManager.shared.checkOnLaunch()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -248,6 +265,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openHelpCenterFromMenu() {
         openHelpCenter()
+    }
+
+    @objc private func checkForUpdates() {
+        openSettings()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            Task { @MainActor in
+                UpdateManager.shared.check(userInitiated: true)
+            }
+        }
     }
 
     @objc private func openHelpCenter() {

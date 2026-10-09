@@ -52,6 +52,40 @@
 - Quick search across all notes
 - Find and replace within a note
 
+## AI (JEV contract)
+
+AI in AlphaNote **classifies, it never drafts**. It follows the JEV contract
+(jevai.net, same as the cockpit project): a small model sorts a request into a
+strict schema (enum / bounded fields) and the app applies the chosen mode with
+deterministic local code. No AI ever writes note content.
+
+**Kept features**
+- **Semantic search** — local hash-64 embeddings (`AI/Storage/`), fully offline,
+  never routed through the network.
+- **Mode routing** — a question is classified into a `NoteMode`
+  (`math | list | timer | code | plain`).
+
+**How routing works**
+1. If enabled and a JEV server is configured, `JEVClient.decider` posts to
+   `POST /v1/decision` with a one-field enum schema (`mode`) whose per-mode
+   descriptions do the heavy lifting.
+2. A valid answer routes via **JEV**.
+3. Any failure — server unreachable, incomplete answer, rejected schema, no
+   mode chosen — falls back **frankly** to the deterministic
+   `KeywordIntentRouter`, and the failure reason is carried on the decision.
+
+**Transparency (non-negotiable)**
+- Every decision carries its `source` (`JEV` or `mots-clés`); the UI badge shows
+  `MODE · source` and the status line names the JEV failure when it fell back.
+- Settings → AI shows the exact schema sent to the server and a "Tester le
+  serveur" probe. Nothing is silent.
+- Confidence scores are never used on their own to decide; an incomplete answer
+  is a failure, not a half-success.
+
+**Removed** (no longer part of the product): summarize, rewrite, extract-actions,
+Q/R (askNotes), remote/web context (Brave), transform, AI timer intent, and the
+entire embedded local runtime (MLX / GGUF / llama.cpp, registry, diagnostics).
+
 ## Architecture
 
 - **Platform**: macOS 14+ (Sonoma)

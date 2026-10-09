@@ -104,4 +104,78 @@ final class KeychainService {
     private func accountKey(serverURL: String, username: String) -> String {
         "\(username.lowercased())|\(serverURL.lowercased())"
     }
+
+    func saveGenericSecret(_ secret: String, service: String, account: String) throws {
+        let encoded = Data(secret.utf8)
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: encoded
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        if updateStatus != errSecItemNotFound {
+            throw KeychainServiceError.osStatus(updateStatus)
+        }
+
+        var createQuery = query
+        createQuery[kSecValueData as String] = encoded
+
+        let createStatus = SecItemAdd(createQuery as CFDictionary, nil)
+        guard createStatus == errSecSuccess else {
+            throw KeychainServiceError.osStatus(createStatus)
+        }
+    }
+
+    func readGenericSecret(service: String, account: String) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecItemNotFound {
+            return nil
+        }
+
+        guard status == errSecSuccess else {
+            throw KeychainServiceError.osStatus(status)
+        }
+
+        guard let data = result as? Data,
+              let secret = String(data: data, encoding: .utf8) else {
+            throw KeychainServiceError.unexpectedData
+        }
+
+        return secret
+    }
+
+    func deleteGenericSecret(service: String, account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        if status == errSecSuccess || status == errSecItemNotFound {
+            return
+        }
+
+        throw KeychainServiceError.osStatus(status)
+    }
 }

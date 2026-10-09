@@ -1,46 +1,107 @@
 import Foundation
 
-struct ModeRoutingFeature {
-    enum RouteMode: String, CaseIterable, Hashable, Sendable {
-        case math
-        case list
-        case web
-        case qa
-        case transform
-        case timer
-    }
+enum NoteMode: String, CaseIterable, Sendable {
+    case math
+    case list
+    case timer
+    case code
+    case plain
 
-    let service: AIServiceProtocol
-
-    init(service: AIServiceProtocol = AIService.shared) {
-        self.service = service
-    }
-
-    func routeModes(question: String, noteKeyword: String?) async -> Set<RouteMode> {
-        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-
-        do {
-            let pseudoNote = Note(content: trimmed)
-            let context = AIContext(
-                noteTitle: noteKeyword ?? "",
-                languageCode: "fr",
-                relatedNotes: []
-            )
-            let result = try await service.run(task: .modeRouting, note: pseudoNote, context: context)
-            let rawModes = (result.metadata["modes"] ?? "")
-                .split(separator: ",")
-                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-
-            var set = Set<RouteMode>()
-            for raw in rawModes {
-                if let mode = RouteMode(rawValue: raw) {
-                    set.insert(mode)
-                }
-            }
-            return set
-        } catch {
-            return []
+    var label: String {
+        switch self {
+        case .math: return "MATH"
+        case .list: return "LISTE"
+        case .timer: return "TIMER"
+        case .code: return "CODE"
+        case .plain: return "TEXTE"
         }
+    }
+}
+
+enum RouteSource: Sendable {
+    case jev
+    case motsCles
+
+    var label: String {
+        switch self {
+        case .jev: return "JEV"
+        case .motsCles: return "mots-clés"
+        }
+    }
+}
+
+struct ModeDecision: Sendable, Equatable {
+    let mode: NoteMode
+    let source: RouteSource
+    var echec: String? = nil
+}
+
+/// Routage de mode à la JEV : le serveur de décision CLASSE la demande dans
+/// un mode selon un schéma strict, il ne rédige rien. En cas d'échec
+/// (serveur muet, réponse incomplète, schéma refusé), on retombe franchement
+/// sur les mots-clés, et la décision porte sa source pour qu'on le sache.
+struct ModeRoutingFeature {
+    static let instructions = """
+    Classe la demande de l'utilisateur dans un seul mode d'une note AlphaNote.
+    Réponds uniquement selon le schéma, sans rédiger. En cas de doute, plain.
+    """
+
+    static let modeField: JEVField = .string(
+        choices: NoteMode.allCases.map(\.rawValue),
+        description: """
+        Le mode que la demande appelle.
+        - math : la demande cherche un résultat chiffré — calcul, pourcentage, \
+        réduction, écart de prix, conversion d'unités ou de devises. \
+        Exemples : « 12 * 8 », « pourcentage de réduction entre 120 et 90 », « 10 km to mi ».
+        - list : la demande veut une liste, une check-list, des tâches, des courses, \
+        des ingrédients, ou ajouter des éléments à une liste. \
+        Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste ».
+        - timer : la demande veut un minuteur, un compte à rebours, un chronomètre \
+        ou une session pomodoro. Exemples : « minuteur 25 minutes », « lance un chrono ».
+        - code : la demande écrit, corrige ou range un snippet de code ou une commande.
+        - plain : cas par défaut — une pensée, une question, du texte, une note \
+        qui ne correspond à aucun autre mode.
+        """
+    )
+
+    static var schema: JEVSchema {
+        ["mode": modeField]
+    }
+
+    func route(question: String, noteKeyword: String?) async -> ModeDecision {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ModeDecision(mode: .plain, source: .motsCles)
+        }
+
+        var echec: String? = nil
+        if AIFeatureGate.isEnabled, JEVClient.config() != nil {
+            switch await JEVClient.decider(
+                instructions: Self.instructions,
+                schema: Self.schema,
+                fragments: [trimmed]
+            ) {
+            case let .ok(decisions):
+                if case let .string(modeRaw)? = decisions.first?["mode"],
+                   let mode = NoteMode(rawValue: modeRaw) {
+                    return ModeDecision(mode: mode, source: .jev)
+                }
+                echec = "Le serveur n'a pas désigné de mode valide."
+            case let .erreur(message):
+                echec = message
+            }
+        }
+
+        return ModeDecision(
+            mode: KeywordIntentRouter.classify(trimmed, noteKeyword: noteKeyword),
+            source: .motsCles,
+            echec: echec
+        )
+    }
+}
+
+enum AIFeatureGate {
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: AISettingsKeys.enabled)
     }
 }

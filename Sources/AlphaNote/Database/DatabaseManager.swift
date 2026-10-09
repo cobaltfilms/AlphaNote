@@ -4,7 +4,12 @@ import GRDB
 final class DatabaseManager {
     static let shared = DatabaseManager()
     static let databaseLocationUserDefaultsKey = "databaseLocation"
-    static let defaultDatabaseFilename = "alph note.sqlite"
+    static let defaultDatabaseFilename = "alphanote.sqlite"
+    static let legacyDatabaseFilenames = [
+        "alph note.sqlite",
+        "AlphaNote.sqlite",
+        "note.sqlite"
+    ]
 
     private var dbQueue: DatabaseQueue?
 
@@ -32,7 +37,7 @@ final class DatabaseManager {
     }
 
     private var databaseURL: URL {
-        databaseFileURL
+        resolvedDatabaseFileURL()
     }
 
     private init() {}
@@ -136,5 +141,70 @@ final class DatabaseManager {
         }
 
         try migrator.migrate(dbQueue)
+    }
+
+    private func resolvedDatabaseFileURL() -> URL {
+        let canonicalURL = databaseDirectoryURL.appendingPathComponent(Self.defaultDatabaseFilename)
+        migrateLegacyDatabaseFileIfNeeded(to: canonicalURL)
+        return canonicalURL
+    }
+
+    private func migrateLegacyDatabaseFileIfNeeded(to canonicalURL: URL) {
+        let fm = FileManager.default
+        let directory = canonicalURL.deletingLastPathComponent()
+        let legacyCandidates = Self.legacyDatabaseFilenames
+            .map { directory.appendingPathComponent($0) }
+            .filter { fm.fileExists(atPath: $0.path) }
+
+        guard let sourceURL = latestModifiedFileURL(from: legacyCandidates) else {
+            return
+        }
+
+        if fm.fileExists(atPath: canonicalURL.path) {
+            let canonicalSize = fileSize(at: canonicalURL)
+            let legacySize = fileSize(at: sourceURL)
+            let shouldReplaceCanonical = canonicalSize < 131_072 &&
+                legacySize > 262_144 &&
+                legacySize > canonicalSize * 4
+            guard shouldReplaceCanonical else { return }
+
+            do {
+                try fm.removeItem(at: canonicalURL)
+            } catch {
+                print("[DatabaseManager] Cannot replace small canonical DB: \(error.localizedDescription)")
+                return
+            }
+        }
+
+        do {
+            try fm.moveItem(at: sourceURL, to: canonicalURL)
+        } catch {
+            do {
+                try fm.copyItem(at: sourceURL, to: canonicalURL)
+            } catch {
+                print("[DatabaseManager] Legacy DB migration failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func latestModifiedFileURL(from urls: [URL]) -> URL? {
+        var latest: (url: URL, date: Date)?
+        for url in urls {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            let date = values?.contentModificationDate ?? .distantPast
+            if let current = latest {
+                if date > current.date {
+                    latest = (url, date)
+                }
+            } else {
+                latest = (url, date)
+            }
+        }
+        return latest?.url
+    }
+
+    private func fileSize(at url: URL) -> Int64 {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values?.fileSize ?? 0)
     }
 }

@@ -5,31 +5,24 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettingsView()
-                .tabItem {
-                    Label("General", systemImage: "gear")
-                }
+                .tabItem { Label("General", systemImage: "gear") }
 
             AppearanceSettingsView()
-                .tabItem {
-                    Label("Appearance", systemImage: "paintbrush")
-                }
+                .tabItem { Label("Appearance", systemImage: "paintbrush") }
 
             KeywordSettingsView()
-                .tabItem {
-                    Label("Keywords", systemImage: "tag")
-                }
+                .tabItem { Label("Keywords", systemImage: "tag") }
 
             AISettingsView()
-                .tabItem {
-                    Label("AI", systemImage: "sparkles")
-                }
+                .tabItem { Label("AI", systemImage: "sparkles") }
 
             AdvancedSettingsView()
-                .tabItem {
-                    Label("Advanced", systemImage: "wrench.and.screwdriver")
-                }
+                .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
+
+            UpdatesSettingsView()
+                .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
         }
-        .frame(width: 580, height: 440)
+        .frame(width: 600, height: 520)
     }
 }
 
@@ -43,10 +36,16 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            Toggle("Enable global hotkey (⌥A)", isOn: $hotkeyEnabled)
-            Toggle("Show in Dock", isOn: $showInDock)
-            Toggle("Show in Menu Bar", isOn: $showInMenuBar)
-            Toggle("Auto-cleanup empty notes", isOn: $autoCleanup)
+            Section {
+                HelpToggle("Enable global hotkey (⌥A)", isOn: $hotkeyEnabled,
+                           help: "Ouvre et ferme la fenêtre de note depuis n'importe quelle app.")
+                HelpToggle("Show in Dock", isOn: $showInDock,
+                           help: "Affiche AlphaNote dans le Dock.")
+                HelpToggle("Show in Menu Bar", isOn: $showInMenuBar,
+                           help: "Ajoute l'icône A| dans la barre des menus.")
+                HelpToggle("Auto-cleanup empty notes", isOn: $autoCleanup,
+                           help: "Supprime automatiquement les notes restées vides.")
+            }
         }
         .padding(20)
     }
@@ -60,15 +59,32 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         Form {
-            Picker("Theme", selection: $theme) {
-                Text("System").tag("system")
-                Text("Light").tag("light")
-                Text("Dark").tag("dark")
-            }
+            Section {
+                LabeledContent {
+                    Picker("Theme", selection: $theme) {
+                        Text("System").tag("system")
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                } label: {
+                    FieldLabel("Theme", help: "Apparence claire, sombre, ou synchronisée au système.")
+                }
 
-            VStack(alignment: .leading) {
-                Text("Font Size: \(Int(fontSize))")
-                Slider(value: $fontSize, in: 10...24, step: 1)
+                LabeledContent {
+                    HStack {
+                        Slider(value: $fontSize, in: 10...24, step: 1)
+                            .frame(width: 180)
+                        Text("\(Int(fontSize)) pt")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                } label: {
+                    FieldLabel("Font size", help: "Taille du texte dans l'éditeur de note.")
+                }
             }
         }
         .padding(20)
@@ -88,31 +104,55 @@ struct KeywordSettingsView: View {
 
     var body: some View {
         Form {
-            TextField("Math keyword", text: $keywordMath)
-            TextField("List keyword", text: $keywordList)
-            TextField("Code keyword", text: $keywordCode)
-            TextField("Timer keyword", text: $keywordTimer)
-            TextField("List check trigger", text: $listCheckTrigger)
-            HStack {
-                Picker("List shortcut", selection: $listModeShortcutModifiers) {
-                    Text("⌘⇧").tag("commandShift")
-                    Text("⌘⌥").tag("commandOption")
-                    Text("⌘⌃").tag("commandControl")
-                    Text("⌘").tag("command")
-                }
-                .frame(width: 140)
+            Section {
+                HelpTextField("Math keyword", text: $keywordMath,
+                              help: "Premier mot qui bascule la note en calculatrice.")
+                HelpTextField("List keyword", text: $keywordList,
+                              help: "Premier mot qui bascule la note en checklist.")
+                HelpTextField("Code keyword", text: $keywordCode,
+                              help: "Premier mot qui bascule la note en éditeur de code.")
+                HelpTextField("Timer keyword", text: $keywordTimer,
+                              help: "Premier mot qui bascule la note en minuteur.")
+            } header: {
+                Text("Mode keywords")
+            } footer: {
+                HelpNote("Le mot-clé se place en première ligne de la note.")
+            }
 
-                TextField("Key", text: $listModeShortcutKey)
-                    .frame(width: 40)
-                    .onChange(of: listModeShortcutKey) {
-                        let filtered = listModeShortcutKey
-                            .lowercased()
-                            .filter { $0.isLetter || $0.isNumber }
-                        listModeShortcutKey = String(filtered.prefix(1))
-                        if listModeShortcutKey.isEmpty {
-                            listModeShortcutKey = "l"
+            Section {
+                HelpTextField("List check trigger", text: $listCheckTrigger,
+                              help: "Suffixe qui coche un élément de liste (ex. /x).")
+
+                LabeledContent {
+                    HStack {
+                        Picker("List shortcut", selection: $listModeShortcutModifiers) {
+                            Text("⌘⇧").tag("commandShift")
+                            Text("⌘⌥").tag("commandOption")
+                            Text("⌘⌃").tag("commandControl")
+                            Text("⌘").tag("command")
                         }
+                        .labelsHidden()
+                        .frame(width: 120)
+
+                        TextField("Key", text: $listModeShortcutKey)
+                            .labelsHidden()
+                            .frame(width: 40)
+                            .multilineTextAlignment(.center)
+                            .onChange(of: listModeShortcutKey) {
+                                let filtered = listModeShortcutKey
+                                    .lowercased()
+                                    .filter { $0.isLetter || $0.isNumber }
+                                listModeShortcutKey = String(filtered.prefix(1))
+                                if listModeShortcutKey.isEmpty {
+                                    listModeShortcutKey = "l"
+                                }
+                            }
                     }
+                } label: {
+                    FieldLabel("Convert to list", help: "Raccourci qui convertit la note active en liste.")
+                }
+            } header: {
+                Text("List")
             }
         }
         .padding(20)
@@ -142,13 +182,15 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Database location", text: $databaseLocation)
+                HelpTextField("Database location", text: $databaseLocation,
+                              help: "Dossier où AlphaNote range sa base SQLite.")
             } header: {
                 Text("Database")
             }
 
             Section {
-                Toggle("Enable cloud sync", isOn: $syncEnabled)
+                HelpToggle("Enable cloud sync", isOn: $syncEnabled,
+                           help: "Synchronise les notes via WebDAV (Nextcloud).")
                     .onChange(of: syncEnabled) {
                         SyncEngine.shared.configureTimer()
                         if syncEnabled {
@@ -156,19 +198,27 @@ struct AdvancedSettingsView: View {
                         }
                     }
 
-                TextField("Server URL", text: $nextcloudServerURL)
+                HelpTextField("Server URL", text: $nextcloudServerURL, prompt: "https://…",
+                              help: "Adresse de votre instance Nextcloud.")
+                HelpTextField("Username", text: $nextcloudUsername,
+                              help: "Identifiant Nextcloud.")
 
-                TextField("Username", text: $nextcloudUsername)
+                LabeledContent {
+                    SecureField("App password", text: $appPassword)
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                } label: {
+                    FieldLabel("App password", help: "Mot de passe applicatif, stocké dans le trousseau.")
+                }
 
-                SecureField("App password", text: $appPassword)
-
-                Stepper("Sync interval: \(syncIntervalMinutes) min", value: $syncIntervalMinutes, in: 1...60)
-                    .onChange(of: syncIntervalMinutes) {
-                        SyncEngine.shared.configureTimer()
-                    }
+                LabeledContent {
+                    Stepper("\(syncIntervalMinutes) min", value: $syncIntervalMinutes, in: 1...60)
+                } label: {
+                    FieldLabel("Sync interval", help: "Fréquence de la synchronisation automatique.")
+                }
 
                 HStack {
-                    Button(isTestingConnection ? "Testing..." : "Test connection") {
+                    Button(isTestingConnection ? "Testing…" : "Test connection") {
                         Task { await testConnection() }
                     }
                     .disabled(isTestingConnection)
@@ -182,22 +232,23 @@ struct AdvancedSettingsView: View {
                 }
 
                 Text(statusLine)
-                    .font(.system(size: 12))
+                    .font(.callout)
                     .foregroundStyle(statusColor)
             } header: {
                 Text("Cloud Sync (Nextcloud)")
             }
 
             Section {
-                TextField("Nextcloud Notes folder", text: $nextcloudNotesFolder)
+                HelpTextField("Nextcloud Notes folder", text: $nextcloudNotesFolder,
+                              help: "Dossier distant où lire/écrire les notes.")
 
                 HStack {
-                    Button(isImportingNextcloudNotes ? "Importing Nextcloud Notes..." : "Import Nextcloud Notes") {
+                    Button(isImportingNextcloudNotes ? "Importing Nextcloud Notes…" : "Import Nextcloud Notes") {
                         Task { await importNextcloudNotes() }
                     }
                     .disabled(isImportingNextcloudNotes || isImportingAppleNotes)
 
-                    Button(isImportingAppleNotes ? "Importing Apple Notes..." : "Import Apple Notes") {
+                    Button(isImportingAppleNotes ? "Importing Apple Notes…" : "Import Apple Notes") {
                         Task { await importAppleNotes() }
                     }
                     .disabled(isImportingAppleNotes || isImportingNextcloudNotes)
@@ -205,13 +256,13 @@ struct AdvancedSettingsView: View {
 
                 if let feedbackMessage {
                     Text(feedbackMessage)
-                        .font(.system(size: 12))
+                        .font(.callout)
                         .foregroundStyle(feedbackIsError ? .red : .green)
                 }
             } header: {
                 Text("Import")
             } footer: {
-                Text("Imports skip duplicates automatically.")
+                HelpNote("Les imports ignorent automatiquement les doublons.")
             }
 
             HStack {
@@ -256,11 +307,11 @@ struct AdvancedSettingsView: View {
         case .idle:
             return "Status: idle"
         case .syncing:
-            return "Status: syncing..."
+            return "Status: syncing…"
         case let .success(date):
             return "Status: success (\(date.formatted(date: .abbreviated, time: .shortened)))"
         case let .error(message):
-            return "Status: error - \(message)"
+            return "Status: error – \(message)"
         }
     }
 
@@ -268,7 +319,6 @@ struct AdvancedSettingsView: View {
         if feedbackMessage != nil {
             return feedbackIsError ? .red : .green
         }
-
         if case .error = syncEngine.status {
             return .red
         }
@@ -363,7 +413,7 @@ struct AdvancedSettingsView: View {
                 try NoteImportService.shared.importAppleNotes()
             }.value
             if report.scanned == 0 {
-                feedbackMessage = "\(report.summary) If you expected notes, open Apple Notes once, wait for sync to finish, then retry import."
+                feedbackMessage = "\(report.summary) Si vous attendiez des notes, ouvrez Apple Notes une fois, laissez la sync finir, puis relancez l'import."
             } else {
                 feedbackMessage = report.summary
             }
@@ -388,5 +438,54 @@ struct AdvancedSettingsView: View {
             throw SyncConfigurationError.missingPassword
         }
         return stored
+    }
+}
+
+// MARK: - Updates
+
+struct UpdatesSettingsView: View {
+    @ObservedObject private var updater = UpdateManager.shared
+    @AppStorage(AISettingsKeys.updateAppcastURL) private var appcastURL = ""
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent {
+                    Text(AppVersion.current)
+                        .font(.body.monospaced())
+                        .foregroundStyle(.secondary)
+                } label: {
+                    FieldLabel("Version", help: "Version d'AlphaNote actuellement installée.")
+                }
+
+                HelpTextField("Appcast URL", text: $appcastURL, prompt: "https://…/appcast.json",
+                              help: "Adresse JSON décrivant la dernière version. Vide = pas de canal configuré.")
+
+                HStack {
+                    Button(updater.phase == .checking ? "Checking…" : "Check for Updates") {
+                        updater.check(userInitiated: true)
+                    }
+                    .disabled(updater.phase == .checking || appcastURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Spacer()
+                }
+
+                HelpNote("AlphaNote vérifie une version plus récente, télécharge le paquet, le vérifie, puis se remplace et se relance. Rien n'est installé sans correspondance d'identité.")
+            } header: {
+                Text("Mises à jour")
+            }
+
+            if let feedError = updater.feedConfigurationError {
+                Section {
+                    Label(feedError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .padding(20)
+        .sheet(isPresented: $updater.showingSheet) {
+            UpdateSheet(updater: updater)
+        }
     }
 }

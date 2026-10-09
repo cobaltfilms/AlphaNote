@@ -164,89 +164,40 @@ final class AlphaNoteTests: XCTestCase {
         XCTAssertTrue(winner.isDeleted)
     }
 
-    // MARK: - AI intents
+    // MARK: - Keyword routing (fallback déterministe, jamais de rédaction)
 
     func testMathIntentDetectedFromExpression() {
-        XCTAssertTrue(AIIntentDetector.isMathRequest("12 * 8", noteKeyword: nil))
+        XCTAssertTrue(KeywordIntentRouter.isMathRequest("12 * 8", noteKeyword: nil))
     }
 
     func testMathIntentDetectedFromReductionRequest() {
-        XCTAssertTrue(AIIntentDetector.isMathRequest("calcule le pourcentage de réduction", noteKeyword: nil))
+        XCTAssertTrue(KeywordIntentRouter.isMathRequest("calcule le pourcentage de réduction", noteKeyword: nil))
     }
 
     func testMathIntentDetectedFromMathNoteKeyword() {
-        XCTAssertTrue(AIIntentDetector.isMathRequest("n'importe quoi", noteKeyword: "math"))
-    }
-
-    func testMathIntentDetectedFromNoisyPricingSentence() {
-        XCTAssertTrue(AIIntentDetector.isMathRequest("un type à 900 chevaux, il les vend à 580€ pièce", noteKeyword: nil))
+        XCTAssertTrue(KeywordIntentRouter.isMathRequest("n'importe quoi", noteKeyword: "math"))
     }
 
     func testListIntentDetectedFromIngredientsWithTypos() {
-        XCTAssertTrue(AIIntentDetector.isListRequest("fais moi une list: ognion, courgette, tomate", noteKeyword: nil))
+        XCTAssertTrue(KeywordIntentRouter.isListRequest("fais moi une list: ognion, courgette, tomate", noteKeyword: nil))
     }
 
-    func testIntentClassifierPrefersMathWhenApplicable() {
-        let intent = AIIntentDetector.classifyIntent("pourcentage reduction prix base 120 final 90", noteKeyword: nil)
-        if case .math = intent {
-            XCTAssertTrue(true)
-        } else {
-            XCTFail("Expected math intent")
-        }
+    func testTimerIntentDetectedFromMinutes() {
+        XCTAssertTrue(KeywordIntentRouter.isTimerRequest("minuteur 25 minutes", noteKeyword: nil))
     }
 
-    func testIntentClassifierPrefersWebResearchForWebQuery() {
-        let intent = AIIntentDetector.classifyIntent(
-            "liste moi les modèles les plus performants cette semaine selon le web",
-            noteKeyword: nil
-        )
-        if case .webResearch = intent {
-            XCTAssertTrue(true)
-        } else {
-            XCTFail("Expected webResearch intent")
-        }
+    func testClassifyPrefersMathWhenApplicable() {
+        XCTAssertEqual(KeywordIntentRouter.classify("pourcentage reduction prix base 120 final 90", noteKeyword: nil), .math)
     }
 
-    func testIntentClassifierPrefersWebResearchOverListForMixedQuery() {
-        let intent = AIIntentDetector.classifyIntent(
-            "liste moi le matériel nécessaire pour construire un NAS en 2026 selon le web",
-            noteKeyword: nil
-        )
-        if case .webResearch = intent {
-            XCTAssertTrue(true)
-        } else {
-            XCTFail("Expected webResearch intent for mixed list+web query")
-        }
+    func testClassifyFallsBackToPlain() {
+        XCTAssertEqual(KeywordIntentRouter.classify("une pensée du jour", noteKeyword: nil), .plain)
     }
 
-    func testRecipeURLListRequestIsWebResearchWhenNotInMathNote() {
-        let intent = AIIntentDetector.classifyIntent(
-            "liste moi les ingrédients nécessaires à cette recette en détail : https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190",
-            noteKeyword: nil
-        )
-        if case .webResearch = intent {
-            XCTAssertTrue(true)
-        } else {
-            XCTFail("Expected webResearch intent for recipe URL list request")
-        }
-    }
-
-    func testRecipeURLListRequestStaysMathInMathNote() {
-        let intent = AIIntentDetector.classifyIntent(
-            "liste moi les ingrédients nécessaires à cette recette en détail : https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190",
-            noteKeyword: "math"
-        )
-        if case .math = intent {
-            XCTAssertTrue(true)
-        } else {
-            XCTFail("Expected math intent when current note is math")
-        }
-        XCTAssertFalse(
-            AIIntentDetector.isMathRequest(
-                "liste moi les ingrédients nécessaires à cette recette en détail : https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190",
-                noteKeyword: nil
-            )
-        )
+    func testParseTimerRequestDefaultsToTenMinutes() {
+        let parsed = KeywordIntentRouter.parseTimerRequest("lance un minuteur")
+        XCTAssertEqual(parsed?.type, .countdown)
+        XCTAssertEqual(parsed?.totalSeconds, 600)
     }
 
     func testURLDetectorNormalizesMalformedScheme() {
@@ -263,26 +214,5 @@ final class AlphaNoteTests: XCTestCase {
         let text = "liste ingrédients: https://www.elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190 en détail"
         let urls = URLDetector.extractURLs(from: text)
         XCTAssertTrue(urls.contains(where: { $0.absoluteString.contains("elle.fr/Elle-a-Table/Recettes-de-cuisine/Porc-aux-piments-et-galettes-2068190") }))
-    }
-
-    func testSemanticParserSalvagesJSONWhenPrefixedByCommentary() throws {
-        let raw = """
-        Looking at the provided notes, here's the structured answer:
-        {
-          "answer": "Liste prête.",
-          "operation": {
-            "type": "list",
-            "content": "- riz\\n- poulet\\n- gingembre",
-            "title": "Courses"
-          },
-          "sources": ["url:https%3A%2F%2Fexample.com%2Frecipe"]
-        }
-        """
-
-        let result = try AIResponseParser.parse(raw, for: .semanticAnswer)
-        XCTAssertEqual(result.metadata["format"], "json_semantic")
-        XCTAssertEqual(result.metadata["operation_type"], "list")
-        XCTAssertEqual(result.metadata["operation_title"], "Courses")
-        XCTAssertEqual(result.metadata["operation_content"], "- riz\n- poulet\n- gingembre")
     }
 }

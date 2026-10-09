@@ -137,9 +137,28 @@ Fonctionnalités:
 - Reset.
 - Notification locale à la fin d'un countdown/pomodoro.
 
+### 5.6 Barre de question (routage de mode)
+
+Une barre de question permet d'écrire une demande en langage naturel ; AlphaNote
+la **classe** dans un mode puis applique localement, sans jamais rédiger à votre
+place :
+
+- `math` : l'expression est notée dans la note (calcul fait par la note).
+- `list` : les éléments (virgules) deviennent une checklist.
+- `timer` : crée une note minuteur/chrono/pomodoro.
+- `code` : convertit la note en mode code.
+- `plain` : rien n'est appliqué.
+
+Un badge affiche le mode détecté (`MODE ?` en direct, puis `MODE · source` après
+envoi), la source étant `JEV` ou `mots-clés`. Une ligne de statut précise
+l'éventuel échec du serveur JEV.
+
+La recherche sémantique (colonne gauche) rapproche les notes par sens ; elle est
+entièrement locale et fonctionne hors-ligne.
+
 ## 6. Réglages
 
-Les réglages sont structurés en 4 onglets.
+Les réglages sont structurés en 5 onglets.
 
 ### 6.1 General
 
@@ -163,7 +182,23 @@ Options visibles:
 - Déclencheur check-list (ex: `/x`)
 - Raccourci "Convertir en liste" (modifieurs + touche)
 
-### 6.4 Advanced
+### 6.4 AI
+
+L'IA d'AlphaNote **classe, elle ne rédige jamais** (contrat JEV).
+
+- Toggle `Activer le routage de mode IA` (désactivé par défaut).
+- URL du serveur de décision JEV (défaut suggéré : `http://192.168.3.169:8096`).
+- Délai (ms).
+- Bouton `Tester le serveur` : sonde un appel de décision, vert si joignable,
+  rouge + message sinon.
+- **Transparence** : l'onglet affiche le schéma exact envoyé au serveur (le
+  champ `mode` et la description de chaque mode).
+
+Si le serveur est injoignable ou désactivé, AlphaNote retombe sur les mots-clés
+déterministes et l'écran l'affiche. La recherche sémantique, elle, reste 100 %
+locale (aucun réseau, aucun modèle).
+
+### 6.5 Advanced
 
 - Emplacement de la base de données SQLite
 - Synchronisation Nextcloud
@@ -251,7 +286,12 @@ Au 21 mai 2026:
 ## 11. Confidentialité
 
 - L'app est local-first.
-- L'accès réseau est limité aux opérations de synchronisation Nextcloud et aux conversions de devises en mode math.
+- L'accès réseau est limité aux opérations de synchronisation Nextcloud, aux
+  conversions de devises en mode math, et — si le routage de mode IA est activé —
+  à l'appel du serveur de décision JEV configuré dans Réglages > AI.
+- L'IA ne classe que la demande (un seul champ `mode`) ; elle ne lit pas le
+  contenu des notes et n'en rédige aucune.
+- La recherche sémantique est 100 % locale (embeddings hash-64) : aucun réseau.
 
 ## 12. Raccourci support
 

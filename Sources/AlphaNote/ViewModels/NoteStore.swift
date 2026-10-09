@@ -9,8 +9,8 @@ final class NoteStore: ObservableObject {
 
     // AI state — managed by AIStore but published here for SwiftUI bindings
     @Published var isAIProcessing = false
-    @Published var aiError: String?
-    @Published var lastAIResult: AIResultEnvelope?
+    @Published var lastRoute: ModeDecision?
+    @Published var aiStatusMessage: String?
     @Published var semanticSearchResults: [SemanticSearchHit] = []
 
     @AppStorage("archivedNoteIDs") private var legacyArchivedNoteIDsStorage: String = "[]"
@@ -198,48 +198,12 @@ final class NoteStore: ObservableObject {
 
     // MARK: - AI Delegation (vers AIStore)
 
-    func summarizeCurrentNote() async {
-        await aiStore.summarizeCurrentNote()
-    }
-
-    func rewriteCurrentNote(style: RewriteStyle) async {
-        await aiStore.rewriteCurrentNote(style: style)
-    }
-
-    func extractActionsCurrentNote() async {
-        await aiStore.extractActionsCurrentNote()
-    }
-
-    func cancelAIOperation() {
-        aiStore.cancelAIOperation()
-    }
-
-    func applyLastAIResult(mode: AIApplyMode) {
-        aiStore.applyLastAIResult(mode: mode)
-    }
-
-    func clearLastAIResult() {
-        aiStore.clearLastAIResult()
+    func routeQuestion(_ question: String) async {
+        await aiStore.routeQuestion(question)
     }
 
     func semanticSearch(query: String) async {
         await aiStore.semanticSearch(query: query)
-    }
-
-    func askNotes(question: String) async -> String {
-        await aiStore.askNotes(question: question)
-    }
-
-    func insertSemanticAnswerIntoCurrentNote(_ answer: String) {
-        aiStore.insertSemanticAnswerIntoCurrentNote(answer)
-    }
-
-    func replaceCurrentNoteWithSemanticAnswer(_ answer: String) {
-        aiStore.replaceCurrentNoteWithSemanticAnswer(answer)
-    }
-
-    func convertSemanticAnswerToListOnCurrentNote(_ answer: String, titleHint: String?, refinementPrompt: String? = nil) -> Bool {
-        aiStore.convertSemanticAnswerToListOnCurrentNote(answer, titleHint: titleHint, refinementPrompt: refinementPrompt)
     }
 
     // MARK: - Private

@@ -16,3 +16,11 @@ Android/local.properties
 Android/.idea/
 Android/**/.DS_Store
 **/build/
+
+# Packaging / sortie
+/dist/
+
+# Éditeurs & sessions
+.vscode/
+.hermes/
+.secret.md
