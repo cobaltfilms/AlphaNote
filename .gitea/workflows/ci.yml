@@ -1,0 +1,27 @@
+# Contrôle automatique de chaque Pull Request et de chaque commit sur main :
+# build + tests. Calqué sur la CI de cockpit (Gitea Actions), mais AlphaNote est
+# macOS-only (SwiftUI/AppKit/Security) : le job tourne sur un runner self-hosted
+# macOS en mode hôte (label « macos:host »), pas dans un conteneur Linux.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: Build et tests (macOS)
+    runs-on: macos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chaîne d'outils
+        run: swift --version
+
+      - name: Build et tests (même script qu'en local)
+        run: bash scripts/test.sh
