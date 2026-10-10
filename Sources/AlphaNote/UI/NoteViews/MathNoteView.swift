@@ -41,6 +41,8 @@ private struct MathColoringEditor: NSViewRepresentable {
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 16, height: 12)
         textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.textColor = Palette.text
+        textView.insertionPointColor = Palette.accent
 
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
@@ -131,7 +133,7 @@ private struct MathColoringEditor: NSViewRepresentable {
             textStorage.beginEditing()
             textStorage.setAttributes([
                 .font: font,
-                .foregroundColor: NSColor.labelColor
+                .foregroundColor: Palette.text
             ], range: fullRange)
 
             let lines = text.components(separatedBy: .newlines)
@@ -153,7 +155,7 @@ private struct MathColoringEditor: NSViewRepresentable {
 
                 if index == 0, isMathHeader(trimmed) {
                     textStorage.addAttributes([
-                        .foregroundColor: NSColor.secondaryLabelColor
+                        .foregroundColor: Palette.secondary
                     ], range: lineRange)
                 }
 
@@ -165,7 +167,7 @@ private struct MathColoringEditor: NSViewRepresentable {
                         let nameRange = NSRange(location: lineRange.location, length: distance)
                         if nameRange.length > 0 {
                             textStorage.addAttributes([
-                                .foregroundColor: NSColor.systemOrange,
+                                .foregroundColor: Palette.math,
                                 .font: NSFont.monospacedSystemFont(ofSize: parent.fontSize, weight: .semibold)
                             ], range: nameRange)
                         }
@@ -176,7 +178,7 @@ private struct MathColoringEditor: NSViewRepresentable {
                     let prefixLength = line.distance(from: line.startIndex, to: equalIndex)
                     let eqRange = NSRange(location: lineRange.location + prefixLength, length: 1)
                     textStorage.addAttributes([
-                        .foregroundColor: NSColor.tertiaryLabelColor
+                        .foregroundColor: Palette.secondary
                     ], range: eqRange)
 
                     let resultStart = line.index(after: equalIndex)
@@ -189,20 +191,20 @@ private struct MathColoringEditor: NSViewRepresentable {
                         )
                         if resultRange.length > 0 {
                             textStorage.addAttributes([
-                                .foregroundColor: NSColor.systemGreen
+                                .foregroundColor: Palette.accent2
                             ], range: resultRange)
                         }
                     }
                 }
 
-                highlightRegex(Self.numberRegex, color: NSColor.systemBlue, in: lineRange, textStorage: textStorage)
-                highlightRegex(Self.unitRegex, color: NSColor.systemTeal, in: lineRange, textStorage: textStorage)
+                highlightRegex(Self.numberRegex, color: Palette.code, in: lineRange, textStorage: textStorage)
+                highlightRegex(Self.unitRegex, color: Palette.list, in: lineRange, textStorage: textStorage)
 
                 for name in variableNames {
                     let escaped = NSRegularExpression.escapedPattern(for: name)
                     let pattern = "(?<![\\p{L}\\p{N}_])\(escaped)(?![\\p{L}\\p{N}_])"
                     guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-                    highlightRegex(regex, color: NSColor.systemOrange, in: lineRange, textStorage: textStorage)
+                    highlightRegex(regex, color: Palette.math, in: lineRange, textStorage: textStorage)
                 }
 
                 location += nsLine.length

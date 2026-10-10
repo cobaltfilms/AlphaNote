@@ -21,7 +21,7 @@ final class NoteWindowController: NSWindowController {
         window.titleVisibility = .hidden
         window.level = .normal
         window.isReleasedWhenClosed = false
-        window.backgroundColor = .clear
+        window.backgroundColor = Palette.window
         window.isMovableByWindowBackground = false
         window.center()
 
@@ -33,6 +33,7 @@ final class NoteWindowController: NSWindowController {
         window.contentView = hostingView
 
         super.init(window: window)
+        applyThemeAppearance(to: window)
     }
 
     required init?(coder: NSCoder) {
@@ -41,6 +42,9 @@ final class NoteWindowController: NSWindowController {
 
     func showWindow() {
         guard let window else { return }
+
+        applyThemeAppearance(to: window)
+        window.backgroundColor = Palette.window
 
         NSRunningApplication.current.activate(options: [.activateAllWindows])
         NSApp.activate(ignoringOtherApps: true)
@@ -60,6 +64,14 @@ final class NoteWindowController: NSWindowController {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             window.animator().alphaValue = 1.0
+        }
+    }
+
+    private func applyThemeAppearance(to window: NSWindow) {
+        switch UserDefaults.standard.string(forKey: "theme") ?? "system" {
+        case "light": window.appearance = NSAppearance(named: .aqua)
+        case "dark": window.appearance = NSAppearance(named: .darkAqua)
+        default: window.appearance = nil
         }
     }
 

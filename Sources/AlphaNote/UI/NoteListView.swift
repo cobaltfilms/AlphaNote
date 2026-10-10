@@ -18,7 +18,7 @@ struct NoteListView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+            Palette.windowColor
                 .ignoresSafeArea()
 
             HStack(spacing: 0) {
@@ -30,6 +30,7 @@ struct NoteListView: View {
                 content
             }
         }
+        .tint(Palette.accentColor)
         .onAppear {
             store.loadNotes()
             syncRightAIPanelWithCurrentNote()
@@ -168,6 +169,7 @@ struct NoteListView: View {
             }
         }
         .frame(width: 220)
+        .background(Palette.sidebarColor)
         .sheet(item: $renamingNote) { note in
             renameSheet(for: note)
         }
@@ -207,57 +209,47 @@ struct NoteListView: View {
             Divider()
 
             HStack(spacing: 8) {
-                ZStack(alignment: .trailing) {
-                    TextField("Détection du mode — tape ou dicte, puis Entrée…", text: $questionDraft)
+                HStack(spacing: 8) {
+                    TextField("Tape ou dicte, puis Entrée…", text: $questionDraft)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.leading, 88)
-                        .padding(.trailing, 12)
-                        .padding(.vertical, 8)
+                        .font(.system(size: 12, weight: .medium))
                         .focused($isAIQuestionFocused)
                         .submitLabel(.send)
                         .disabled(isAnswering)
                         .onSubmit {
                             askQuestionToCurrentNote()
                         }
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.primary.opacity(0.06))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(
-                                    isAIQuestionFocused
-                                        ? Color.accentColor.opacity(0.95)
-                                        : Color.accentColor.opacity(0.45),
-                                    lineWidth: isAIQuestionFocused ? 1.8 : 1.0
-                                )
-                        )
-                        .shadow(
-                            color: Color.accentColor.opacity(isAIQuestionFocused ? 0.45 : 0.18),
-                            radius: isAIQuestionFocused ? 12 : 6
-                        )
 
-                    HStack(spacing: 6) {
-                        ForEach(detectedBadges, id: \.id) { badge in
-                            intentBadge(badge)
-                        }
-                        Spacer()
-                        micButton
+                    ForEach(detectedBadges, id: \.id) { badge in
+                        intentBadge(badge)
                     }
-                    .padding(.leading, 8)
 
                     if isAnswering {
                         ProgressView()
                             .controlSize(.small)
-                            .padding(.trailing, 10)
                     } else if speechRecognizer.isListening {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(.red)
-                            .padding(.trailing, 10)
+                            .tint(Color(nsColor: Palette.timer))
                     }
+
+                    micButton
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Palette.fieldColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(
+                            isAIQuestionFocused
+                                ? Palette.accentColor.opacity(0.95)
+                                : Palette.accentColor.opacity(0.45),
+                            lineWidth: isAIQuestionFocused ? 1.8 : 1.0
+                        )
+                )
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
@@ -266,10 +258,10 @@ struct NoteListView: View {
                 HStack(spacing: 6) {
                     Image(systemName: store.lastRoute?.source == .jev ? "sparkles" : "text.magnifyingglass")
                         .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryColor)
                     Text(status)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryColor)
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -297,6 +289,8 @@ struct NoteListView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Palette.contentColor)
     }
 
     private var positionLabel: String {
@@ -426,10 +420,11 @@ struct NoteListView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title(for: note, index: index ?? 0))
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Palette.textColor)
                     .lineLimit(1)
                 Text(preview(for: note))
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryColor)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
@@ -465,7 +460,7 @@ struct NoteListView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(selected ? Color.primary.opacity(0.12) : Color.clear)
+        .background(selected ? Palette.selectionColor : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .opacity(isArchived ? 0.72 : 1.0)
         .contentShape(RoundedRectangle(cornerRadius: 8))

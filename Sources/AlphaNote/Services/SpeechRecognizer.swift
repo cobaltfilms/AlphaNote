@@ -86,6 +86,13 @@ final class SpeechRecognizer: ObservableObject {
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
+        // Sans micro (ou format nul : sampleRate/canal à 0), installTap lève une
+        // exception Objective-C non rattrapable → crash. On coupe court ici.
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+            error = .audioEngineFailedToStart
+            return
+        }
+
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
         }
@@ -225,6 +232,13 @@ final class SpeechRecognizer: ObservableObject {
 
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+        // Sans micro (ou format nul : sampleRate/canal à 0), installTap lève une
+        // exception Objective-C non rattrapable → crash. On coupe court ici.
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+            error = .audioEngineFailedToStart
+            return
+        }
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)

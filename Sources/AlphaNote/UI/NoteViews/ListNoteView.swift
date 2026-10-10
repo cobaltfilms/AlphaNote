@@ -69,6 +69,7 @@ struct ListNoteView: View {
             if isEditing {
                 TextEditor(text: $note.content)
                     .font(.system(size: fontSize))
+                    .foregroundStyle(Palette.textColor)
                     .scrollContentBackground(.hidden)
                     .focused($isEditorFocused)
                     .padding(.horizontal, 16)
@@ -115,14 +116,14 @@ struct ListNoteView: View {
     private func headingRow(_ line: String) -> some View {
         Text(line)
             .font(.system(size: fontSize + 2, weight: .bold))
-            .foregroundStyle(.primary)
+            .foregroundStyle(Palette.textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func commentRow(_ line: String) -> some View {
         Text(line)
             .font(.system(size: fontSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.secondaryColor)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -132,11 +133,11 @@ struct ListNoteView: View {
 
         return HStack(alignment: .top, spacing: 8) {
             Image(systemName: checked ? "checkmark.square.fill" : "square")
-                .foregroundStyle(checked ? .green : .secondary)
+                .foregroundStyle(checked ? Color(nsColor: Palette.list) : Palette.secondaryColor)
                 .font(.system(size: fontSize))
             Text(itemText.isEmpty ? " " : itemText)
                 .font(.system(size: fontSize))
-                .foregroundStyle(checked ? .secondary : .primary)
+                .foregroundStyle(checked ? Palette.secondaryColor : Palette.textColor)
                 .strikethrough(checked)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

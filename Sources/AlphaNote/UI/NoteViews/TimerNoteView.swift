@@ -67,7 +67,7 @@ struct TimerNoteView: View {
         VStack(spacing: 24) {
             Text(mode.rawValue)
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.secondaryColor)
 
             Picker("Mode", selection: $mode) {
                 ForEach(TimerMode.allCases, id: \.self) { m in
@@ -79,20 +79,20 @@ struct TimerNoteView: View {
 
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 6)
+                    .stroke(Palette.lineColor, lineWidth: 6)
                     .frame(width: 180, height: 180)
 
                 if mode != .stopwatch {
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(mode == .pomodoro ? Color.red : Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .stroke(mode == .pomodoro ? Color(nsColor: Palette.timer) : Palette.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                         .frame(width: 180, height: 180)
                         .rotationEffect(.degrees(-90))
                 }
 
                 Text(displayTime)
                     .font(.system(size: 40, design: .monospaced))
-                    .foregroundStyle(state == .finished ? .red : .primary)
+                    .foregroundStyle(state == .finished ? Color(nsColor: Palette.timer) : Palette.textColor)
             }
 
             if mode == .countdown {
@@ -114,7 +114,7 @@ struct TimerNoteView: View {
             if isSoundPlaying {
                 Button(action: stopSound) {
                     Label("Arrêter la sonnerie", systemImage: "speaker.slash.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color(nsColor: Palette.timer))
                 }
                 .buttonStyle(.bordered)
             }

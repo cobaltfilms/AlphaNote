@@ -61,6 +61,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key> <true/>
     <key>NSPrincipalClass</key>        <string>NSApplication</string>
     <key>LSApplicationCategoryType</key> <string>public.app-category.productivity</string>
+    <key>NSMicrophoneUsageDescription</key> <string>AlphaNote utilise le microphone pour la dictée vocale.</string>
+    <key>NSSpeechRecognitionUsageDescription</key> <string>AlphaNote transcrit votre voix pour transformer vos demandes en notes.</string>
 </dict>
 </plist>
 PLIST

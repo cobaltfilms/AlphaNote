@@ -9,6 +9,7 @@ struct PlainNoteView: View {
     var body: some View {
         TextEditor(text: $note.content)
             .font(.system(size: fontSize))
+            .foregroundStyle(Palette.textColor)
             .scrollContentBackground(.hidden)
             .focused($isEditorFocused)
             .padding(.horizontal, 16)

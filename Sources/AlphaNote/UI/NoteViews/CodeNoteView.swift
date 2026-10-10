@@ -39,6 +39,7 @@ struct CodeNoteView: View {
 
             TextEditor(text: $note.content)
                 .font(.system(size: fontSize, design: .monospaced))
+                .foregroundStyle(Palette.textColor)
                 .scrollContentBackground(.hidden)
                 .focused($isEditorFocused)
                 .padding(.horizontal, 16)
