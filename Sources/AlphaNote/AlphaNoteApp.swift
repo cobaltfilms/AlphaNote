@@ -137,7 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NoteWindowController.alwaysOnTopKey: true,
             Self.themeKey: "system",
             "fontSize": 14.0,
-            "listCheckTrigger": "/x"
+            "listCheckTrigger": "/x",
+            // Canal de mise à jour par défaut : l'appcast publié à la racine du dépôt.
+            AISettingsKeys.updateAppcastURL: "https://git.cobaltfilms.be/paul/AlphaNote/raw/branch/main/appcast.json"
         ])
 
         PreferencesMigration.migrateLegacyDefaultsIfNeeded()
