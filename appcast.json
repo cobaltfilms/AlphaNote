@@ -1,6 +1,6 @@
 {
-  "version": "0.2.0",
-  "notes": "Éditeur unique pour tous les modes, volet des notes en colonne, barre d'outils dans la barre de titre, math fiable (fonctions, unités, devises), minuteur persistant, raccourci global reconfigurable, sync Nextcloud plus économe.",
-  "url": "https://git.cobaltfilms.be/attachments/2f9de203-8ee8-4f6c-9867-cb550da92d6d",
+  "version": "0.2.1",
+  "notes": "Correctif : les cases à cocher du mode liste s'affichent de nouveau (marge dédiée). Canal de mise à jour par défaut renseigné.",
+  "url": "https://git.cobaltfilms.be/attachments/15d670b0-7059-4259-aacb-04e65d46aac5",
   "minimumSystemVersion": "14.0"
 }
