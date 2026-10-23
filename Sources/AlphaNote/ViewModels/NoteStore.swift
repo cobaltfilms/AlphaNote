@@ -1,17 +1,26 @@
 import Foundation
 import SwiftUI
 
+/// Message transitoire affiché en bas de la fenêtre (routage de mode, sync…).
+struct Toast: Equatable, Identifiable {
+    let id = UUID()
+    let text: String
+    let symbol: String
+}
+
 @MainActor
 final class NoteStore: ObservableObject {
     @Published var notes: [Note] = []
     @Published var archivedNotes: [Note] = []
     @Published var currentIndex: Int = 0
 
-    // AI state — managed by AIStore but published here for SwiftUI bindings
+    // État IA — géré par AIStore, publié ici pour SwiftUI.
     @Published var isAIProcessing = false
     @Published var lastRoute: ModeDecision?
     @Published var aiStatusMessage: String?
     @Published var semanticSearchResults: [SemanticSearchHit] = []
+
+    @Published var toast: Toast?
 
     @AppStorage("archivedNoteIDs") private var legacyArchivedNoteIDsStorage: String = "[]"
     @AppStorage("archivedIDsMigratedToDatabase") private var archivedIDsMigratedToDatabase: Bool = false
@@ -19,44 +28,50 @@ final class NoteStore: ObservableObject {
 
     lazy var aiStore = AIStore(noteStore: self)
 
-    var isAIEnabled: Bool {
-        aiEnabled
-    }
+    /// Sauvegardes différées : une écriture SQLite par note au plus toutes les
+    /// `saveDelay`, et jamais une par frappe.
+    private var pendingNotes: [Int64: Note] = [:]
+    private var pendingSaveTasks: [Int64: Task<Void, Never>] = [:]
+    private let saveDelay: UInt64 = 400_000_000
+    private var toastTask: Task<Void, Never>?
+
+    var isAIEnabled: Bool { aiEnabled }
 
     var currentNote: Note? {
-        guard !notes.isEmpty, currentIndex >= 0, currentIndex < notes.count else {
-            return nil
-        }
+        guard !notes.isEmpty, currentIndex >= 0, currentIndex < notes.count else { return nil }
         return notes[currentIndex]
     }
+
+    // MARK: - Chargement
 
     func loadNotes() {
         migrateLegacyArchiveIDsIfNeeded()
         reloadNotes()
         repairListNotesIfNeeded()
-        Task {
-            for note in notes where !note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let snapshot = notes + archivedNotes
+        Task.detached(priority: .utility) {
+            for note in snapshot where !note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 await SemanticSearchFeature().index(note: note)
             }
         }
     }
 
-    func addNote() {
-        let allPositions = (notes + archivedNotes).map(\.position)
-        let position = (allPositions.max() ?? -1) + 1
-        let created = Note.create(Note(position: position))
+    // MARK: - Création
+
+    @discardableResult
+    func addNote(content: String = "") -> Note? {
+        let created = Note.create(Note(content: content, position: nextPosition()))
         guard let createdID = created.id else {
             reloadNotes()
-            return
+            return nil
         }
         SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: createdID)
+        return created
     }
 
     func createNote(keyword: String, content: String) -> Bool {
-        let allPositions = (notes + archivedNotes).map(\.position)
-        let position = (allPositions.max() ?? -1) + 1
-        var note = Note(content: content, keyword: keyword, position: position)
+        var note = Note(content: content, keyword: keyword, position: nextPosition())
         note = Note.create(note)
         guard let createdID = note.id else { return false }
         SyncEngine.shared.notifyLocalChange()
@@ -64,20 +79,112 @@ final class NoteStore: ObservableObject {
         return true
     }
 
+    private func nextPosition() -> Int {
+        ((notes + archivedNotes).map(\.position).max() ?? -1) + 1
+    }
+
+    // MARK: - Sélection
+
     func selectNote(id: Int64) {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        flushPendingSaves()
         currentIndex = index
     }
 
-    func isArchived(_ note: Note) -> Bool {
-        note.archived
+    func navigateNext() {
+        guard !notes.isEmpty else { addNote(); return }
+        if deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: false) { return }
+        flushPendingSaves()
+        if currentIndex < notes.count - 1 {
+            currentIndex += 1
+        } else {
+            addNote()
+        }
+    }
+
+    func navigatePrevious() {
+        guard !notes.isEmpty else { addNote(); return }
+        if deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: true) { return }
+        flushPendingSaves()
+        if currentIndex > 0 {
+            currentIndex -= 1
+        }
+    }
+
+    // MARK: - Édition
+
+    /// Mise à jour en mémoire immédiate, écriture disque différée.
+    func edit(_ note: Note) {
+        var updated = note
+        updated.detectKeyword()
+        updated.updatedAt = Date()
+        updated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
+        replaceInMemory(updated)
+
+        guard let id = updated.id else { return }
+        pendingNotes[id] = updated
+        pendingSaveTasks[id]?.cancel()
+        pendingSaveTasks[id] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: self?.saveDelay ?? 400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.persistPending(id: id) }
+        }
+    }
+
+    /// Mise à jour immédiate (actions explicites : renommer, archiver, épingler…).
+    func updateNote(_ note: Note) {
+        var updated = note
+        updated.detectKeyword()
+        updated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
+        if let id = updated.id {
+            pendingSaveTasks[id]?.cancel()
+            pendingSaveTasks[id] = nil
+            pendingNotes[id] = nil
+        }
+        Note.update(updated)
+        updated.updatedAt = Date()
+        replaceInMemory(updated)
+        SyncEngine.shared.notifyLocalChange()
+        Task.detached(priority: .utility) { await SemanticSearchFeature().index(note: updated) }
+    }
+
+    func flushPendingSaves() {
+        for id in Array(pendingNotes.keys) {
+            pendingSaveTasks[id]?.cancel()
+            persistPending(id: id)
+        }
+    }
+
+    private func persistPending(id: Int64) {
+        pendingSaveTasks[id] = nil
+        guard let note = pendingNotes.removeValue(forKey: id) else { return }
+        Note.update(note)
+        SyncEngine.shared.notifyLocalChange()
+        Task.detached(priority: .utility) { await SemanticSearchFeature().index(note: note) }
+    }
+
+    private func replaceInMemory(_ note: Note) {
+        if let index = notes.firstIndex(where: { $0.id == note.id }) {
+            notes[index] = note
+        } else if let index = archivedNotes.firstIndex(where: { $0.id == note.id }) {
+            archivedNotes[index] = note
+        }
+    }
+
+    // MARK: - Actions sur une note
+
+    func togglePin(_ note: Note) {
+        var updated = note
+        updated.isPinned.toggle()
+        updateNote(updated)
+        reloadNotes(selecting: currentNote?.id)
     }
 
     func archiveNote(_ note: Note) {
         var updated = note
         updated.archived = true
         updateNote(updated)
-        let nextSelection = adjacentNoteID(forDeletedNoteID: note.id)
+        let nextSelection = note.id == currentNote?.id ? adjacentNoteID(forDeletedNoteID: note.id) : currentNote?.id
         reloadNotes(selecting: nextSelection)
     }
 
@@ -89,193 +196,148 @@ final class NoteStore: ObservableObject {
     }
 
     func duplicateNote(_ note: Note) {
+        flushPendingSaves()
         var duplicated = note
         duplicated.id = nil
         duplicated.uuid = UUID().uuidString.lowercased()
         duplicated.createdAt = Date()
         duplicated.updatedAt = Date()
         duplicated.archived = false
+        duplicated.isPinned = false
         duplicated.isDeleted = false
         duplicated.deletedAt = nil
         duplicated.lastSyncedAt = nil
         duplicated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
         duplicated.aiSummary = ""
         duplicated.aiLastProcessedAt = nil
-        let allPositions = (notes + archivedNotes).map(\.position)
-        duplicated.position = (allPositions.max() ?? -1) + 1
+        duplicated.position = nextPosition()
 
         let created = Note.create(duplicated)
-        guard let createdID = created.id else {
-            reloadNotes()
-            return
-        }
-
+        guard let createdID = created.id else { reloadNotes(); return }
         SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: createdID)
     }
 
     func renameNote(_ note: Note, to newTitle: String) {
-        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
         var updated = note
-        updated.title = trimmed
+        updated.title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         updateNote(updated)
     }
 
-    func convertCurrentNoteToList() {
-        guard var note = currentNote else { return }
-        let normalized = ListModeFormatter.normalizeForListMode(content: note.content, forceListHeader: true)
-        guard normalized != note.content else { return }
-        note.content = normalized
-        note.detectKeyword()
-        updateNote(note)
-    }
-
-    func updateNote(_ note: Note) {
-        Note.update(note)
-        var updated = note
-        updated.detectKeyword()
-        updated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
-
-        if let index = notes.firstIndex(where: { $0.id == note.id }) {
-            notes[index] = updated
-        }
-        if let index = archivedNotes.firstIndex(where: { $0.id == note.id }) {
-            archivedNotes[index] = updated
-        }
-        SyncEngine.shared.notifyLocalChange()
-
-        Task {
-            await SemanticSearchFeature().index(note: updated)
-        }
-    }
-
     func deleteNote(_ note: Note) {
-        let nextSelection = adjacentNoteID(forDeletedNoteID: note.id)
+        if let id = note.id {
+            pendingSaveTasks[id]?.cancel()
+            pendingSaveTasks[id] = nil
+            pendingNotes[id] = nil
+        }
+        let nextSelection = note.id == currentNote?.id ? adjacentNoteID(forDeletedNoteID: note.id) : currentNote?.id
         Note.delete(note)
+        TimerRegistry.shared.discard(noteUUID: note.uuid)
+        Task.detached(priority: .utility) { await EmbeddingStore.shared.removeEmbedding(noteUUID: note.uuid) }
         SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: nextSelection)
     }
 
+    /// Nettoyage des notes vides (réglage « auto-cleanup »), déclenché quand la
+    /// fenêtre se cache. La note courante vide est gardée si elle est seule.
     func deleteEmptyNotes() {
-        let selectedID = currentNote?.id
-        Note.deleteEmpty()
+        flushPendingSaves()
+        let empties = notes.filter { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !empties.isEmpty, empties.count < notes.count || notes.count > 1 else { return }
+        let selectedID = currentNote.flatMap { current in
+            empties.contains(where: { $0.id == current.id }) ? nil : current.id
+        }
+        for note in empties {
+            Note.delete(note)
+            TimerRegistry.shared.discard(noteUUID: note.uuid)
+        }
+        SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: selectedID)
     }
 
-    func navigateNext() {
-        guard !notes.isEmpty else {
-            addNote()
-            return
+    // MARK: - Modes
+
+    /// Change le mode de la note courante en réécrivant sa première ligne.
+    func setMode(_ mode: NoteMode, for note: Note) {
+        var updated = note
+        var lines = updated.content.components(separatedBy: .newlines)
+        let firstTrimmed = lines.first?.trimmingCharacters(in: .whitespaces) ?? ""
+        let hasHeader = Note.knownKeywords.contains(firstTrimmed.lowercased())
+            || Note.knownKeywords.contains(firstTrimmed.split(separator: ":", maxSplits: 1).first.map { String($0).trimmingCharacters(in: .whitespaces).lowercased() } ?? "")
+
+        var suffix = ""
+        if hasHeader, let colon = firstTrimmed.firstIndex(of: ":") {
+            suffix = String(firstTrimmed[firstTrimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        }
+        if hasHeader { lines.removeFirst() }
+
+        switch mode {
+        case .plain:
+            break
+        case .math, .list, .timer, .code:
+            let header = suffix.isEmpty ? mode.rawValue : "\(mode.rawValue): \(suffix)"
+            lines.insert(header, at: 0)
         }
 
-        if deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: false) {
-            return
+        updated.content = lines.joined(separator: "\n")
+        if mode == .list {
+            updated.content = ListModeFormatter.normalizeForListMode(content: updated.content, forceListHeader: true)
         }
+        if mode == .timer, lines.count == 1 {
+            updated.content += "\ncountdown 10:00"
+        }
+        updateNote(updated)
+    }
 
-        if currentIndex < notes.count - 1 {
-            currentIndex += 1
-        } else {
-            addNote()
+    func convertCurrentNoteToList() {
+        guard let note = currentNote else { return }
+        setMode(.list, for: note)
+    }
+
+    // MARK: - Toast
+
+    func showToast(_ text: String, symbol: String = "info.circle", duration: TimeInterval = 4) {
+        toastTask?.cancel()
+        toast = Toast(text: text, symbol: symbol)
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.toast = nil }
         }
     }
 
-    func navigatePrevious() {
-        guard !notes.isEmpty else {
-            addNote()
-            return
-        }
-
-        if deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: true) {
-            return
-        }
-
-        if currentIndex > 0 {
-            currentIndex -= 1
-        }
-    }
-
-    // MARK: - AI Delegation (vers AIStore)
+    // MARK: - IA (délégation à AIStore)
 
     func routeQuestion(_ question: String) async {
+        flushPendingSaves()
         await aiStore.routeQuestion(question)
+        if let message = aiStatusMessage {
+            showToast(message, symbol: lastRoute?.source == .jev ? "sparkles" : "text.magnifyingglass")
+        }
     }
 
     func semanticSearch(query: String) async {
         await aiStore.semanticSearch(query: query)
     }
 
-    // MARK: - Private
+    // MARK: - Minuteur
 
-    func viewForNote(_ note: Note) -> AnyView {
-        let noteBinding = binding(for: note)
-
-        switch note.keyword {
-        case "math":
-            return AnyView(MathNoteView(note: noteBinding))
-        case "list":
-            return AnyView(ListNoteView(note: noteBinding))
-        case "code":
-            return AnyView(CodeNoteView(note: noteBinding))
-        case "timer":
-            let (mode, seconds) = parseTimerContent(from: note.content)
-            return AnyView(TimerNoteView(initialSeconds: seconds, initialMode: mode))
-        default:
-            return AnyView(PlainNoteView(note: noteBinding, store: self))
-        }
-    }
-
-    private func parseTimerContent(from content: String) -> (TimerNoteView.TimerMode, Int) {
-        let lines = content.components(separatedBy: .newlines)
-        var mode: TimerNoteView.TimerMode = .countdown
+    func timerParameters(for note: Note) -> (mode: TimerSession.Mode, seconds: Int) {
+        var mode: TimerSession.Mode = .countdown
         var seconds = 600
-
-        for line in lines {
-            let lower = line.lowercased()
-            if lower.contains("countdown") {
-                mode = .countdown
-            } else if lower.contains("pomodoro") {
-                mode = .pomodoro
-            } else if lower.contains("stopwatch") || lower.contains("chronometre") || lower.contains("chronomètre") {
-                mode = .stopwatch
-            }
-
-            let pattern = #"(\d+):(\d+)"#
-            if let regex = try? NSRegularExpression(pattern: pattern),
-               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-               let minRange = Range(match.range(at: 1), in: line),
-               let secRange = Range(match.range(at: 2), in: line),
-               let minutes = Int(line[minRange]),
-               let sec = Int(line[secRange]) {
-                seconds = minutes * 60 + sec
+        for line in note.content.components(separatedBy: .newlines) {
+            if let detected = TimerSession.Mode(keyword: line) { mode = detected }
+            if let match = line.range(of: #"(\d+):(\d{1,2})"#, options: .regularExpression) {
+                let parts = line[match].split(separator: ":")
+                if parts.count == 2, let minutes = Int(parts[0]), let secs = Int(parts[1]) {
+                    seconds = minutes * 60 + secs
+                }
             }
         }
-
         return (mode, seconds)
     }
 
-    private func binding(for note: Note) -> Binding<Note> {
-        Binding(
-            get: {
-                guard let noteID = note.id,
-                      let index = self.notes.firstIndex(where: { $0.id == noteID }) else {
-                    return note
-                }
-                return self.notes[index]
-            },
-            set: { updatedNote in
-                if let noteID = updatedNote.id,
-                   let index = self.notes.firstIndex(where: { $0.id == noteID }) {
-                    self.notes[index] = updatedNote
-                } else if self.currentIndex >= 0 && self.currentIndex < self.notes.count {
-                    self.notes[self.currentIndex] = updatedNote
-                }
-
-                self.updateNote(updatedNote)
-            }
-        )
-    }
+    // MARK: - Privé
 
     private func reloadNotes(selecting selectedID: Int64? = nil) {
         let allNotes = Note.fetchAll()
@@ -289,118 +351,80 @@ final class NoteStore: ObservableObject {
             return
         }
 
-        if let selectedID,
-           let index = notes.firstIndex(where: { $0.id == selectedID }) {
+        if let selectedID, let index = notes.firstIndex(where: { $0.id == selectedID }) {
             currentIndex = index
             return
         }
-
         currentIndex = min(max(currentIndex, 0), notes.count - 1)
     }
 
     private var legacyArchivedNoteIDs: Set<Int64> {
         guard let data = legacyArchivedNoteIDsStorage.data(using: .utf8),
-              let ids = try? JSONDecoder().decode([Int64].self, from: data) else {
-            return []
-        }
+              let ids = try? JSONDecoder().decode([Int64].self, from: data) else { return [] }
         return Set(ids)
-    }
-
-    private func setLegacyArchivedNoteIDs(_ ids: Set<Int64>) {
-        let sorted = ids.sorted()
-        if let data = try? JSONEncoder().encode(sorted),
-           let json = String(data: data, encoding: .utf8) {
-            legacyArchivedNoteIDsStorage = json
-        }
     }
 
     private func migrateLegacyArchiveIDsIfNeeded() {
         guard !archivedIDsMigratedToDatabase else { return }
-
         let archivedIDs = legacyArchivedNoteIDs
         guard !archivedIDs.isEmpty else {
             archivedIDsMigratedToDatabase = true
             return
         }
-
-        let existing = Note.fetchAllIncludingDeleted()
-        for var note in existing where archivedIDs.contains(note.id ?? -1) {
-            if note.archived {
-                continue
-            }
+        for var note in Note.fetchAllIncludingDeleted() where archivedIDs.contains(note.id ?? -1) && !note.archived {
             note.archived = true
             Note.update(note)
         }
-
-        setLegacyArchivedNoteIDs([])
+        legacyArchivedNoteIDsStorage = "[]"
         archivedIDsMigratedToDatabase = true
     }
 
     private func repairListNotesIfNeeded() {
         let selectedID = currentNote?.id
-        let candidates = notes + archivedNotes
         var changed = false
-
-        for note in candidates where note.keyword == "list" {
+        for note in notes + archivedNotes where note.keyword == "list" {
             let normalized = ListModeFormatter.normalizeForListMode(content: note.content, forceListHeader: false)
             guard normalized != note.content else { continue }
-
             var updated = note
             updated.content = normalized
             updated.detectKeyword()
             Note.update(updated)
             changed = true
         }
-
-        if changed {
-            reloadNotes(selecting: selectedID)
-        }
+        if changed { reloadNotes(selecting: selectedID) }
     }
 
     private func adjacentNoteID(forDeletedNoteID noteID: Int64?) -> Int64? {
-        guard let noteID,
-              let deletedIndex = notes.firstIndex(where: { $0.id == noteID }) else {
+        guard let noteID, let deletedIndex = notes.firstIndex(where: { $0.id == noteID }) else {
             return currentNote?.id
         }
-
-        if deletedIndex + 1 < notes.count {
-            return notes[deletedIndex + 1].id
-        }
-
-        if deletedIndex - 1 >= 0 {
-            return notes[deletedIndex - 1].id
-        }
-
+        if deletedIndex + 1 < notes.count { return notes[deletedIndex + 1].id }
+        if deletedIndex - 1 >= 0 { return notes[deletedIndex - 1].id }
         return nil
     }
 
     private func deleteCurrentNoteIfEmptyAndSelectAdjacent(preferPrevious: Bool) -> Bool {
-        guard let current = currentNote else {
+        guard let current = currentNote,
+              current.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return false
         }
+        let preferredID = preferPrevious ? notes[safe: currentIndex - 1]?.id : notes[safe: currentIndex + 1]?.id
+        let fallbackID = preferPrevious ? notes[safe: currentIndex + 1]?.id : notes[safe: currentIndex - 1]?.id
 
-        if !current.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return false
+        if let id = current.id {
+            pendingSaveTasks[id]?.cancel()
+            pendingNotes[id] = nil
         }
-
-        let preferredID = preferPrevious
-            ? notes[safe: currentIndex - 1]?.id
-            : notes[safe: currentIndex + 1]?.id
-        let fallbackID = preferPrevious
-            ? notes[safe: currentIndex + 1]?.id
-            : notes[safe: currentIndex - 1]?.id
-
         Note.delete(current)
+        TimerRegistry.shared.discard(noteUUID: current.uuid)
         SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: preferredID ?? fallbackID)
         return true
     }
 }
 
-
 private extension Array {
     subscript(safe index: Int) -> Element? {
-        guard indices.contains(index) else { return nil }
-        return self[index]
+        indices.contains(index) ? self[index] : nil
     }
 }

@@ -40,7 +40,7 @@
 
 ### Unit & Currency Conversion
 - Parse expressions like `10 km to mi`, `72 kg to lbs`, `100°F to °C`
-- Currency via `exchangerate.host` API with 1-hour cache in UserDefaults
+- Currency via Frankfurter / open.er-api (no key), fetched asynchronously, 1-hour cache; the note shows `…` until rates arrive
 - Parse `10 USD to JPY` style input
 
 ### OCR
@@ -93,7 +93,7 @@ entire embedded local runtime (MLX / GGUF / llama.cpp, registry, diagnostics).
 - **Database**: SQLite via GRDB.swift 7.0+
 - **Math Parser**: Custom recursive-descent parser (safe for untrusted input, NOT NSExpression)
 - **Collections**: swift-collections (OrderedCollections) for deterministic note ordering
-- **Currency API**: `exchangerate.host` with 1-hour UserDefaults cache
+- **Currency API**: Frankfurter (ECB) with open.er-api.com fallback, async, 1-hour cache (`CurrencyRateService`); never blocks the editor
 - **OCR**: Apple Vision VNRecognizeTextRequest (offline)
 
 ### Database Schema (v1)
@@ -119,28 +119,32 @@ entire embedded local runtime (MLX / GGUF / llama.cpp, registry, diagnostics).
 ### Project Structure
 ```
 Sources/AlphaNote/
-├── AlphaNoteApp.swift          # @main entry, AppDelegate, status item
+├── AlphaNoteApp.swift          # @main entry, menus, AppDelegate (hotkey, status item, theme, window levels)
 ├── Database/
-│   └── DatabaseManager.swift   # GRDB singleton, migrations
+│   └── DatabaseManager.swift   # GRDB singleton, migrations, safe fallback + relocation
 ├── Models/
-│   └── Note.swift              # Note model, CRUD
+│   ├── Note.swift              # Note model, CRUD
+│   ├── ListModeFormatter.swift
+│   └── TimerSession.swift      # Timer state per note (registry, persisted)
 ├── ViewModels/
-│   └── NoteStore.swift         # @Published notes, business logic
+│   ├── NoteStore.swift         # notes, debounced saves, modes, toast
+│   └── AIStore.swift           # JEV routing → deterministic local action
 ├── UI/
-│   ├── NoteWindowController.swift  # Floating window management
-│   ├── NoteListView.swift          # Main list, swipe nav
-│   ├── SettingsView.swift          # 4-tab settings
-│   └── NoteViews/
-│       ├── PlainNoteView.swift     # Default text editor
-│       ├── MathNoteView.swift      # Inline math evaluation
-│       ├── ListNoteView.swift      # Checklist mode
-│       ├── CodeNoteView.swift      # Code editor mode
-│       └── TimerNoteView.swift     # Timer (stopwatch/countdown/pomodoro)
+│   ├── NoteWindowController.swift  # Floating window, frame autosave, Esc
+│   ├── NoteListView.swift          # Main view: top bar, editor, overlay sidebar, ⌘K, toast
+│   ├── Editor/NoteEditorView.swift # ONE NSTextView for plain/math/list/code (decoration only)
+│   ├── NoteViews/TimerNoteView.swift
+│   ├── SettingsView.swift          # General, Apparence, Sync, IA, Mises à jour, Avancé
+│   ├── Settings/HotkeyRecorderView.swift
+│   └── Theme/AlphaNoteTheme.swift  # « Encre & or » palette
 ├── Evaluation/
-│   ├── MathEvaluator.swift         # Safe recursive-descent parser
-│   └── Converter.swift             # Unit + currency conversion
-└── Services/
-    └── HotkeyManager.swift         # Global hotkey registration
+│   ├── MathEvaluator.swift         # Safe recursive-descent parser (functions, %, !, pi)
+│   ├── MathDocumentEvaluator.swift # Variables, units, inline results (pure, tested)
+│   ├── Converter.swift             # Unit + currency conversion
+│   └── CurrencyRateService.swift   # Async cached exchange rates
+├── AI/                             # JEVClient, KeywordIntentRouter, ModeRoutingFeature, hash-64 embeddings
+├── Sync/                           # SyncEngine (ETag-aware), SyncModels
+└── Services/                       # HotkeyManager, Keychain, WebDAV, import, speech, updates
 ```
 
 ## Phase Plan
@@ -163,16 +167,19 @@ Sources/AlphaNote/
 - [x] Swipe navigation between notes
 - [x] Settings (4 tabs)
 
-### Phase 2 — Polish
-- [ ] Smooth animations and transitions
-- [ ] Keyboard shortcuts within notes
-- [ ] Search across notes
-- [ ] Find & replace within note
+### Phase 2 — Polish (2026-10-23 : single-editor rewrite)
+- [x] Smooth animations and transitions (overlay sidebar, ⌘K field, toast)
+- [x] Keyboard shortcuts within notes (modes ⌥⌘1-5, pin, archive, delete, prev/next)
+- [x] Search across notes (text + local semantic, ⇧⌘F)
+- [x] Find within note (⌘F find bar)
 - [ ] Smart paste with OCR (Apple Vision)
-- [ ] Note pinning UI
-- [ ] Theme support (light/dark/auto)
-- [ ] Custom font size
-- [ ] Auto-cleanup of empty notes
+- [x] Note pinning UI
+- [x] Theme support (light/dark/auto, applied app-wide)
+- [x] Custom font size
+- [x] Auto-cleanup of empty notes (on hide, configurable)
+- [x] Configurable global hotkey (recorder, layout-aware)
+- [x] Floating panel with remembered frame, Esc to hide
+- [x] Timer state survives note switches and relaunch
 
 ### Phase 3 — Advanced
 - [ ] Note tagging / categories
@@ -199,16 +206,16 @@ Sources/AlphaNote/
 - [x] Auto-delete empty notes
 - [x] Math evaluation (safe parser)
 - [x] Percent calculations
-- [x] Math functions (sqrt, log, etc.)
+- [x] Math functions (sqrt, abs, round, floor, ceil, ln, log, log2, exp, sin, cos, tan, min, max, pi)
 - [x] Factorial
 - [x] Unit conversion (distance, mass, temp)
 - [x] Currency conversion (API + cache)
 - [x] Checklist mode
 - [x] Code editor mode
 - [x] Timer modes (stopwatch, countdown, pomodoro)
-- [x] Settings (general, appearance, keywords, advanced)
+- [x] Settings (general, appearance, sync, AI, updates, advanced)
 - [ ] OCR paste (Phase 2)
-- [ ] Search (Phase 2)
+- [x] Search (Phase 2)
 - [ ] Replace (Phase 2)
-- [ ] Theme support (Phase 2)
-- [ ] Export (Phase 3)
+- [x] Theme support (Phase 2)
+- [x] Export JSON / Markdown (Phase 3)

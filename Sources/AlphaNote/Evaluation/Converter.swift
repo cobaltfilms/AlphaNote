@@ -200,60 +200,28 @@ final class Converter {
 
     // MARK: - Currency Conversion
 
-    private var cachedRates: [String: Double] = [:]
-    private var ratesBase: String = ""
-    private var ratesTimestamp: Date = .distantPast
+    private let rateService: CurrencyRateService
 
+    init(rateService: CurrencyRateService = .shared) {
+        self.rateService = rateService
+    }
+
+    /// Conversion de devises sans jamais bloquer : taux lu dans le cache
+    /// (`CurrencyRateService`), nil si absent — le service télécharge alors en
+    /// arrière-plan et notifie `alphaNoteCurrencyRatesDidUpdate`.
     private func convertCurrency(value: Double, from: String, to: String) -> String? {
-        guard from.count == 3,
-              to.count == 3,
-              from.allSatisfy({ $0.isUppercase }),
-              to.allSatisfy({ $0.isUppercase }) else {
+        let fromCode = from.uppercased()
+        let toCode = to.uppercased()
+        guard fromCode.count == 3, toCode.count == 3,
+              fromCode.allSatisfy({ $0.isLetter }), toCode.allSatisfy({ $0.isLetter }),
+              fromCode != toCode else {
             return nil
         }
 
-        let group = DispatchGroup()
-        group.enter()
-
-        var result: String?
-
-        fetchRates(base: from) { rates in
-            if let rate = rates[to] {
-                let converted = value * rate
-                result = "\(self.formatNumber(converted)) \(to)"
-            }
-            group.leave()
+        guard let rate = rateService.rate(from: fromCode, to: toCode) else {
+            return nil
         }
-
-        _ = group.wait(timeout: .now() + 5)
-
-        return result
-    }
-
-    private func fetchRates(base: String, completion: @escaping ([String: Double]) -> Void) {
-        if ratesBase == base && Date().timeIntervalSince(ratesTimestamp) < 3600 && !cachedRates.isEmpty {
-            completion(cachedRates)
-            return
-        }
-
-        let urlStr = "https://api.exchangerate.host/latest?base=\(base)"
-        guard let url = URL(string: urlStr) else {
-            completion([:])
-            return
-        }
-
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let rates = json["rates"] as? [String: Double] else {
-                completion([:])
-                return
-            }
-            self?.cachedRates = rates
-            self?.ratesBase = base
-            self?.ratesTimestamp = Date()
-            completion(rates)
-        }.resume()
+        return "\(formatNumber(value * rate)) \(toCode)"
     }
 
     // MARK: - Helpers
@@ -297,7 +265,7 @@ final class Converter {
             return String(Int64(value))
         }
 
-        var formatted = String(format: "%.6f", value)
+        var formatted = String(format: "%.4f", value)
         while formatted.last == "0" {
             formatted.removeLast()
         }

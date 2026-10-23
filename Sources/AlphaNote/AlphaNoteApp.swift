@@ -13,100 +13,158 @@ struct AlphaNoteApp: App {
         }
         .commands {
             CommandMenu("Notes") {
-                Button("Nouvelle note") {
-                    NotificationCenter.default.post(name: .alphaNoteCreateNote, object: nil)
-                }
-                .keyboardShortcut("n", modifiers: [.command, .option])
+                Button("Nouvelle note") { post(.alphaNoteCreateNote) }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
+                Button("Note précédente") { post(.alphaNoteNavigatePrevious) }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                Button("Note suivante") { post(.alphaNoteNavigateNext) }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
 
-                Button("Afficher / Masquer la liste") {
-                    NotificationCenter.default.post(name: .alphaNoteToggleSidebar, object: nil)
-                }
-                .keyboardShortcut("l", modifiers: [.command, .option])
+                Divider()
 
-                Button("Convertir en liste") {
-                    NotificationCenter.default.post(name: .alphaNoteConvertToList, object: nil)
+                Button("Afficher / masquer la liste") { post(.alphaNoteToggleSidebar) }
+                    .keyboardShortcut("l", modifiers: [.command, .option])
+                Button("Demande en langage naturel…") { post(.alphaNoteToggleCommandField) }
+                    .keyboardShortcut("k", modifiers: [.command])
+                Button("Rechercher dans les notes…") { post(.alphaNoteFocusSearch) }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+
+                Divider()
+
+                Menu("Mode") {
+                    ForEach(NoteMode.allCases, id: \.self) { mode in
+                        Button(mode.title) {
+                            NotificationCenter.default.post(name: .alphaNoteSetMode, object: mode)
+                        }
+                        .keyboardShortcut(mode.shortcutKey, modifiers: [.command, .option])
+                    }
                 }
-                .keyboardShortcut(listModeShortcutKeyEquivalent, modifiers: listModeShortcutModifierFlags)
+                Button("Convertir en liste") { post(.alphaNoteConvertToList) }
+                    .keyboardShortcut(listModeShortcutKeyEquivalent, modifiers: listModeShortcutModifierFlags)
+
+                Divider()
+
+                Button("Épingler / désépingler") { post(.alphaNoteTogglePin) }
+                    .keyboardShortcut("p", modifiers: [.command, .option])
+                Button("Archiver la note") { post(.alphaNoteArchiveCurrent) }
+                    .keyboardShortcut("e", modifiers: [.command, .option])
+                Button("Supprimer la note") { post(.alphaNoteDeleteCurrent) }
+                    .keyboardShortcut(.delete, modifiers: [.command, .option])
             }
 
             CommandGroup(replacing: .help) {
-                Button("AlphaNote Help") {
-                    NotificationCenter.default.post(name: .alphaNoteOpenHelpCenter, object: nil)
-                }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
+                Button("Aide AlphaNote") { post(.alphaNoteOpenHelpCenter) }
+                    .keyboardShortcut("h", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") {
-                    NotificationCenter.default.post(name: .alphaNoteCheckForUpdates, object: nil)
-                }
+                Button("Rechercher des mises à jour…") { post(.alphaNoteCheckForUpdates) }
             }
         }
     }
 
+    private func post(_ name: Notification.Name) {
+        NotificationCenter.default.post(name: name, object: nil)
+    }
+
     private var listModeShortcutKeyEquivalent: KeyEquivalent {
-        let lower = listModeShortcutKey.lowercased()
-        let first = lower.first ?? "l"
-        return KeyEquivalent(first)
+        KeyEquivalent(listModeShortcutKey.lowercased().first ?? "l")
     }
 
     private var listModeShortcutModifierFlags: EventModifiers {
         switch listModeShortcutModifiers {
-        case "command":
-            return [.command]
-        case "commandOption":
-            return [.command, .option]
-        case "commandControl":
-            return [.command, .control]
-        case "commandShift":
-            fallthrough
-        default:
-            return [.command, .shift]
+        case "command": return [.command]
+        case "commandOption": return [.command, .option]
+        case "commandControl": return [.command, .control]
+        default: return [.command, .shift]
         }
     }
 }
 
+extension NoteMode {
+    var title: String {
+        switch self {
+        case .plain: return "Texte"
+        case .math: return "Math"
+        case .list: return "Liste"
+        case .code: return "Code"
+        case .timer: return "Minuteur"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .plain: return "text.alignleft"
+        case .math: return "function"
+        case .list: return "checklist"
+        case .code: return "chevron.left.forwardslash.chevron.right"
+        case .timer: return "timer"
+        }
+    }
+
+    var shortcutKey: KeyEquivalent {
+        switch self {
+        case .plain: return "1"
+        case .math: return "2"
+        case .list: return "3"
+        case .code: return "4"
+        case .timer: return "5"
+        }
+    }
+}
+
+// MARK: - AppDelegate
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var hotkeyManager: HotkeyManager?
+    static let showInDockKey = "showInDock"
+    static let showInMenuBarKey = "showInMenuBar"
+    static let autoCleanupKey = "autoCleanup"
+    static let themeKey = "theme"
+
+    private var hotkeyManager = HotkeyManager()
     private var windowController: NoteWindowController?
-    private var settingsWindowController: NSWindowController?
     private var helpWindowController: NSWindowController?
     private var statusItem: NSStatusItem?
-    private var savedNoteWindowLevel: NSWindow.Level?
-    private var observedSettingsWindows = Set<ObjectIdentifier>()
+    private var appliedHotkey: (UInt32, UInt)?
+    private var observers: [NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.register(defaults: [
+            HotkeySettings.enabledKey: true,
+            Self.showInDockKey: true,
+            Self.showInMenuBarKey: true,
+            Self.autoCleanupKey: true,
+            NoteWindowController.alwaysOnTopKey: true,
+            Self.themeKey: "system",
+            "fontSize": 14.0,
+            "listCheckTrigger": "/x"
+        ])
+
         PreferencesMigration.migrateLegacyDefaultsIfNeeded()
         DatabaseManager.shared.setup()
         SyncEngine.shared.start()
-        _ = NSApp.setActivationPolicy(.regular)
+        applyTheme()
+        applyActivationPolicy()
         configureDockIcon()
 
         windowController = NoteWindowController()
         windowController?.showWindow()
 
-        hotkeyManager = HotkeyManager()
-        hotkeyManager?.registerGlobalHotkey(keyCode: 0, modifiers: .option) { [weak self] in
-            DispatchQueue.main.async {
-                self?.toggleWindow()
+        hotkeyManager.onHotkey = { [weak self] in self?.windowController?.toggle() }
+        applyHotkey()
+        applyStatusItem()
+
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: .alphaNoteOpenHelpCenter, object: nil, queue: .main) { [weak self] _ in self?.openHelpCenter() },
+            center.addObserver(forName: .alphaNoteCheckForUpdates, object: nil, queue: .main) { [weak self] _ in self?.checkForUpdates() },
+            center.addObserver(forName: .alphaNoteHideWindow, object: nil, queue: .main) { [weak self] _ in self?.windowController?.hideWindow() },
+            center.addObserver(forName: .alphaNoteOpenSettings, object: nil, queue: .main) { [weak self] _ in self?.openSettings() },
+            center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.applySettings() },
+            center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
+                self?.windowDidBecomeKey(note.object as? NSWindow)
             }
-        }
-
-        configureStatusItem()
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(openHelpCenter),
-            name: .alphaNoteOpenHelpCenter,
-            object: nil
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(checkForUpdates),
-            name: .alphaNoteCheckForUpdates,
-            object: nil
-        )
+        ]
 
         Task { @MainActor in
             UpdateManager.shared.checkOnLaunch()
@@ -114,119 +172,155 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        hotkeyManager?.unregisterAll()
+        NotificationCenter.default.post(name: .alphaNoteWindowWillHide, object: nil)
+        hotkeyManager.unregister()
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        windowController?.showWindow()
+        return false
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    // MARK: Réglages appliqués à chaud
+
+    private func applySettings() {
+        applyHotkey()
+        applyStatusItem()
+        applyActivationPolicy()
+        applyTheme()
+        windowController?.applyLevel()
+    }
+
+    private func applyHotkey() {
+        guard HotkeySettings.isEnabled else {
+            hotkeyManager.unregister()
+            appliedHotkey = nil
+            return
+        }
+        let keyCode = HotkeySettings.keyCode
+        let modifiers = HotkeySettings.modifiers
+        if let applied = appliedHotkey, applied.0 == keyCode, applied.1 == modifiers.rawValue { return }
+        if hotkeyManager.register(keyCode: keyCode, modifiers: modifiers) {
+            appliedHotkey = (keyCode, modifiers.rawValue)
+        } else {
+            appliedHotkey = nil
+        }
+    }
+
+    private func applyActivationPolicy() {
+        let showInDock = UserDefaults.standard.bool(forKey: Self.showInDockKey)
+        let policy: NSApplication.ActivationPolicy = showInDock ? .regular : .accessory
+        if NSApp.activationPolicy() != policy {
+            NSApp.setActivationPolicy(policy)
+        }
+    }
+
+    private func applyStatusItem() {
+        let showInMenuBar = UserDefaults.standard.bool(forKey: Self.showInMenuBarKey)
+            || !UserDefaults.standard.bool(forKey: Self.showInDockKey) // jamais les deux absents
+        if showInMenuBar, statusItem == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+            if let button = item.button {
+                let image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "AlphaNote")
+                image?.isTemplate = true
+                button.image = image
+                button.toolTip = "AlphaNote (\(HotkeySettings.displayString))"
+            }
+            item.menu = makeStatusMenu()
+            statusItem = item
+        } else if !showInMenuBar, let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        } else if let button = statusItem?.button {
+            button.toolTip = "AlphaNote (\(HotkeySettings.displayString))"
+        }
+    }
+
+    private func applyTheme() {
+        let wanted: NSAppearance.Name?
+        switch UserDefaults.standard.string(forKey: Self.themeKey) ?? "system" {
+        case "light": wanted = .aqua
+        case "dark": wanted = .darkAqua
+        default: wanted = nil
+        }
+        guard NSApp.appearance?.name != wanted else { return }
+        NSApp.appearance = wanted.map { NSAppearance(named: $0) } ?? nil
+    }
+
+    /// La fenêtre de notes flotte au-dessus de tout — sauf quand une autre
+    /// fenêtre d'AlphaNote (Réglages, Aide) passe devant.
+    private func windowDidBecomeKey(_ window: NSWindow?) {
+        guard let window, let noteWindow = windowController?.window else { return }
+        if window === noteWindow {
+            windowController?.applyLevel()
+        } else {
+            windowController?.demote()
+        }
+    }
+
+    // MARK: Icône
 
     private func configureDockIcon() {
         let size = NSSize(width: 1024, height: 1024)
         let image = NSImage(size: size)
-
         image.lockFocus()
 
-        NSColor.clear.setFill()
-        NSBezierPath(rect: NSRect(origin: .zero, size: size)).fill()
-
         let bgRect = NSRect(x: 96, y: 96, width: 832, height: 832)
-        let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 180, yRadius: 180)
-
+        let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 186, yRadius: 186)
         NSGraphicsContext.current?.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowBlurRadius = 18
         shadow.shadowOffset = NSSize(width: 0, height: -6)
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.22)
         shadow.set()
-
-        NSColor(calibratedRed: 0.10, green: 0.12, blue: 0.18, alpha: 1).setFill()
+        NSColor(srgbRed: 0.078, green: 0.066, blue: 0.051, alpha: 1).setFill()
         bgPath.fill()
-
         NSGraphicsContext.current?.restoreGraphicsState()
 
         let font = NSFont(name: "Menlo-Bold", size: 560) ?? NSFont.systemFont(ofSize: 560, weight: .bold)
-        let textAttributes: [NSAttributedString.Key: Any] = [
+        NSString(string: "A").draw(at: NSPoint(x: 305, y: 245), withAttributes: [
             .font: font,
-            .foregroundColor: NSColor(calibratedWhite: 0.96, alpha: 1)
-        ]
-        NSString(string: "A").draw(at: NSPoint(x: 305, y: 245), withAttributes: textAttributes)
-
-        NSColor(calibratedRed: 1.0, green: 0.73, blue: 0.30, alpha: 1).setFill()
+            .foregroundColor: NSColor(srgbRed: 0.953, green: 0.918, blue: 0.851, alpha: 1)
+        ])
+        NSColor(srgbRed: 0.851, green: 0.643, blue: 0.255, alpha: 1).setFill()
         NSBezierPath(roundedRect: NSRect(x: 596, y: 298, width: 36, height: 405), xRadius: 10, yRadius: 10).fill()
-
         image.unlockFocus()
 
         NSApp.applicationIconImage = image
     }
 
-    private func configureStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = item.button {
-            button.image = nil
-            button.title = "A|"
-            button.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
-            button.toolTip = "AlphaNote"
-        }
-        item.menu = makeStatusMenu()
-        statusItem = item
-    }
+    // MARK: Menu de la barre des menus
 
     private func makeStatusMenu() -> NSMenu {
         let menu = NSMenu()
 
-        let titleItem = NSMenuItem(title: "AlphaNote", action: nil, keyEquivalent: "")
-        titleItem.isEnabled = false
-        menu.addItem(titleItem)
-        menu.addItem(.separator())
-
-        let toggleItem = NSMenuItem(
-            title: "Toggle Window",
-            action: #selector(toggleFromMenu),
-            keyEquivalent: "a"
-        )
-        toggleItem.keyEquivalentModifierMask = [.option]
+        let toggleItem = NSMenuItem(title: "Afficher / masquer AlphaNote", action: #selector(toggleFromMenu), keyEquivalent: "")
         toggleItem.target = self
         menu.addItem(toggleItem)
 
-        let newNoteItem = NSMenuItem(
-            title: "New Note",
-            action: #selector(createNoteFromMenu),
-            keyEquivalent: "n"
-        )
-        newNoteItem.keyEquivalentModifierMask = [.option]
+        let newNoteItem = NSMenuItem(title: "Nouvelle note", action: #selector(createNoteFromMenu), keyEquivalent: "n")
+        newNoteItem.keyEquivalentModifierMask = [.command, .option]
         newNoteItem.target = self
         menu.addItem(newNoteItem)
 
-        let toggleListItem = NSMenuItem(
-            title: "Toggle Note List",
-            action: #selector(toggleListFromMenu),
-            keyEquivalent: "l"
-        )
-        toggleListItem.keyEquivalentModifierMask = [.option]
-        toggleListItem.target = self
-        menu.addItem(toggleListItem)
+        menu.addItem(.separator())
 
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        )
+        let settingsItem = NSMenuItem(title: "Réglages…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
-        let helpItem = NSMenuItem(
-            title: "Centre d’aide",
-            action: #selector(openHelpCenterFromMenu),
-            keyEquivalent: "h"
-        )
+        let helpItem = NSMenuItem(title: "Aide AlphaNote", action: #selector(openHelpCenter), keyEquivalent: "h")
         helpItem.keyEquivalentModifierMask = [.command, .shift]
         helpItem.target = self
         menu.addItem(helpItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(
-            title: "Quit AlphaNote",
-            action: #selector(quitApp),
-            keyEquivalent: "q"
-        )
+        let quitItem = NSMenuItem(title: "Quitter AlphaNote", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -234,37 +328,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleFromMenu() {
-        toggleWindow()
+        windowController?.toggle()
     }
 
     @objc private func createNoteFromMenu() {
-        showWindowIfNeeded()
+        windowController?.showWindow()
         NotificationCenter.default.post(name: .alphaNoteCreateNote, object: nil)
     }
 
-    @objc private func toggleListFromMenu() {
-        showWindowIfNeeded()
-        NotificationCenter.default.post(name: .alphaNoteToggleSidebar, object: nil)
-    }
-
-    @objc private func openSettings() {
-        demoteNoteWindowForSettings()
-        // Always use an AppKit settings window to avoid SwiftUI Settings scene invalidation edge cases.
-        showFallbackSettingsWindow()
-        _ = bringSettingsToFront()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self else { return }
-            let found = self.bringSettingsToFront()
-            if !found {
-                self.restoreNoteWindowLevelIfNeeded()
-            }
-        }
-        NSRunningApplication.current.activate(options: [.activateAllWindows])
+    @objc func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    @objc private func openHelpCenterFromMenu() {
-        openHelpCenter()
+        // Fenêtre Réglages SwiftUI (scène `Settings`) — un seul chemin d'ouverture.
+        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
     }
 
     @objc private func checkForUpdates() {
@@ -277,16 +354,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openHelpCenter() {
-        if let existingWindow = helpWindowController?.window {
-            existingWindow.makeKeyAndOrderFront(nil)
-            existingWindow.orderFrontRegardless()
-            NSRunningApplication.current.activate(options: [.activateAllWindows])
-            NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate(ignoringOtherApps: true)
+        if let existing = helpWindowController?.window {
+            existing.makeKeyAndOrderFront(nil)
             return
         }
-
-        let helpView = HelpCenterView()
-        let hostingView = NSHostingView(rootView: helpView)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 700),
@@ -297,131 +369,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Aide AlphaNote"
         window.isReleasedWhenClosed = false
         window.center()
-        window.contentView = hostingView
+        window.contentView = NSHostingView(rootView: HelpCenterView())
 
         let controller = NSWindowController(window: window)
         helpWindowController = controller
         controller.showWindow(nil)
-        NSRunningApplication.current.activate(options: [.activateAllWindows])
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
-    }
-
-    private func showWindowIfNeeded() {
-        ensureMainWindowController()
-        guard let windowController else { return }
-        NSApp.unhide(nil)
-        windowController.showWindow()
-    }
-
-    private func showFallbackSettingsWindow() {
-        if let existingWindow = settingsWindowController?.window {
-            existingWindow.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        let settingsView = SettingsView()
-        let hostingView = NSHostingView(rootView: settingsView)
-
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 390),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Settings"
-        window.level = .modalPanel
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.contentView = hostingView
-
-        let controller = NSWindowController(window: window)
-        settingsWindowController = controller
-        attachSettingsCloseHandler(to: window)
-        controller.showWindow(nil)
-    }
-
-    @discardableResult
-    private func bringSettingsToFront() -> Bool {
-        let settingsWindows = NSApp.windows.filter { [weak self] window in
-            if window === self?.settingsWindowController?.window {
-                return true
-            }
-
-            let title = window.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let settingsLikeTitle =
-                title.contains("settings") ||
-                title.contains("preferences") ||
-                title.contains("réglages")
-
-            return settingsLikeTitle
-        }
-
-        guard !settingsWindows.isEmpty else { return false }
-
-        for window in settingsWindows {
-            window.level = .modalPanel
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-            attachSettingsCloseHandler(to: window)
-        }
-        return true
-    }
-
-    private func demoteNoteWindowForSettings() {
-        guard let noteWindow = windowController?.window else { return }
-        if savedNoteWindowLevel == nil {
-            savedNoteWindowLevel = noteWindow.level
-        }
-        noteWindow.level = .normal
-    }
-
-    private func restoreNoteWindowLevelIfNeeded() {
-        guard let noteWindow = windowController?.window,
-              let previousLevel = savedNoteWindowLevel else {
-            return
-        }
-
-        noteWindow.level = previousLevel
-        savedNoteWindowLevel = nil
-    }
-
-    private func attachSettingsCloseHandler(to window: NSWindow) {
-        let id = ObjectIdentifier(window)
-        guard !observedSettingsWindows.contains(id) else { return }
-        observedSettingsWindows.insert(id)
-
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            if let closingWindow = notification.object as? NSWindow {
-                self.observedSettingsWindows.remove(ObjectIdentifier(closingWindow))
-            }
-            self.restoreNoteWindowLevelIfNeeded()
-        }
-    }
-
-    private func toggleWindow() {
-        ensureMainWindowController()
-        guard let windowController else { return }
-
-        if windowController.window?.isVisible == true {
-            windowController.hideWindow()
-        } else {
-            NSApp.unhide(nil)
-            windowController.showWindow()
-        }
-    }
-
-    private func ensureMainWindowController() {
-        if windowController == nil {
-            windowController = NoteWindowController()
-        }
     }
 }

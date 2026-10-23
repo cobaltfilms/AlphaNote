@@ -127,7 +127,10 @@ final class NextcloudWebDAVClient {
         return RemoteNotePayload(dto: dto, etag: result.headers["Etag"] ?? result.headers["ETag"])
     }
 
-    func uploadNote(_ dto: CloudNoteDTO, etag: String?) async throws {
+    /// Envoie la note ; retourne l'ETag renvoyé par le serveur (nil s'il n'en
+    /// donne pas), pour éviter de la re-télécharger à la sync suivante.
+    @discardableResult
+    func uploadNote(_ dto: CloudNoteDTO, etag: String?) async throws -> String? {
         let url = notesFolderURL.appendingPathComponent("\(dto.uuid).json")
         let encoder = CloudJSONCoder.makeEncoder()
         let payload = try encoder.encode(dto)
@@ -142,6 +145,7 @@ final class NextcloudWebDAVClient {
         if result.statusCode == 412 {
             throw NextcloudClientError.httpStatus(412)
         }
+        return result.headers["Etag"] ?? result.headers["ETag"] ?? result.headers["etag"]
     }
 
     func deleteNote(uuid: String) async throws {

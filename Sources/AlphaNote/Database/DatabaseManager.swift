@@ -13,6 +13,10 @@ final class DatabaseManager {
 
     private var dbQueue: DatabaseQueue?
 
+    /// Message affiché dans Réglages › Avancé si l'emplacement configuré n'a pas
+    /// pu être ouvert (AlphaNote retombe alors sur le dossier par défaut).
+    private(set) var setupErrorMessage: String?
+
     var databaseFileURL: URL {
         databaseDirectoryURL.appendingPathComponent(Self.defaultDatabaseFilename)
     }
@@ -36,48 +40,88 @@ final class DatabaseManager {
         return (candidate as NSString).expandingTildeInPath
     }
 
-    private var databaseURL: URL {
-        resolvedDatabaseFileURL()
-    }
-
     private init() {}
 
+    // MARK: - Ouverture
+
     func setup() {
-        if dbQueue != nil {
+        if dbQueue != nil { return }
+
+        let preferredURL = resolvedDatabaseFileURL()
+        if let queue = openQueue(at: preferredURL) {
+            dbQueue = queue
             return
         }
 
+        // Repli : dossier par défaut, sans toucher à la base existante.
+        let defaultDirectory = URL(fileURLWithPath: Self.defaultDatabaseDirectoryPath(), isDirectory: true)
+        try? FileManager.default.createDirectory(at: defaultDirectory, withIntermediateDirectories: true)
+        let fallbackURL = defaultDirectory.appendingPathComponent(Self.defaultDatabaseFilename)
+        if fallbackURL.standardizedFileURL != preferredURL.standardizedFileURL, let queue = openQueue(at: fallbackURL) {
+            setupErrorMessage = "Impossible d'ouvrir la base dans « \(preferredURL.deletingLastPathComponent().path) ». AlphaNote utilise le dossier par défaut."
+            UserDefaults.standard.removeObject(forKey: Self.databaseLocationUserDefaultsKey)
+            dbQueue = queue
+            return
+        }
+
+        // Dernier recours : base en mémoire, pour que l'app démarre quand même.
+        setupErrorMessage = "Impossible d'ouvrir la base de données : les notes de cette session ne seront pas conservées."
+        if let queue = try? DatabaseQueue() {
+            dbQueue = queue
+            try? migrate(queue)
+        }
+    }
+
+    private func openQueue(at url: URL) -> DatabaseQueue? {
         do {
             var config = Configuration()
             config.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA journal_mode=WAL")
                 try db.execute(sql: "PRAGMA foreign_keys=ON")
             }
-            dbQueue = try DatabaseQueue(path: databaseURL.path, configuration: config)
-            try migrate()
+            let queue = try DatabaseQueue(path: url.path, configuration: config)
+            try migrate(queue)
+            return queue
         } catch {
-            print("[DatabaseManager] Setup failed: \(error)")
+            print("[DatabaseManager] Ouverture impossible (\(url.path)) : \(error)")
+            return nil
         }
     }
 
     func getDBQueue() -> DatabaseQueue {
-        if dbQueue == nil {
-            setup()
-        }
-
+        if dbQueue == nil { setup() }
         guard let db = dbQueue else {
             fatalError("Database initialization failed.")
         }
         return db
     }
 
-    private func migrate() throws {
-        guard let dbQueue else { return }
+    /// Copie la base (après checkpoint WAL) dans `directory` et mémorise ce
+    /// dossier. L'app doit être relancée ensuite ; l'ancien fichier est conservé.
+    func relocateDatabase(to directory: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent(Self.defaultDatabaseFilename)
+        let source = databaseFileURL
+        guard destination.standardizedFileURL != source.standardizedFileURL else { return }
 
+        if let dbQueue {
+            _ = try dbQueue.writeWithoutTransaction { db in
+                try db.checkpoint(.truncate)
+            }
+        }
+        if fm.fileExists(atPath: destination.path) {
+            let backup = directory.appendingPathComponent("alphanote-\(Int(Date().timeIntervalSince1970)).sqlite.bak")
+            try fm.moveItem(at: destination, to: backup)
+        }
+        try fm.copyItem(at: source, to: destination)
+        UserDefaults.standard.set(directory.path, forKey: Self.databaseLocationUserDefaultsKey)
+    }
+
+    // MARK: - Migrations
+
+    private func migrate(_ dbQueue: DatabaseQueue) throws {
         var migrator = DatabaseMigrator()
-        // Keep user data across app rebuilds/runs.
-        // Automatic erase on schema change is convenient for prototyping,
-        // but it makes notes appear to "reset" during development.
         migrator.eraseDatabaseOnSchemaChange = false
 
         migrator.registerMigration("v1") { db in
@@ -111,10 +155,7 @@ final class DatabaseManager {
             let rows = try Row.fetchAll(db, sql: "SELECT id FROM note WHERE uuid IS NULL OR trim(uuid) = ''")
             for row in rows {
                 let id: Int64 = row["id"]
-                try db.execute(
-                    sql: "UPDATE note SET uuid = ? WHERE id = ?",
-                    arguments: [UUID().uuidString.lowercased(), id]
-                )
+                try db.execute(sql: "UPDATE note SET uuid = ? WHERE id = ?", arguments: [UUID().uuidString.lowercased(), id])
             }
 
             try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_note_uuid ON note(uuid)")
@@ -143,6 +184,8 @@ final class DatabaseManager {
         try migrator.migrate(dbQueue)
     }
 
+    // MARK: - Anciens noms de fichier
+
     private func resolvedDatabaseFileURL() -> URL {
         let canonicalURL = databaseDirectoryURL.appendingPathComponent(Self.defaultDatabaseFilename)
         migrateLegacyDatabaseFileIfNeeded(to: canonicalURL)
@@ -156,18 +199,13 @@ final class DatabaseManager {
             .map { directory.appendingPathComponent($0) }
             .filter { fm.fileExists(atPath: $0.path) }
 
-        guard let sourceURL = latestModifiedFileURL(from: legacyCandidates) else {
-            return
-        }
+        guard let sourceURL = latestModifiedFileURL(from: legacyCandidates) else { return }
 
         if fm.fileExists(atPath: canonicalURL.path) {
             let canonicalSize = fileSize(at: canonicalURL)
             let legacySize = fileSize(at: sourceURL)
-            let shouldReplaceCanonical = canonicalSize < 131_072 &&
-                legacySize > 262_144 &&
-                legacySize > canonicalSize * 4
+            let shouldReplaceCanonical = canonicalSize < 131_072 && legacySize > 262_144 && legacySize > canonicalSize * 4
             guard shouldReplaceCanonical else { return }
-
             do {
                 try fm.removeItem(at: canonicalURL)
             } catch {
@@ -190,13 +228,8 @@ final class DatabaseManager {
     private func latestModifiedFileURL(from urls: [URL]) -> URL? {
         var latest: (url: URL, date: Date)?
         for url in urls {
-            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            let date = values?.contentModificationDate ?? .distantPast
-            if let current = latest {
-                if date > current.date {
-                    latest = (url, date)
-                }
-            } else {
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if latest == nil || date > latest!.date {
                 latest = (url, date)
             }
         }
@@ -204,7 +237,6 @@ final class DatabaseManager {
     }
 
     private func fileSize(at url: URL) -> Int64 {
-        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
-        return Int64(values?.fileSize ?? 0)
+        Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
     }
 }

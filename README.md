@@ -13,14 +13,16 @@ between thoughts.
 
 ## Features
 
-- **Global hotkey (⌥A)** — instant access from anywhere
-- **Floating overlay window** — stays on top, out of the way
-- **Swipe navigation** — fluid note switching
-- **Keyword modes** — plain text, math (`=`), checklists, code, timer
-- **Live math evaluation** — safe recursive-descent parser, colloquial percent, variables
-- **Unit & currency conversion** — distance, mass, temp + live exchange rates
-- **Local SQLite persistence** + optional Nextcloud sync
-- **In-app help center** + full embedded documentation
+- **Global hotkey** (⌥A by default, recordable) — instant access from anywhere; Esc hides
+- **Floating window** — stays on top, remembers its frame, follows the active Space
+- **One editor for every mode** — `math`, `list`, `code` or `timer` on the first line just decorates the text; no focus loss
+- **Live math** — variables, inline results, functions, percent, units, currencies (async rates)
+- **Checklists** — click the margin to tick, `- ` bullets continue on Enter
+- **Timers** — countdown / stopwatch / pomodoro that survive note switches and relaunch
+- **⌘K natural-language routing** — a JEV decision server *classifies* the request, local code applies it; keyword fallback shown on screen
+- **Overlay note list** (⌥⌘L) with text + local semantic search, pins and archive
+- **Local SQLite persistence** (debounced writes) + optional Nextcloud sync (ETag-aware)
+- **In-app help center** (⇧⌘H) + full embedded guide
 
 ## Tech Stack
 
@@ -36,7 +38,8 @@ between thoughts.
 ## Build
 
 ```bash
-swift build
+swift build                      # debug binary (.build/debug/AlphaNote)
+scripts/build-app.sh 1.2.0 --zip # AlphaNote.app + zip; CODESIGN_IDENTITY=... for a stable signature
 ```
 
 ## Test

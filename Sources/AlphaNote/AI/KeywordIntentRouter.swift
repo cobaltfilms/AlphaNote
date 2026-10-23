@@ -83,7 +83,7 @@ enum KeywordIntentRouter {
 
         let query = normalized(question)
         let markers = [
-            "timer", "minuteur", "chronometre", "chronomètre",
+            "timer", "minuteur", "chrono",
             "pomodoro", "countdown", "stopwatch"
         ]
         if markers.contains(where: { query.contains($0) }) {
@@ -108,7 +108,7 @@ enum KeywordIntentRouter {
         let type: TimerType
         if query.contains("pomodoro") {
             type = .pomodoro
-        } else if query.contains("stopwatch") || query.contains("chronometre") || query.contains("chronomètre") {
+        } else if query.contains("stopwatch") || query.contains("chrono") {
             type = .stopwatch
         } else {
             type = .countdown

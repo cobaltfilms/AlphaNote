@@ -1,490 +1,792 @@
 import SwiftUI
 import AppKit
 
+/// Vue principale : une surface d'écriture, une barre d'outils minimale, la
+/// liste des notes en volet superposé (⌥⌘L), la demande en langage naturel en
+/// champ éphémère (⌘K) et un toast pour les retours. Pas de compteur, pas de
+/// panneau permanent : l'écran appartient au texte.
 struct NoteListView: View {
-    @StateObject private var store = NoteStore()
-    @State private var isSidebarVisible = true
-    @State private var showArchived = false
-    @State private var renamingNote: Note?
-    @State private var renameDraft = ""
-    @State private var semanticQuery = ""
-    @State private var questionDraft = ""
-    @State private var perNoteQuestionDraft: [Int64: String] = [:]
-    @State private var lastRoutedQuestion = ""
-    @State private var isAnswering = false
-    @State private var showMicPermissionAlert = false
-    @FocusState private var isAIQuestionFocused: Bool
+    @StateObject fileprivate var store = NoteStore()
     @StateObject private var speechRecognizer = SpeechRecognizer()
 
+    @AppStorage("fontSize") private var fontSize: Double = 14
+    @AppStorage("listCheckTrigger") private var listCheckTrigger: String = "/x"
+    @AppStorage(AppDelegate.autoCleanupKey) private var autoCleanup = true
+
+    @AppStorage("sidebarVisible") private var isSidebarVisible = false
+    @State private var isCommandVisible = false
+    @State private var showArchived = false
+    @State private var searchQuery = ""
+    @State private var commandDraft = ""
+    @State private var isRouting = false
+    @State private var renamingNote: Note?
+    @State private var renameDraft = ""
+    @State private var showMicPermissionAlert = false
+    @State private var confirmDelete: Note?
+
+    @FocusState private var isSearchFocused: Bool
+    @FocusState private var isCommandFocused: Bool
+
     var body: some View {
-        ZStack {
-            Palette.windowColor
-                .ignoresSafeArea()
-
-            HStack(spacing: 0) {
-                if isSidebarVisible {
-                    sidebar
-                    Divider()
+        mainLayers
+            .tint(Palette.accentColor)
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isSidebarVisible)
+            .animation(.spring(response: 0.24, dampingFraction: 0.9), value: isCommandVisible)
+            .animation(.easeInOut(duration: 0.2), value: store.toast)
+            .onAppear { store.loadNotes() }
+            .modifier(NotificationHandlers(view: self))
+            .onChange(of: speechRecognizer.transcript) { _, newValue in
+                if !newValue.isEmpty { commandDraft = newValue }
+            }
+            .onChange(of: speechRecognizer.isListening) { _, listening in
+                if !listening, !commandDraft.isEmpty, !isRouting { submitCommand() }
+            }
+            .sheet(item: $renamingNote) { note in renameSheet(for: note) }
+            .alert("Supprimer cette note ?", isPresented: deleteAlertBinding, presenting: confirmDelete) { note in
+                Button("Supprimer", role: .destructive) { store.deleteNote(note) }
+                Button("Annuler", role: .cancel) {}
+            } message: { note in
+                Text("« \(displayTitle(note)) » sera supprimée. Les notes vides se suppriment sans confirmation.")
+            }
+            .alert("Reconnaissance vocale", isPresented: $showMicPermissionAlert) {
+                Button("Ouvrir les Réglages Système") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
-
-                content
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("AlphaNote a besoin du microphone et de la reconnaissance vocale. Activez-les dans Réglages Système › Confidentialité.")
             }
-        }
-        .tint(Palette.accentColor)
-        .onAppear {
-            store.loadNotes()
-            syncRightAIPanelWithCurrentNote()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .alphaNoteCreateNote)) { _ in
-            store.addNote()
-            isSidebarVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .alphaNoteToggleSidebar)) { _ in
-            withAnimation(.easeInOut(duration: 0.18)) {
-                isSidebarVisible.toggle()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .alphaNoteConvertToList)) { _ in
-            store.convertCurrentNoteToList()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .alphaNoteDidSync)) { _ in
-            Task { @MainActor in
-                store.loadNotes()
-            }
-        }
-        .onChange(of: store.currentNote?.id) {
-            syncRightAIPanelWithCurrentNote()
-        }
-        .onChange(of: questionDraft) {
-            guard let noteID = store.currentNote?.id else { return }
-            perNoteQuestionDraft[noteID] = questionDraft
-        }
-        .onChange(of: speechRecognizer.transcript) { _, newValue in
-            if !newValue.isEmpty {
-                questionDraft = newValue
-            }
-        }
-        .onChange(of: speechRecognizer.isListening) { _, isListening in
-            if !isListening && !questionDraft.isEmpty && !isAnswering {
-                askQuestionToCurrentNote()
-            }
-        }
-        .alert("Reconnaissance vocale", isPresented: $showMicPermissionAlert) {
-            Button("Ouvrir les Préférences Système") {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            Button("Annuler", role: .cancel) { }
-        } message: {
-            Text("AlphaNote a besoin d'accéder au microphone et à la reconnaissance vocale. Veuillez activer ces permissions dans les Préférences Système.")
-        }
     }
 
-    private var sidebar: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Notes")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    store.addNote()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .help("Nouvelle note")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-
-            Divider()
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    VStack(spacing: 6) {
-                    HStack(spacing: 6) {
-                        TextField("Rechercher", text: $semanticQuery)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11))
-                            .onSubmit {
-                                Task { await store.semanticSearch(query: semanticQuery) }
-                            }
-                        if !semanticQuery.isEmpty {
-                            Button {
-                                semanticQuery = ""
-                                store.semanticSearchResults = []
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if !semanticQuery.isEmpty && filteredNotes.isEmpty {
-                        Text("Aucun résultat")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                    .padding(.bottom, 6)
-
-                    ForEach(Array(filteredNotes.enumerated()), id: \.element.id) { index, note in
-                        noteRow(note: note, index: store.notes.firstIndex(where: { $0.id == note.id }) ?? index, isArchived: false)
-                    }
-
-                    if !store.archivedNotes.isEmpty {
-                        Divider().padding(.vertical, 2)
-
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                showArchived.toggle()
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: showArchived ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                                Text("Archives (\(store.archivedNotes.count))")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                        }
-                        .buttonStyle(.plain)
-
-                        if showArchived {
-                            ForEach(store.archivedNotes, id: \.id) { note in
-                                noteRow(note: note, index: nil, isArchived: true)
-                            }
-                        }
-                    }
-                }
-                .padding(10)
-            }
-        }
-        .frame(width: 220)
-        .background(Palette.sidebarColor)
-        .sheet(item: $renamingNote) { note in
-            renameSheet(for: note)
-        }
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })
     }
 
-    private var content: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isSidebarVisible.toggle()
-                    }
-                } label: {
-                    Image(systemName: "sidebar.leading")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .buttonStyle(.plain)
-                .help("Afficher/Masquer la liste")
-
-                Text(positionLabel)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Button {
-                    store.addNote()
-                } label: {
-                    Label("Nouvelle note", systemImage: "square.and.pencil")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .buttonStyle(.plain)
+    /// Deux colonnes : le volet des notes (optionnel, persistant) pousse
+    /// l'éditeur au lieu de le recouvrir ; la demande ⌘K et le toast flottent
+    /// uniquement au-dessus de la colonne éditeur.
+    private var mainLayers: some View {
+        HStack(spacing: 0) {
+            if isSidebarVisible {
+                sidebarPane
+                    .frame(width: Self.sidebarWidth)
+                    .transition(.move(edge: .leading))
+                Rectangle()
+                    .fill(Palette.lineColor)
+                    .frame(width: 1)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            editorColumn
+        }
+        .background(Palette.contentColor)
+        .ignoresSafeArea()
+    }
 
-            Divider()
+    private static let sidebarWidth: CGFloat = 260
 
-            HStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    TextField("Tape ou dicte, puis Entrée…", text: $questionDraft)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, weight: .medium))
-                        .focused($isAIQuestionFocused)
-                        .submitLabel(.send)
-                        .disabled(isAnswering)
-                        .onSubmit {
-                            askQuestionToCurrentNote()
-                        }
+    private var editorColumn: some View {
+        ZStack(alignment: .top) {
+            Palette.contentColor
 
-                    ForEach(detectedBadges, id: \.id) { badge in
-                        intentBadge(badge)
-                    }
-
-                    if isAnswering {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else if speechRecognizer.isListening {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(Color(nsColor: Palette.timer))
-                    }
-
-                    micButton
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Palette.fieldColor)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(
-                            isAIQuestionFocused
-                                ? Palette.accentColor.opacity(0.95)
-                                : Palette.accentColor.opacity(0.45),
-                            lineWidth: isAIQuestionFocused ? 1.8 : 1.0
-                        )
-                )
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-
-            if let status = store.aiStatusMessage, !status.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: store.lastRoute?.source == .jev ? "sparkles" : "text.magnifyingglass")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Palette.secondaryColor)
-                    Text(status)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Palette.secondaryColor)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+            VStack(spacing: 0) {
+                topBar
+                editorArea
             }
 
-            ZStack {
-                if store.notes.isEmpty {
-                    Text("No notes")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                } else if let note = store.currentNote {
-                    ZStack {
-                        store.viewForNote(note)
-                            .id(note.id)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                        TrackpadSwipeMonitorView(
-                            onSwipeLeft: { store.navigateNext() },
-                            onSwipeRight: { store.navigatePrevious() }
-                        )
-                        .allowsHitTesting(false)
-                    }
-                }
+            if isCommandVisible {
+                commandField
+                    .padding(.top, 44)
+                    .padding(.horizontal, 16)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            toastView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Palette.contentColor)
+        .clipped()
     }
 
-    private var positionLabel: String {
-        guard !store.notes.isEmpty else { return "0 / 0" }
-        return "\(store.currentIndex + 1) / \(store.notes.count)"
-    }
+    /// Les commandes de menu et de l'AppDelegate arrivent par notifications.
+    private struct NotificationHandlers: ViewModifier {
+        let view: NoteListView
 
-    private func askQuestionToCurrentNote() {
-        guard !isAnswering else { return }
-        let question = questionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty else { return }
-        Task {
-            isAnswering = true
-            lastRoutedQuestion = question
-            await store.routeQuestion(question)
-            isAnswering = false
+        func body(content: Content) -> some View {
+            let center = NotificationCenter.default
+            content
+                .onReceive(center.publisher(for: .alphaNoteCreateNote)) { _ in view.store.addNote(); view.closeOverlays() }
+                .onReceive(center.publisher(for: .alphaNoteToggleSidebar)) { _ in view.toggleSidebar() }
+                .onReceive(center.publisher(for: .alphaNoteFocusSearch)) { _ in view.openSearch() }
+                .onReceive(center.publisher(for: .alphaNoteToggleCommandField)) { _ in view.toggleCommandField() }
+                .onReceive(center.publisher(for: .alphaNoteConvertToList)) { _ in view.store.convertCurrentNoteToList() }
+                .onReceive(center.publisher(for: .alphaNoteNavigateNext)) { _ in view.store.navigateNext() }
+                .onReceive(center.publisher(for: .alphaNoteNavigatePrevious)) { _ in view.store.navigatePrevious() }
+                .onReceive(center.publisher(for: .alphaNoteTogglePin)) { _ in view.togglePinCurrent() }
+                .onReceive(center.publisher(for: .alphaNoteArchiveCurrent)) { _ in view.archiveCurrent() }
+                .onReceive(center.publisher(for: .alphaNoteDeleteCurrent)) { _ in view.deleteCurrent() }
+                .onReceive(center.publisher(for: .alphaNoteSetMode)) { notification in view.setMode(notification.object as? NoteMode) }
+                .onReceive(center.publisher(for: .alphaNoteDidSync)) { _ in view.store.flushPendingSaves(); view.store.loadNotes() }
+                .onReceive(center.publisher(for: .alphaNoteWindowWillHide)) { _ in view.windowWillHide() }
         }
     }
 
-    @ViewBuilder
-    private var micButton: some View {
-        Button {
-            Task {
-                if speechRecognizer.isListening {
-                    speechRecognizer.stopListening()
-                } else {
-                    do {
-                        try await speechRecognizer.startListening()
-                    } catch {
-                        showMicPermissionAlert = true
+    fileprivate func openSearch() {
+        isSidebarVisible = true
+        DispatchQueue.main.async { isSearchFocused = true }
+    }
+
+    fileprivate func togglePinCurrent() {
+        if let note = store.currentNote { store.togglePin(note) }
+    }
+
+    fileprivate func archiveCurrent() {
+        guard let note = store.currentNote else { return }
+        store.archiveNote(note)
+        store.showToast("Note archivée", symbol: "archivebox")
+    }
+
+    fileprivate func deleteCurrent() {
+        if let note = store.currentNote { requestDelete(note) }
+    }
+
+    fileprivate func setMode(_ mode: NoteMode?) {
+        guard let mode, let note = store.currentNote else { return }
+        store.setMode(mode, for: note)
+    }
+
+    fileprivate func windowWillHide() {
+        store.flushPendingSaves()
+        if autoCleanup { store.deleteEmptyNotes() }
+        closeOverlays()
+    }
+
+    // MARK: - Barre supérieure
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            Button { toggleSidebar() } label: {
+                Image(systemName: "sidebar.leading")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.secondaryColor)
+            .help("Liste des notes (⌥⌘L)")
+
+            if let note = store.currentNote {
+                HStack(spacing: 6) {
+                    if note.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Palette.accentColor)
                     }
+                    Text(displayTitle(note))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Palette.secondaryColor)
+                        .lineLimit(1)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { beginRename(note) }
+            }
+
+            Spacer(minLength: 8)
+
+            if let note = store.currentNote {
+                modeChip(for: note)
+                noteMenu(for: note)
+            }
+
+            Button { store.addNote(); closeOverlays() } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.secondaryColor)
+            .help("Nouvelle note (⌥⌘N)")
+        }
+        .padding(.leading, isSidebarVisible ? 14 : 76) // feux tricolores
+        .padding(.trailing, 14)
+        .frame(height: 38)
+        .background(Palette.windowColor)
+    }
+
+    private func modeChip(for note: Note) -> some View {
+        let mode = NoteMode(rawValue: note.keyword) ?? .plain
+        return Menu {
+            ForEach(NoteMode.allCases, id: \.self) { candidate in
+                Button {
+                    store.setMode(candidate, for: note)
+                } label: {
+                    Label(candidate.title, systemImage: candidate.symbol)
+                }
+                .disabled(candidate == mode)
             }
         } label: {
-            Image(systemName: speechRecognizer.isListening ? "waveform.circle.fill" : "mic.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(speechRecognizer.isListening ? .red : .secondary)
-                .symbolEffect(.pulse, isActive: speechRecognizer.isListening)
+            HStack(spacing: 4) {
+                Image(systemName: mode.symbol)
+                    .font(.system(size: 9, weight: .bold))
+                Text(mode.label)
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(ModePalette.foreground(mode))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule(style: .continuous).fill(ModePalette.background(mode)))
         }
-        .buttonStyle(.plain)
-        .help(speechRecognizer.isListening ? "Arrêter l'écoute" : "Dictée vocale")
-        .disabled(isAnswering)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Mode de la note — la première ligne (math, list, code, timer) le change aussi")
     }
 
-    private struct IntentBadgeSpec {
-        let id: String
-        var label: String
-        let foreground: Color
-        let background: Color
-    }
-
-    private var detectedBadges: [IntentBadgeSpec] {
-        let question = questionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty else { return [] }
-        let keyword = store.currentNote?.keyword
-
-        if let route = store.lastRoute,
-           store.aiStatusMessage != nil,
-           question == lastRoutedQuestion {
-            var spec = badgeSpec(for: route.mode)
-            spec.label = "\(route.mode.label) · \(route.source.label)"
-            return [spec]
+    private func noteMenu(for note: Note) -> some View {
+        Menu {
+            Button { toggleCommandField() } label: { Label("Demande en langage naturel…", systemImage: "sparkles") }
+            Divider()
+            Button { store.togglePin(note) } label: {
+                Label(note.isPinned ? "Désépingler" : "Épingler", systemImage: note.isPinned ? "pin.slash" : "pin")
+            }
+            Button { beginRename(note) } label: { Label("Renommer…", systemImage: "pencil") }
+            Button { store.duplicateNote(note) } label: { Label("Dupliquer", systemImage: "plus.square.on.square") }
+            Button { copyNote(note) } label: { Label("Copier le contenu", systemImage: "doc.on.doc") }
+            Divider()
+            Button { store.archiveNote(note); store.showToast("Note archivée", symbol: "archivebox") } label: {
+                Label("Archiver", systemImage: "archivebox")
+            }
+            Button(role: .destructive) { requestDelete(note) } label: { Label("Supprimer", systemImage: "trash") }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Palette.secondaryColor)
         }
-
-        let preview = KeywordIntentRouter.classify(question, noteKeyword: keyword)
-        guard preview != .plain else { return [] }
-        var spec = badgeSpec(for: preview)
-        spec.label = "\(preview.label) ?"
-        return [spec]
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
+
+    // MARK: - Zone d'édition
 
     @ViewBuilder
-    private func intentBadge(_ spec: IntentBadgeSpec) -> some View {
-        Text(spec.label)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(spec.foreground)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(spec.background)
-            )
+    private var editorArea: some View {
+        if let note = store.currentNote {
+            ZStack {
+                if note.keyword == "timer" {
+                    timerView(for: note)
+                        .id(note.uuid)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    NoteEditorView(
+                        text: contentBinding(for: note),
+                        mode: NoteMode(rawValue: note.keyword) ?? .plain,
+                        fontSize: fontSize,
+                        checkTrigger: listCheckTrigger,
+                        onEscape: handleEscape
+                    )
+                    .id(note.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                TrackpadSwipeMonitorView(
+                    onSwipeLeft: { store.navigateNext() },
+                    onSwipeRight: { store.navigatePrevious() }
+                )
+                .allowsHitTesting(false)
+            }
+        } else {
+            Spacer()
+        }
     }
 
-    private func badgeSpec(for mode: NoteMode) -> IntentBadgeSpec {
-        IntentBadgeSpec(
-            id: mode.rawValue,
-            label: mode.label,
-            foreground: ModePalette.foreground(mode),
-            background: ModePalette.background(mode)
+    private func timerView(for note: Note) -> TimerNoteView {
+        let parameters = store.timerParameters(for: note)
+        let session = TimerRegistry.shared.session(for: note.uuid, defaultMode: parameters.mode, defaultSeconds: parameters.seconds)
+        return TimerNoteView(session: session)
+    }
+
+    private func contentBinding(for note: Note) -> Binding<String> {
+        Binding(
+            get: {
+                guard let id = note.id, let current = store.notes.first(where: { $0.id == id }) else { return note.content }
+                return current.content
+            },
+            set: { newValue in
+                guard let id = note.id, var current = store.notes.first(where: { $0.id == id }),
+                      current.content != newValue else { return }
+                current.content = newValue
+                store.edit(current)
+            }
         )
     }
 
-    private func title(for note: Note, index: Int) -> String {
-        let displayTitle = note.effectiveTitle
-        if !displayTitle.isEmpty {
-            return displayTitle
-        }
-        return "Note \(index + 1)"
-    }
+    // MARK: - Champ de demande (⌘K)
 
-    private func preview(for note: Note) -> String {
-        let source: String
-        if note.keyword == "list" {
-            let lines = note.content.components(separatedBy: .newlines)
-            if let first = lines.first, ListModeFormatter.isListHeader(first) {
-                source = Array(lines.dropFirst()).joined(separator: "\n")
-            } else {
-                source = note.content
+    private var commandField: some View {
+        let preview = KeywordIntentRouter.classify(commandDraft, noteKeyword: store.currentNote?.keyword)
+        return HStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.accentColor)
+
+            TextField("Demande : « minuteur 25 min », « courses : pain, lait », « 12 km to mi »…", text: $commandDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($isCommandFocused)
+                .disabled(isRouting)
+                .onSubmit(submitCommand)
+                .onExitCommand { closeCommandField() }
+
+            if !commandDraft.trimmingCharacters(in: .whitespaces).isEmpty, preview != .plain {
+                Text("\(preview.label) ?")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(ModePalette.foreground(preview))
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Capsule().fill(ModePalette.background(preview)))
             }
-        } else {
-            source = note.content
-        }
 
-        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return "Vide"
+            if isRouting || speechRecognizer.isListening {
+                ProgressView().controlSize(.small)
+            }
+
+            Button {
+                Task {
+                    if speechRecognizer.isListening {
+                        speechRecognizer.stopListening()
+                    } else {
+                        do { try await speechRecognizer.startListening() } catch { showMicPermissionAlert = true }
+                    }
+                }
+            } label: {
+                Image(systemName: speechRecognizer.isListening ? "waveform.circle.fill" : "mic.fill")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(speechRecognizer.isListening ? Color(nsColor: Palette.timer) : Palette.secondaryColor)
+                    .symbolEffect(.pulse, isActive: speechRecognizer.isListening)
+            }
+            .buttonStyle(.plain)
+            .help(speechRecognizer.isListening ? "Arrêter l'écoute" : "Dicter")
+
+            Button { closeCommandField() } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Palette.secondaryColor.opacity(0.7))
+            }
+            .buttonStyle(.plain)
         }
-        return trimmed.replacingOccurrences(of: "\n", with: " ")
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Palette.fieldColor)
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Palette.accentColor.opacity(0.6), lineWidth: 1)
+        )
+        .onAppear { DispatchQueue.main.async { isCommandFocused = true } }
     }
 
-    @ViewBuilder
-    private func noteRow(note: Note, index: Int?, isArchived: Bool) -> some View {
-        let selected = index.map { $0 == store.currentIndex } ?? false
+    private func submitCommand() {
+        guard !isRouting else { return }
+        let question = commandDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else { closeCommandField(); return }
+        Task {
+            isRouting = true
+            await store.routeQuestion(question)
+            isRouting = false
+            commandDraft = ""
+            closeCommandField()
+        }
+    }
 
-        HStack(alignment: .top, spacing: 8) {
+    fileprivate func toggleCommandField() {
+        if isCommandVisible { closeCommandField() } else { isCommandVisible = true }
+    }
+
+    private func closeCommandField() {
+        if speechRecognizer.isListening { speechRecognizer.stopListening() }
+        isCommandVisible = false
+        refocusEditor()
+    }
+
+    // MARK: - Volet des notes
+
+    private var sidebarPane: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Palette.secondaryColor)
+                TextField("Rechercher", text: $searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .focused($isSearchFocused)
+                    .onSubmit { openFirstResultOrSearch() }
+                    .onExitCommand { closeSidebar() }
+                    .onMoveCommand { direction in moveSelection(direction) }
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                        store.semanticSearchResults = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.secondaryColor)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.fieldColor))
+            .padding(.horizontal, 12)
+            .padding(.top, 44) // sous les feux tricolores
+            .padding(.bottom, 8)
+            .onChange(of: searchQuery) { _, newValue in
+                if newValue.trimmingCharacters(in: .whitespaces).isEmpty {
+                    store.semanticSearchResults = []
+                } else {
+                    Task { await store.semanticSearch(query: newValue) }
+                }
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        let pinned = filteredNotes.filter(\.isPinned)
+                        let others = filteredNotes.filter { !$0.isPinned }
+
+                        if !pinned.isEmpty {
+                            sectionHeader("Épinglées", systemImage: "pin.fill")
+                            ForEach(pinned, id: \.id) { note in noteRow(note, archived: false) }
+                        }
+                        if !others.isEmpty {
+                            if !pinned.isEmpty { sectionHeader("Notes", systemImage: nil) }
+                            ForEach(others, id: \.id) { note in noteRow(note, archived: false) }
+                        }
+                        if filteredNotes.isEmpty {
+                            Text(searchQuery.isEmpty ? "Aucune note" : "Aucun résultat")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Palette.secondaryColor)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                        }
+
+                        if !store.archivedNotes.isEmpty {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { showArchived.toggle() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: showArchived ? "chevron.down" : "chevron.right")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text("Archives · \(store.archivedNotes.count)")
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Spacer()
+                                }
+                                .foregroundStyle(Palette.secondaryColor)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 12)
+                                .padding(.bottom, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if showArchived {
+                                ForEach(store.archivedNotes, id: \.id) { note in noteRow(note, archived: true) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 12)
+                }
+                .onChange(of: store.currentIndex) { _, _ in
+                    if let id = store.currentNote?.id {
+                        withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
+                    }
+                }
+            }
+
+            Divider()
+            HStack {
+                Text("\(store.notes.count) note\(store.notes.count > 1 ? "s" : "")")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.secondaryColor)
+                Spacer()
+                Button {
+                    NotificationCenter.default.post(name: .alphaNoteOpenSettings, object: nil)
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Palette.secondaryColor)
+                .help("Réglages (⌘,)")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+        .frame(maxHeight: .infinity)
+        .background(Palette.sidebarColor)
+    }
+
+    /// ↑ / ↓ dans le champ de recherche : change la note sélectionnée sans
+    /// quitter le volet (ordre d'affichage : épinglées puis les autres).
+    private func moveSelection(_ direction: MoveCommandDirection) {
+        let ordered = filteredNotes.filter(\.isPinned) + filteredNotes.filter { !$0.isPinned }
+        guard !ordered.isEmpty else { return }
+        let currentID = store.currentNote?.id
+        let index = ordered.firstIndex(where: { $0.id == currentID })
+        let target: Int
+        switch direction {
+        case .down: target = index.map { min($0 + 1, ordered.count - 1) } ?? 0
+        case .up: target = index.map { max($0 - 1, 0) } ?? 0
+        default: return
+        }
+        if let id = ordered[target].id { store.selectNote(id: id) }
+    }
+
+    /// Entrée dans la recherche : ouvre le premier résultat (déjà filtré au fil
+    /// de la frappe) et rend le focus à l'éditeur.
+    private func openFirstResultOrSearch() {
+        let ordered = filteredNotes.filter(\.isPinned) + filteredNotes.filter { !$0.isPinned }
+        if let first = ordered.first, let id = first.id {
+            store.selectNote(id: id)
+            refocusEditor()
+        } else {
+            Task { await store.semanticSearch(query: searchQuery) }
+        }
+    }
+
+    private func sectionHeader(_ title: String, systemImage: String?) -> some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage).font(.system(size: 9, weight: .bold))
+            }
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.6)
+            Spacer()
+        }
+        .foregroundStyle(Palette.secondaryColor)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private func noteRow(_ note: Note, archived: Bool) -> some View {
+        let selected = !archived && note.id == store.currentNote?.id
+        let mode = NoteMode(rawValue: note.keyword) ?? .plain
+        return HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(ModePalette.foreground(mode))
+                .frame(width: 7, height: 7)
+                .padding(.top, 5)
+                .opacity(mode == .plain ? 0.35 : 1)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(title(for: note, index: index ?? 0))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Palette.textColor)
-                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(displayTitle(note))
+                        .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(Palette.textColor)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(Self.shortDate(note.updatedAt))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Palette.secondaryColor.opacity(0.85))
+                        .monospacedDigit()
+                }
                 Text(preview(for: note))
                     .font(.system(size: 11))
                     .foregroundStyle(Palette.secondaryColor)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
-            Spacer(minLength: 4)
-            Menu {
-                Button("Renommer") {
-                    renamingNote = note
-                    renameDraft = title(for: note, index: index ?? 0)
-                }
-                Button("Dupliquer") {
-                    store.duplicateNote(note)
-                }
-                if isArchived {
-                    Button("Désarchiver") {
-                        store.unarchiveNote(note)
-                    }
-                } else {
-                    Button("Archiver") {
-                        store.archiveNote(note)
-                    }
-                }
-                Divider()
-                Button("Supprimer", role: .destructive) {
-                    store.deleteNote(note)
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(selected ? Palette.selectionColor : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .opacity(isArchived ? 0.72 : 1.0)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? Palette.selectionColor : Color.clear)
+        )
+        .opacity(archived ? 0.7 : 1)
+        .id(note.id)
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture {
-            guard !isArchived else { return }
-            if let noteID = note.id {
-                store.selectNote(id: noteID)
-            } else if let index {
-                store.currentIndex = index
+            if archived {
+                store.unarchiveNote(note)
+            } else if let id = note.id {
+                store.selectNote(id: id)
             }
+            refocusEditor()
         }
+        .contextMenu {
+            Button(note.isPinned ? "Désépingler" : "Épingler") { store.togglePin(note) }
+            Button("Renommer…") { beginRename(note) }
+            Button("Dupliquer") { store.duplicateNote(note) }
+            if archived {
+                Button("Désarchiver") { store.unarchiveNote(note) }
+            } else {
+                Button("Archiver") { store.archiveNote(note) }
+            }
+            Divider()
+            Button("Supprimer", role: .destructive) { requestDelete(note) }
+        }
+    }
+
+    private var filteredNotes: [Note] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return store.notes }
+        let lower = query.lowercased()
+        let textMatches = store.notes.filter {
+            $0.content.lowercased().contains(lower) || $0.title.lowercased().contains(lower)
+        }
+        let semanticIDs = Set(store.semanticSearchResults.map(\.note.uuid))
+        let textIDs = Set(textMatches.map(\.uuid))
+        let semanticOnly = store.notes.filter { semanticIDs.contains($0.uuid) && !textIDs.contains($0.uuid) }
+        return textMatches + semanticOnly
+    }
+
+    fileprivate func toggleSidebar() {
+        if isSidebarVisible { closeSidebar() } else {
+            isCommandVisible = false
+            isSidebarVisible = true
+            DispatchQueue.main.async { isSearchFocused = true }
+        }
+    }
+
+    private func closeSidebar() {
+        isSidebarVisible = false
+        refocusEditor()
+    }
+
+    /// Le volet est un état persistant, pas une superposition : seuls le champ
+    /// ⌘K et la dictée se ferment ici.
+    fileprivate func closeOverlays() {
+        if speechRecognizer.isListening { speechRecognizer.stopListening() }
+        isCommandVisible = false
+    }
+
+    private func handleEscape() {
+        if isCommandVisible {
+            closeCommandField()
+        } else {
+            NotificationCenter.default.post(name: .alphaNoteHideWindow, object: nil)
+        }
+    }
+
+    private func refocusEditor() {
+        DispatchQueue.main.async {
+            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
+                  let textView = firstTextView(in: window.contentView) else { return }
+            window.makeFirstResponder(textView)
+        }
+    }
+
+    private func firstTextView(in view: NSView?) -> NSTextView? {
+        guard let view else { return nil }
+        if let textView = view as? NoteTextView { return textView }
+        for subview in view.subviews {
+            if let found = firstTextView(in: subview) { return found }
+        }
+        return nil
+    }
+
+    // MARK: - Toast
+
+    @ViewBuilder
+    private var toastView: some View {
+        if let toast = store.toast {
+            VStack {
+                Spacer()
+                HStack(spacing: 8) {
+                    Image(systemName: toast.symbol)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Palette.accentColor)
+                    Text(toast.text)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.textColor)
+                        .lineLimit(2)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Palette.fieldColor)
+                        .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+                )
+                .overlay(Capsule(style: .continuous).stroke(Palette.lineColor, lineWidth: 1))
+                .padding(.bottom, 16)
+                .onTapGesture { store.toast = nil }
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    // MARK: - Divers
+
+    /// Date courte façon liste de notes : heure si aujourd'hui, « hier »,
+    /// jour de la semaine dans les 7 jours, sinon « 23 oct. ».
+    static func shortDate(_ date: Date, now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        if calendar.isDate(date, inSameDayAs: now) {
+            formatter.dateFormat = "HH:mm"
+        } else if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+                  calendar.isDate(date, inSameDayAs: yesterday) {
+            return "hier"
+        } else if let weekAgo = calendar.date(byAdding: .day, value: -6, to: now), date > weekAgo {
+            formatter.dateFormat = "EEE"
+        } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            formatter.dateFormat = "d MMM"
+        } else {
+            formatter.dateFormat = "MMM yyyy"
+        }
+        return formatter.string(from: date)
+    }
+
+    private func displayTitle(_ note: Note) -> String {
+        let title = note.effectiveTitle
+        return title.isEmpty ? "Note sans titre" : title
+    }
+
+    private func preview(for note: Note) -> String {
+        var lines = note.content.components(separatedBy: .newlines)
+        if let first = lines.first, NoteEditorView.Coordinator.isModeHeader(first.trimmingCharacters(in: .whitespaces)) {
+            lines.removeFirst()
+        }
+        if note.title.isEmpty, !lines.isEmpty, lines[0].trimmingCharacters(in: .whitespaces) == note.effectiveTitle {
+            lines.removeFirst()
+        }
+        let text = lines.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? "Vide" : text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
+    private func beginRename(_ note: Note) {
+        renameDraft = note.title.isEmpty ? displayTitle(note) : note.title
+        renamingNote = note
+    }
+
+    fileprivate func requestDelete(_ note: Note) {
+        if note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            store.deleteNote(note)
+        } else {
+            confirmDelete = note
+        }
+    }
+
+    private func copyNote(_ note: Note) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(note.content, forType: .string)
+        store.showToast("Contenu copié", symbol: "doc.on.doc")
     }
 
     private func renameSheet(for note: Note) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Renommer la note")
-                .font(.headline)
-            TextField("Nouveau nom", text: $renameDraft)
+            Text("Renommer la note").font(.headline)
+            TextField("Nom (vide = première ligne)", text: $renameDraft)
                 .textFieldStyle(.roundedBorder)
+                .onSubmit { store.renameNote(note, to: renameDraft); renamingNote = nil }
             HStack {
                 Spacer()
-                Button("Annuler") {
-                    renamingNote = nil
-                }
+                Button("Annuler") { renamingNote = nil }
                 Button("Enregistrer") {
                     store.renameNote(note, to: renameDraft)
                     renamingNote = nil
@@ -493,60 +795,11 @@ struct NoteListView: View {
             }
         }
         .padding(18)
-        .frame(width: 320)
-    }
-
-    private var filteredNotes: [Note] {
-        let query = semanticQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return store.notes }
-        let lower = query.lowercased()
-        let textMatches = store.notes.filter { note in
-            note.content.lowercased().contains(lower) ||
-            note.title.lowercased().contains(lower)
-        }
-        let hitIDs = Set(store.semanticSearchResults.map { $0.note.id })
-        if hitIDs.isEmpty {
-            return textMatches
-        }
-        let textIDs = Set(textMatches.map { $0.id })
-        let semanticOnly = store.notes.filter { hitIDs.contains($0.id) && !textIDs.contains($0.id) }
-        var merged = textMatches
-        for note in semanticOnly {
-            merged.append(note)
-        }
-        let ordered = Set(merged.map { $0.id })
-        return store.notes.filter { ordered.contains($0.id) }
-    }
-
-    private func syncRightAIPanelWithCurrentNote() {
-        guard let noteID = store.currentNote?.id else {
-            questionDraft = ""
-            return
-        }
-        questionDraft = perNoteQuestionDraft[noteID] ?? ""
+        .frame(width: 340)
     }
 }
 
-struct VisualEffectView: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-    let blendingMode: NSVisualEffectView.BlendingMode
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
-        view.wantsLayer = true
-        view.layer?.cornerRadius = 12
-        view.layer?.masksToBounds = true
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
-    }
-}
+// MARK: - Swipe trackpad
 
 private struct TrackpadSwipeMonitorView: NSViewRepresentable {
     let onSwipeLeft: () -> Void
@@ -558,7 +811,6 @@ private struct TrackpadSwipeMonitorView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        view.wantsLayer = false
         context.coordinator.attach(to: view)
         return view
     }
@@ -576,85 +828,57 @@ private struct TrackpadSwipeMonitorView: NSViewRepresentable {
     final class Coordinator {
         var onSwipeLeft: () -> Void
         var onSwipeRight: () -> Void
-
         private weak var view: NSView?
         private var monitor: Any?
-        private var accumulatedHorizontalDelta: CGFloat = 0
-        private var didTriggerForCurrentGesture = false
-
-        private let horizontalThreshold: CGFloat = 100
-        private let horizontalDominanceRatio: CGFloat = 1.35
+        private var accumulated: CGFloat = 0
+        private var didTrigger = false
+        private let threshold: CGFloat = 110
+        private let dominance: CGFloat = 1.4
 
         init(onSwipeLeft: @escaping () -> Void, onSwipeRight: @escaping () -> Void) {
             self.onSwipeLeft = onSwipeLeft
             self.onSwipeRight = onSwipeRight
         }
 
-        deinit {
-            detach()
-        }
+        deinit { detach() }
 
         func attach(to view: NSView) {
             self.view = view
             guard monitor == nil else { return }
-
             monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                self?.handleScroll(event)
+                self?.handle(event)
                 return event
             }
         }
 
         func detach() {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-                self.monitor = nil
-            }
-            resetGestureState()
+            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+            reset()
         }
 
-        private func handleScroll(_ event: NSEvent) {
-            guard let hostWindow = view?.window,
-                  event.window === hostWindow else {
+        private func handle(_ event: NSEvent) {
+            guard let hostWindow = view?.window, event.window === hostWindow else { return }
+            if event.phase == .began { reset() }
+
+            let dx = event.scrollingDeltaX, dy = event.scrollingDeltaY
+            let ended = event.phase == .ended || event.phase == .cancelled
+                || event.momentumPhase == .ended || event.momentumPhase == .cancelled
+
+            guard abs(dx) > 0.5, abs(dx) > abs(dy) * dominance else {
+                if ended { reset() }
                 return
             }
-
-            if event.phase == .began || event.momentumPhase == .began {
-                resetGestureState()
+            accumulated += dx
+            if !didTrigger, abs(accumulated) >= threshold {
+                didTrigger = true
+                accumulated > 0 ? onSwipeRight() : onSwipeLeft()
             }
-
-            let deltaX = event.scrollingDeltaX
-            let deltaY = event.scrollingDeltaY
-
-            guard abs(deltaX) > 0.5,
-                  abs(deltaX) > abs(deltaY) * horizontalDominanceRatio else {
-                if event.phase == .ended || event.phase == .cancelled ||
-                    event.momentumPhase == .ended || event.momentumPhase == .cancelled {
-                    resetGestureState()
-                }
-                return
-            }
-
-            accumulatedHorizontalDelta += deltaX
-
-            if !didTriggerForCurrentGesture,
-               abs(accumulatedHorizontalDelta) >= horizontalThreshold {
-                didTriggerForCurrentGesture = true
-                if accumulatedHorizontalDelta > 0 {
-                    onSwipeRight()
-                } else {
-                    onSwipeLeft()
-                }
-            }
-
-            if event.phase == .ended || event.phase == .cancelled ||
-                event.momentumPhase == .ended || event.momentumPhase == .cancelled {
-                resetGestureState()
-            }
+            if ended { reset() }
         }
 
-        private func resetGestureState() {
-            accumulatedHorizontalDelta = 0
-            didTriggerForCurrentGesture = false
+        private func reset() {
+            accumulated = 0
+            didTrigger = false
         }
     }
 }
@@ -662,8 +886,17 @@ private struct TrackpadSwipeMonitorView: NSViewRepresentable {
 extension Notification.Name {
     static let alphaNoteCreateNote = Notification.Name("alphaNoteCreateNote")
     static let alphaNoteToggleSidebar = Notification.Name("alphaNoteToggleSidebar")
+    static let alphaNoteFocusSearch = Notification.Name("alphaNoteFocusSearch")
+    static let alphaNoteToggleCommandField = Notification.Name("alphaNoteToggleCommandField")
     static let alphaNoteConvertToList = Notification.Name("alphaNoteConvertToList")
+    static let alphaNoteNavigateNext = Notification.Name("alphaNoteNavigateNext")
+    static let alphaNoteNavigatePrevious = Notification.Name("alphaNoteNavigatePrevious")
+    static let alphaNoteTogglePin = Notification.Name("alphaNoteTogglePin")
+    static let alphaNoteArchiveCurrent = Notification.Name("alphaNoteArchiveCurrent")
+    static let alphaNoteDeleteCurrent = Notification.Name("alphaNoteDeleteCurrent")
+    static let alphaNoteSetMode = Notification.Name("alphaNoteSetMode")
     static let alphaNoteDidSync = Notification.Name("alphaNoteDidSync")
     static let alphaNoteOpenHelpCenter = Notification.Name("alphaNoteOpenHelpCenter")
     static let alphaNoteCheckForUpdates = Notification.Name("alphaNoteCheckForUpdates")
+    static let alphaNoteOpenSettings = Notification.Name("alphaNoteOpenSettings")
 }

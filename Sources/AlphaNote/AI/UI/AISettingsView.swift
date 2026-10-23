@@ -64,7 +64,7 @@ struct AISettingsView: View {
                 HelpNote("C'est exactement ce que le serveur reçoit : un seul champ « mode », enum, avec la description de chaque mode. La recherche sémantique reste 100 % locale (embeddings hash-64, hors-ligne).")
             }
         }
-        .padding(20)
+        .formStyle(.grouped)
     }
 
     private var schemaCard: some View {

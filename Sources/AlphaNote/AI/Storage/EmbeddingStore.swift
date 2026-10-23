@@ -18,29 +18,29 @@ struct EmbeddingRecord: FetchableRecord, MutablePersistableRecord, Codable {
 actor EmbeddingStore {
     static let shared = EmbeddingStore()
 
-    private let dimensions = 64
-
-    func upsertEmbedding(for note: Note, modelID: String = "hash-64") {
-        let vector = embed(text: note.content)
-        let vectorJSON = encode(vector: vector)
-
+    /// Réindexe la note si son embedding manque, vient d'un ancien modèle, ou
+    /// est antérieur à sa dernière modification.
+    func upsertEmbedding(for note: Note, force: Bool = false) {
         let dbQueue = DatabaseManager.shared.getDBQueue()
         do {
             try dbQueue.write { db in
-                if var existing = try EmbeddingRecord
-                    .filter(Column("noteUUID") == note.uuid)
-                    .fetchOne(db) {
-                    existing.modelID = modelID
+                let existing = try EmbeddingRecord.filter(Column("noteUUID") == note.uuid).fetchOne(db)
+                if !force, let existing,
+                   existing.modelID == HashEmbedding.modelID,
+                   existing.updatedAt >= note.updatedAt {
+                    return
+                }
+
+                let vectorJSON = Self.encode(HashEmbedding.embed(text: note.effectiveTitle + "\n" + note.content))
+                if var existing {
+                    existing.modelID = HashEmbedding.modelID
                     existing.vectorJSON = vectorJSON
                     existing.updatedAt = Date()
                     try existing.update(db)
                 } else {
                     var record = EmbeddingRecord(
-                        id: nil,
-                        noteUUID: note.uuid,
-                        modelID: modelID,
-                        vectorJSON: vectorJSON,
-                        updatedAt: Date()
+                        id: nil, noteUUID: note.uuid, modelID: HashEmbedding.modelID,
+                        vectorJSON: vectorJSON, updatedAt: Date()
                     )
                     try record.insert(db)
                 }
@@ -50,12 +50,21 @@ actor EmbeddingStore {
         }
     }
 
+    func removeEmbedding(noteUUID: String) {
+        let dbQueue = DatabaseManager.shared.getDBQueue()
+        try? dbQueue.write { db in
+            _ = try EmbeddingRecord.filter(Column("noteUUID") == noteUUID).deleteAll(db)
+        }
+    }
+
     func fetchAllEmbeddings() -> [(noteUUID: String, vector: [Double])] {
         let dbQueue = DatabaseManager.shared.getDBQueue()
         do {
             return try dbQueue.read { db in
-                let records = try EmbeddingRecord.fetchAll(db)
-                return records.map { ($0.noteUUID, decode(vectorJSON: $0.vectorJSON)) }
+                try EmbeddingRecord
+                    .filter(Column("modelID") == HashEmbedding.modelID)
+                    .fetchAll(db)
+                    .map { ($0.noteUUID, Self.decode($0.vectorJSON)) }
             }
         } catch {
             print("[EmbeddingStore] fetch error: \(error)")
@@ -63,35 +72,15 @@ actor EmbeddingStore {
         }
     }
 
-    private func embed(text: String) -> [Double] {
-        var vector = Array(repeating: 0.0, count: dimensions)
-        let tokens = text.lowercased().split { !$0.isLetter && !$0.isNumber }
-
-        guard !tokens.isEmpty else { return vector }
-
-        for token in tokens {
-            let bucket = abs(token.hashValue) % dimensions
-            vector[bucket] += 1
-        }
-
-        let norm = sqrt(vector.reduce(0) { $0 + ($1 * $1) })
-        guard norm > 0 else { return vector }
-        return vector.map { $0 / norm }
-    }
-
-    private func encode(vector: [Double]) -> String {
+    private static func encode(_ vector: [Double]) -> String {
         guard let data = try? JSONEncoder().encode(vector),
-              let string = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
+              let string = String(data: data, encoding: .utf8) else { return "[]" }
         return string
     }
 
-    private func decode(vectorJSON: String) -> [Double] {
+    private static func decode(_ vectorJSON: String) -> [Double] {
         guard let data = vectorJSON.data(using: .utf8),
-              let vector = try? JSONDecoder().decode([Double].self, from: data) else {
-            return []
-        }
+              let vector = try? JSONDecoder().decode([Double].self, from: data) else { return [] }
         return vector
     }
 }

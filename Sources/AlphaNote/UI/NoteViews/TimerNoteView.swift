@@ -1,228 +1,124 @@
 import SwiftUI
-import AVFoundation
 
+/// Surface du mode `timer`. L'état vit dans `TimerSession` (registre par note) :
+/// changer de note, cacher la fenêtre ou relancer l'app n'arrête rien.
 struct TimerNoteView: View {
-    enum TimerMode: String, CaseIterable {
-        case stopwatch = "Stopwatch"
-        case countdown = "Countdown"
-        case pomodoro = "Pomodoro"
-
-        init?(from content: String) {
-            let lower = content.lowercased()
-            if lower.contains("countdown") {
-                self = .countdown
-            } else if lower.contains("pomodoro") {
-                self = .pomodoro
-            } else if lower.contains("stopwatch") || lower.contains("chronometre") || lower.contains("chronomètre") {
-                self = .stopwatch
-            } else {
-                return nil
-            }
-        }
-    }
-
-    enum TimerState {
-        case stopped
-        case running
-        case paused
-        case finished
-    }
-
-    var initialSeconds: Int = 600
-    var initialMode: TimerMode = .countdown
-
-    @State private var mode: TimerMode = .countdown
-    @State private var state: TimerState = .stopped
-    @State private var elapsed: TimeInterval = 0
-    @State private var targetDuration: TimeInterval = 600
-    @State private var timer: Timer?
-    @State private var audioPlayer: AVAudioPlayer?
-    @State private var nsSound: NSSound?
-    @State private var isSoundPlaying = false
-
+    @ObservedObject var session: TimerSession
     @AppStorage("fontSize") private var fontSize: Double = 14
 
-    private var displayTime: String {
-        let total: TimeInterval
-        switch mode {
-        case .stopwatch:
-            total = elapsed
-        case .countdown, .pomodoro:
-            total = max(0, targetDuration - elapsed)
-        }
-        return formatTime(total)
-    }
-
-    private var progress: Double {
-        switch mode {
-        case .stopwatch:
-            return 0
-        case .countdown, .pomodoro:
-            guard targetDuration > 0 else { return 0 }
-            return min(1, elapsed / targetDuration)
-        }
-    }
+    private let presets: [(label: String, seconds: TimeInterval)] = [
+        ("5 min", 5 * 60), ("10 min", 10 * 60), ("15 min", 15 * 60),
+        ("25 min", 25 * 60), ("45 min", 45 * 60), ("1 h", 3600)
+    ]
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text(mode.rawValue)
-                .font(.headline)
-                .foregroundStyle(Palette.secondaryColor)
-
-            Picker("Mode", selection: $mode) {
-                ForEach(TimerMode.allCases, id: \.self) { m in
-                    Text(m.rawValue).tag(m)
+        VStack(spacing: 28) {
+            Picker("Mode", selection: Binding(
+                get: { session.mode },
+                set: { session.setMode($0) }
+            )) {
+                ForEach(TimerSession.Mode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 280)
+            .frame(width: 300)
 
             ZStack {
                 Circle()
-                    .stroke(Palette.lineColor, lineWidth: 6)
-                    .frame(width: 180, height: 180)
+                    .stroke(Palette.lineColor, lineWidth: 8)
+                    .frame(width: 220, height: 220)
 
-                if mode != .stopwatch {
+                if session.mode != .stopwatch {
                     Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(mode == .pomodoro ? Color(nsColor: Palette.timer) : Palette.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .frame(width: 180, height: 180)
+                        .trim(from: 0, to: session.progress)
+                        .stroke(
+                            session.mode == .pomodoro ? Color(nsColor: Palette.timer) : Palette.accentColor,
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        )
+                        .frame(width: 220, height: 220)
                         .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.1), value: session.progress)
                 }
 
-                Text(displayTime)
-                    .font(.system(size: 40, design: .monospaced))
-                    .foregroundStyle(state == .finished ? Color(nsColor: Palette.timer) : Palette.textColor)
+                VStack(spacing: 4) {
+                    Text(session.displayTime)
+                        .font(.system(size: 46, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(session.state == .finished ? Color(nsColor: Palette.timer) : Palette.textColor)
+                    Text(stateLabel)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Palette.secondaryColor)
+                }
             }
 
-            if mode == .countdown {
-                HStack(spacing: 12) {
-                    Stepper("Minutes: \(Int(targetDuration / 60))", value: $targetDuration, in: 60...3600, step: 60)
-                        .labelsHidden()
-                    Text("\(Int(targetDuration / 60)) min")
+            if session.mode != .stopwatch, session.state == .stopped || session.state == .finished {
+                HStack(spacing: 8) {
+                    ForEach(presets, id: \.seconds) { preset in
+                        Button(preset.label) { session.setTargetDuration(preset.seconds) }
+                            .buttonStyle(.bordered)
+                            .tint(session.targetDuration == preset.seconds ? Palette.accentColor : nil)
+                    }
+                }
+
+                Stepper(
+                    value: Binding(
+                        get: { session.targetDuration / 60 },
+                        set: { session.setTargetDuration($0 * 60) }
+                    ),
+                    in: 1...180,
+                    step: 1
+                ) {
+                    Text("\(Int(session.targetDuration / 60)) min")
                         .font(.system(size: fontSize))
+                        .monospacedDigit()
                 }
-            } else if mode == .pomodoro {
-                HStack(spacing: 12) {
-                    Button("25 min") { targetDuration = 25 * 60 }
-                    Button("15 min") { targetDuration = 15 * 60 }
-                    Button("5 min") { targetDuration = 5 * 60 }
-                }
-                .buttonStyle(.bordered)
+                .frame(width: 140)
             }
 
-            if isSoundPlaying {
-                Button(action: stopSound) {
+            if session.isSoundPlaying {
+                Button {
+                    session.stopSound()
+                } label: {
                     Label("Arrêter la sonnerie", systemImage: "speaker.slash.fill")
-                        .foregroundStyle(Color(nsColor: Palette.timer))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
+                .tint(Color(nsColor: Palette.timer))
             }
 
-            HStack(spacing: 20) {
-                Button(action: startOrResume) {
-                    Image(systemName: state == .running ? "pause.fill" : "play.fill")
-                        .font(.title2)
+            HStack(spacing: 16) {
+                Button {
+                    session.toggle()
+                } label: {
+                    Image(systemName: session.state == .running ? "pause.fill" : "play.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 56, height: 56)
                 }
-                .buttonStyle(.bordered)
-                .disabled(state == .running && mode == .stopwatch)
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.accentColor)
+                .keyboardShortcut(.space, modifiers: [])
 
-                Button(action: resetTimer) {
+                Button {
+                    session.reset()
+                } label: {
                     Image(systemName: "arrow.counterclockwise")
-                        .font(.title2)
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 56)
                 }
                 .buttonStyle(.bordered)
+                .disabled(session.state == .stopped)
             }
         }
-        .padding(20)
-        .onAppear {
-            mode = initialMode
-            targetDuration = TimeInterval(initialSeconds)
-        }
-        .onChange(of: mode) {
-            resetTimer()
-        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func startOrResume() {
-        switch state {
-        case .stopped, .paused, .finished:
-            state = .running
-            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                elapsed += 0.1
-                if (mode == .countdown || mode == .pomodoro) && elapsed >= targetDuration {
-                    stopTimer()
-                    state = .finished
-                    sendNotification()
-                }
-            }
-        case .running:
-            timer?.invalidate()
-            timer = nil
-            state = .paused
-        }
-    }
-
-    private func resetTimer() {
-        stopTimer()
-        stopSound()
-        elapsed = 0
-        state = .stopped
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func stopSound() {
-        audioPlayer?.stop()
-        audioPlayer = nil
-        nsSound?.stop()
-        nsSound = nil
-        isSoundPlaying = false
-    }
-
-    private func sendNotification() {
-        stopSound()
-
-        DispatchQueue.main.async { [self] in
-            if let url = Bundle.main.url(forResource: "timer_sound", withExtension: "mp3") {
-                do {
-                    audioPlayer = try AVAudioPlayer(contentsOf: url)
-                    audioPlayer?.numberOfLoops = -1
-                    audioPlayer?.prepareToPlay()
-                    audioPlayer?.play()
-                    isSoundPlaying = true
-                } catch {
-                    playFallbackSound()
-                }
-            } else {
-                playFallbackSound()
-            }
-        }
-    }
-
-    private func playFallbackSound() {
-        if let sound = NSSound(named: "Ping") {
-            sound.loops = true
-            sound.play()
-            nsSound = sound
-            isSoundPlaying = true
-        }
-    }
-
-    private func formatTime(_ interval: TimeInterval) -> String {
-        let totalSeconds = Int(interval)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let seconds = totalSeconds % 60
-        let tenths = Int((interval - Double(totalSeconds)) * 10)
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d.%d", hours, minutes, seconds, tenths)
-        } else {
-            return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
+    private var stateLabel: String {
+        switch session.state {
+        case .stopped: return session.mode == .stopwatch ? "Prêt" : "En attente"
+        case .running: return "En cours"
+        case .paused: return "En pause"
+        case .finished: return "Terminé"
         }
     }
 }

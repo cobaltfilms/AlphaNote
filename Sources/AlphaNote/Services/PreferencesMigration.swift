@@ -5,6 +5,9 @@ enum PreferencesMigration {
 
     private static let trackedKeys: Set<String> = [
         "hotkeyEnabled",
+        "hotkeyKeyCode",
+        "hotkeyModifiers",
+        "alwaysOnTop",
         "showInDock",
         "showInMenuBar",
         "autoCleanup",

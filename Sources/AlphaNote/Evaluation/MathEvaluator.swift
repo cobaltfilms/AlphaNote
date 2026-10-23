@@ -1,51 +1,89 @@
 import Foundation
 
-/// Safe recursive-descent math evaluator — no NSExpression.
-/// Supports: +, -, *, /, ^, parentheses, colloquial percent.
+/// Évaluateur arithmétique sûr (descente récursive, jamais NSExpression).
+///
+/// Supporte : + - * / ^, parenthèses, pourcentage familier (« 50% of 200 »,
+/// « 100 - 20% »), factorielle `5!`, fonctions usuelles (`sqrt`, `abs`,
+/// `round`, `floor`, `ceil`, `ln`, `log`, `log2`, `exp`, `sin`, `cos`, `tan`,
+/// `min`, `max`), la constante `pi`/`π`, la multiplication implicite
+/// (`2(3+4)`, `3 pi`) et la virgule décimale (« 1,5 »).
+///
+/// Les mots inconnus (« 5 pommes + 3 ») sont ignorés : le calcul reste
+/// tolérant aux unités et annotations. Un mot inconnu suivi d'une parenthèse
+/// est une fonction inconnue → l'expression est rejetée.
 final class MathEvaluator {
 
-    // MARK: - Public API
+    // MARK: - API
 
-    /// Evaluate a math expression. Returns nil if it can't be parsed.
+    /// Évalue une expression. Retourne nil si elle n'est pas analysable.
     func evaluate(_ expression: String) -> Double? {
-        let normalizedExpression = normalize(expression)
-        let tokens = tokenize(normalizedExpression)
+        let tokens = tokenize(normalize(expression))
         guard !tokens.isEmpty else { return nil }
         var pos = 0
         do {
             let result = try parseExpression(tokens, &pos)
-            return pos == tokens.count ? result : nil
+            guard pos == tokens.count, result.isFinite else { return nil }
+            return result
         } catch {
             return nil
         }
     }
 
-    // MARK: - Token Types
+    // MARK: - Jetons
 
     private enum Token: Equatable {
         case number(Double)
-        case percent          // %
-        case `operator`(String) // + - * / ^
+        case percent
+        case factorial
+        case `operator`(String)
         case lparen, rparen
-        case identifier(String) // for future variable support
+        case comma
+        case identifier(String)
 
         var isBinaryOperator: Bool {
-            if case .operator(let op) = self, op != "" {
-                return true
-            }
+            if case .operator = self { return true }
             return false
         }
     }
 
-    // MARK: - Normalization
+    private static let functions: [String: ([Double]) -> Double?] = [
+        "sqrt": { a in a.count == 1 && a[0] >= 0 ? a[0].squareRoot() : nil },
+        "abs": { a in a.count == 1 ? Swift.abs(a[0]) : nil },
+        "round": { a in a.count == 1 ? a[0].rounded() : nil },
+        "floor": { a in a.count == 1 ? a[0].rounded(.down) : nil },
+        "ceil": { a in a.count == 1 ? a[0].rounded(.up) : nil },
+        "ln": { a in a.count == 1 && a[0] > 0 ? Foundation.log(a[0]) : nil },
+        "log": { a in a.count == 1 && a[0] > 0 ? Foundation.log10(a[0]) : nil },
+        "log2": { a in a.count == 1 && a[0] > 0 ? Foundation.log2(a[0]) : nil },
+        "exp": { a in a.count == 1 ? Foundation.exp(a[0]) : nil },
+        "sin": { a in a.count == 1 ? Foundation.sin(a[0]) : nil },
+        "cos": { a in a.count == 1 ? Foundation.cos(a[0]) : nil },
+        "tan": { a in a.count == 1 ? Foundation.tan(a[0]) : nil },
+        "min": { a in a.isEmpty ? nil : a.min() },
+        "max": { a in a.isEmpty ? nil : a.max() }
+    ]
+
+    private static let constants: [String: Double] = [
+        "pi": Double.pi,
+        "π": Double.pi
+    ]
+
+    // MARK: - Normalisation
 
     private func normalize(_ input: String) -> String {
         var expression = input
             .replacingOccurrences(of: "÷", with: "/")
             .replacingOccurrences(of: "×", with: "*")
             .replacingOccurrences(of: "**", with: "^")
+            .replacingOccurrences(of: "−", with: "-")
 
-        if let regex = try? NSRegularExpression(pattern: "(?<=\\d|\\)|%)\\s*[xX]\\s*(?=\\d|\\(|[A-Za-z_])") {
+        // Virgule décimale entre deux chiffres (« 1,5 »).
+        expression = expression.replacingOccurrences(
+            of: #"(?<=\d),(?=\d)"#, with: ".", options: .regularExpression
+        )
+
+        // « 2 x 3 » → « 2 * 3 » (x comme signe de multiplication).
+        if let regex = try? NSRegularExpression(pattern: "(?<=\\d|\\)|%)\\s*[xX]\\s*(?=\\d|\\(|[A-Za-z_π])") {
             expression = regex.stringByReplacingMatches(
                 in: expression,
                 options: [],
@@ -60,130 +98,117 @@ final class MathEvaluator {
     // MARK: - Tokenizer
 
     private func tokenize(_ input: String) -> [Token] {
-        var tokens: [Token] = []
-        var chars = input[...].unicodeScalars
-        var buffer = ""
+        var raw: [Token] = []
+        var number = ""
+        var word = ""
 
         func flushNumber() {
-            if let val = Double(buffer) {
-                tokens.append(.number(val))
+            if !number.isEmpty, let value = Double(number) {
+                raw.append(.number(value))
             }
-            buffer = ""
+            number = ""
         }
 
-        while let ch = chars.popFirst() {
+        func flushWord() {
+            if !word.isEmpty {
+                raw.append(.identifier(word.lowercased()))
+            }
+            word = ""
+        }
+
+        for ch in input {
+            if ch.isNumber || ch == "." {
+                flushWord()
+                number.append(ch)
+                continue
+            }
+            if ch.isLetter || ch == "_" || ch == "π" {
+                flushNumber()
+                word.append(ch)
+                continue
+            }
+
+            flushNumber()
+            flushWord()
+
             switch ch {
-            case "0"..."9", ".": // negative handled by parser
-                buffer.append(Character(ch))
-            case "%":
-                if !buffer.isEmpty { flushNumber() }
-                tokens.append(.percent)
-            case "+", "*", "/":
-                if !buffer.isEmpty { flushNumber() }
-                tokens.append(.operator(String(ch)))
-            case "^":
-                if !buffer.isEmpty { flushNumber() }
-                tokens.append(.operator("^"))
-            case "-":
-                // Distinguish minus sign from negative number
-                if !buffer.isEmpty {
-                    flushNumber()
-                    tokens.append(.operator("-"))
-                } else if tokens.isEmpty || (tokens.last?.isBinaryOperator == true) || tokens.last == .lparen {
-                    // Negative number: at start, after another operator, or after lparen
-                    buffer.append(Character(ch))
-                } else {
-                    tokens.append(.operator("-"))
-                }
-            case "(":
-                if !buffer.isEmpty { flushNumber() }
-                tokens.append(.lparen)
-            case ")":
-                if !buffer.isEmpty { flushNumber() }
-                tokens.append(.rparen)
-            case " ", "\t":
-                if !buffer.isEmpty { flushNumber() }
-            default:
-                if Character(ch).isLetter || ch == "_" {
-                    buffer.append(Character(ch))
-                } else if !buffer.isEmpty {
-                    flushNumber()
-                }
+            case "%": raw.append(.percent)
+            case "!": raw.append(.factorial)
+            case "+", "*", "/", "^": raw.append(.operator(String(ch)))
+            case "-": raw.append(.operator("-"))
+            case "(": raw.append(.lparen)
+            case ")": raw.append(.rparen)
+            case ",", ";": raw.append(.comma)
+            default: break // espaces, symboles monétaires, etc.
             }
         }
+        flushNumber()
+        flushWord()
 
-        // Flush any remaining content in buffer
-        if !buffer.isEmpty { flushNumber() }
-
-        // Handle colloquial "of" — convert "50% of 200" → 0.5 * 200
+        // « of » = multiplication ; mots inconnus ignorés ; fonctions et
+        // constantes conservées.
         var cleaned: [Token] = []
-        for i in tokens.indices {
-            if case .identifier(let word) = tokens[i], word.lowercased() == "of" {
+        for (index, token) in raw.enumerated() {
+            guard case let .identifier(name) = token else {
+                cleaned.append(token)
+                continue
+            }
+            if name == "of" {
                 cleaned.append(.operator("*"))
-            } else {
-                cleaned.append(tokens[i])
+            } else if Self.functions[name] != nil || Self.constants[name] != nil {
+                cleaned.append(token)
+            } else if index + 1 < raw.count, raw[index + 1] == .lparen {
+                cleaned.append(token) // fonction inconnue → échec au parsing
             }
         }
 
-        // Convert standalone % after number to 0.01 multiplier
+        // « 50% » → 0.5, et « 50% 200 » → 0.5 * 200.
         var final: [Token] = []
-        for i in cleaned.indices {
-            if case .percent = cleaned[i] {
-                // Colloquial: "50% of 200" or "100 + 15%"
-                // The % becomes a modifier on the preceding number
-                if let lastIdx = final.indices.last, case .number(let val) = final[lastIdx] {
-                    final[lastIdx] = .number(val / 100.0)
+        var index = 0
+        while index < cleaned.count {
+            let token = cleaned[index]
+            if case .percent = token {
+                if let last = final.indices.last, case let .number(value) = final[last] {
+                    final[last] = .number(value / 100)
                 }
-                // Insert implicit * if next token is number or lparen
-                if i + 1 < cleaned.count {
-                    switch cleaned[i + 1] {
-                    case .number, .lparen:
-                        final.append(.operator("*"))
-                    default:
-                        break
+                if index + 1 < cleaned.count {
+                    switch cleaned[index + 1] {
+                    case .number, .lparen: final.append(.operator("*"))
+                    default: break
                     }
                 }
             } else {
-                final.append(cleaned[i])
+                final.append(token)
             }
+            index += 1
         }
 
         return final
     }
 
-    // MARK: - Parser (recursive descent)
+    // MARK: - Analyse
 
     private func parseExpression(_ tokens: [Token], _ pos: inout Int) throws -> Double {
         var result = try parseTerm(tokens, &pos)
-
-        while pos < tokens.count {
-            if case .operator(let op) = tokens[pos], op == "+" || op == "-" {
-                pos += 1
-                let rhs = try parseTerm(tokens, &pos)
-                switch op {
-                case "+": result += rhs
-                case "-": result -= rhs
-                default: break
-                }
-            } else {
-                break
-            }
+        while pos < tokens.count, case let .operator(op) = tokens[pos], op == "+" || op == "-" {
+            pos += 1
+            let rhs = try parseTerm(tokens, &pos)
+            result = op == "+" ? result + rhs : result - rhs
         }
         return result
     }
 
     private func parseTerm(_ tokens: [Token], _ pos: inout Int) throws -> Double {
         var result = try parsePower(tokens, &pos)
-
         while pos < tokens.count {
-            if case .operator(let op) = tokens[pos], op == "*" || op == "/" {
+            if case let .operator(op) = tokens[pos], op == "*" || op == "/" {
                 pos += 1
                 let rhs = try parsePower(tokens, &pos)
-                switch op {
-                case "*": result *= rhs
-                case "/": result /= rhs
-                default: break
-                }
+                result = op == "*" ? result * rhs : result / rhs
+            } else if tokens[pos] == .lparen || isIdentifier(tokens[pos]) {
+                // Multiplication implicite : « 2(3+4) », « 3 pi ».
+                let rhs = try parsePower(tokens, &pos)
+                result *= rhs
             } else {
                 break
             }
@@ -192,52 +217,106 @@ final class MathEvaluator {
     }
 
     private func parsePower(_ tokens: [Token], _ pos: inout Int) throws -> Double {
-        var result = try parseUnary(tokens, &pos)
-
+        let base = try parseUnary(tokens, &pos)
         if pos < tokens.count, case .operator("^") = tokens[pos] {
             pos += 1
-            let rhs = try parsePower(tokens, &pos) // right-associative
-            result = Foundation.pow(result, rhs)
+            let exponent = try parsePower(tokens, &pos) // associatif à droite
+            return Foundation.pow(base, exponent)
         }
-        return result
+        return base
     }
 
     private func parseUnary(_ tokens: [Token], _ pos: inout Int) throws -> Double {
         if pos < tokens.count, case .operator("-") = tokens[pos] {
             pos += 1
-            let val = try parsePrimary(tokens, &pos)
-            return -val
+            return -(try parseUnary(tokens, &pos))
         }
-        return try parsePrimary(tokens, &pos)
+        if pos < tokens.count, case .operator("+") = tokens[pos] {
+            pos += 1
+            return try parseUnary(tokens, &pos)
+        }
+        return try parsePostfix(tokens, &pos)
+    }
+
+    private func parsePostfix(_ tokens: [Token], _ pos: inout Int) throws -> Double {
+        var value = try parsePrimary(tokens, &pos)
+        while pos < tokens.count, tokens[pos] == .factorial {
+            pos += 1
+            value = try factorial(value)
+        }
+        return value
     }
 
     private func parsePrimary(_ tokens: [Token], _ pos: inout Int) throws -> Double {
         guard pos < tokens.count else { throw ParseError.unexpectedEnd }
 
         switch tokens[pos] {
-        case .number(let val):
+        case let .number(value):
             pos += 1
-            return val
+            return value
+
         case .lparen:
             pos += 1
             let result = try parseExpression(tokens, &pos)
-            guard pos < tokens.count, case .rparen = tokens[pos] else {
-                throw ParseError.missingParen
-            }
+            guard pos < tokens.count, tokens[pos] == .rparen else { throw ParseError.missingParen }
             pos += 1
             return result
-        case .identifier(_):
-            // Future: variable lookup
+
+        case let .identifier(name):
             pos += 1
-            return 0
+            if let constant = Self.constants[name] {
+                return constant
+            }
+            guard pos < tokens.count, tokens[pos] == .lparen else { throw ParseError.unknownIdentifier }
+            pos += 1
+            var arguments: [Double] = []
+            if pos < tokens.count, tokens[pos] == .rparen {
+                pos += 1
+            } else {
+                while true {
+                    arguments.append(try parseExpression(tokens, &pos))
+                    guard pos < tokens.count else { throw ParseError.missingParen }
+                    if tokens[pos] == .comma {
+                        pos += 1
+                        continue
+                    }
+                    if tokens[pos] == .rparen {
+                        pos += 1
+                        break
+                    }
+                    throw ParseError.unexpectedToken
+                }
+            }
+            guard let function = Self.functions[name], let value = function(arguments) else {
+                throw ParseError.unknownIdentifier
+            }
+            return value
+
         default:
             throw ParseError.unexpectedToken
         }
+    }
+
+    private func factorial(_ value: Double) throws -> Double {
+        guard value >= 0, value == value.rounded(), value <= 170 else { throw ParseError.unexpectedToken }
+        var result = 1.0
+        var n = 2.0
+        while n <= value {
+            result *= n
+            n += 1
+        }
+        return result
+    }
+
+    private func isIdentifier(_ token: Token) -> Bool {
+        if case .identifier = token { return true }
+        return false
     }
 
     enum ParseError: Error {
         case unexpectedEnd
         case missingParen
         case unexpectedToken
+        case unknownIdentifier
     }
 }

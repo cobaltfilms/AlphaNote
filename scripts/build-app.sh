@@ -63,12 +63,19 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSApplicationCategoryType</key> <string>public.app-category.productivity</string>
     <key>NSMicrophoneUsageDescription</key> <string>AlphaNote utilise le microphone pour la dictée vocale.</string>
     <key>NSSpeechRecognitionUsageDescription</key> <string>AlphaNote transcrit votre voix pour transformer vos demandes en notes.</string>
+    <key>NSAppleEventsUsageDescription</key> <string>AlphaNote lit vos notes Apple Notes pour les importer.</string>
+    <key>LSUIElement</key>            <false/>
 </dict>
 </plist>
 PLIST
 
-echo "› signature ad-hoc"
-codesign --force --deep --sign - "$APP"
+# Identité de signature : ad-hoc ("-") par défaut. Une identité stable
+# (Developer ID ou certificat auto-signé importé dans le trousseau) évite que
+# macOS redemande l'accès au mot de passe Nextcloud à chaque mise à jour.
+#   CODESIGN_IDENTITY="Developer ID Application: Cobalt Films" scripts/build-app.sh 1.2.0
+CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+echo "› signature (${CODESIGN_IDENTITY})"
+codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP" && echo "  signature OK"
 
 echo "✓ $APP (v$VERSION)"

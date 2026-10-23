@@ -1,300 +1,222 @@
 # AlphaNote - Guide Utilisateur Complet
 
-Version du guide: 21 mai 2026  
-Plateforme: macOS 14+
+Version du guide : 23 octobre 2026  
+Plateforme : macOS 14+
 
 ## 1. Vue d'ensemble
 
-AlphaNote est un carnet rapide orienté capture immédiate. L'application est pensée pour ouvrir une fenêtre de note en quelques millisecondes, écrire, calculer, convertir, organiser en checklist, puis fermer.
+AlphaNote est un bloc-notes de capture immédiate, inspiré d'Antinote : une fenêtre
+flottante, un raccourci global, et des mots en première ligne qui changent le
+comportement de la note (`math`, `list`, `code`, `timer`).
 
-Principes de fonctionnement:
-- Fenêtre flottante toujours accessible.
-- Données locales (SQLite) en priorité.
-- Syntaxe légère par mots-clés en première ligne (`math`, `list`, `code`, `timer`).
-- Synchronisation cloud optionnelle via Nextcloud (WebDAV).
+Principes :
+- **Éphémère** : écrire et jeter doivent coûter le même effort. Les notes vides
+  disparaissent seules ; on épingle ce qui doit rester.
+- **Zéro friction** : un raccourci pour ouvrir, Échap pour cacher. La fenêtre
+  mémorise sa place et suit l'espace actif.
+- **Les mots sont des commandes** : la première ligne pilote le mode.
+- **Local-first** : base SQLite locale ; Nextcloud en option.
 
 ## 2. Première utilisation
 
 1. Lancez AlphaNote.
-2. Utilisez `⌥A` pour afficher/masquer la fenêtre de notes.
-3. Créez une note avec le bouton `Nouvelle note` ou le raccourci `⌥⌘N`.
-4. Tapez librement, ou démarrez la première ligne avec un mot-clé pour activer un mode.
+2. Appuyez sur le raccourci global (⌥A par défaut, réglable dans Réglages › Général).
+3. Écrivez. Tapez `math`, `list`, `code` ou `timer` en première ligne, ou choisissez
+   le mode dans la pastille en haut à droite.
+4. Échap cache la fenêtre.
 
 ## 3. Interface principale
 
-La fenêtre contient:
-- Une barre supérieure avec bouton de bascule de liste, compteur de position et bouton de création.
-- Une colonne gauche (liste des notes) affichable/masquable.
-- Une zone d'édition principale qui change selon le mode de la note.
+La fenêtre ne contient que :
+- Une barre fine : bouton du volet des notes, titre de la note, pastille de mode
+  (menu), menu d'actions (épingler, renommer, dupliquer, copier, archiver,
+  supprimer), bouton nouvelle note.
+- L'éditeur, qui occupe tout le reste.
 
-### 3.1 Liste des notes
+Volet des notes (`⌥⌘L`) : colonne de gauche qui **pousse** l'éditeur (il ne le
+recouvre pas) et reste ouverte d'une session à l'autre. Recherche (texte +
+sémantique locale), notes épinglées, notes, archives ; chaque ligne montre le
+titre, la date et un aperçu. ↑ / ↓ dans la recherche changent de note, Entrée
+ouvre le premier résultat, Échap referme le volet. Clic droit pour les actions.
 
-Dans la colonne gauche, chaque note affiche:
-- Un titre (nom explicite si défini, sinon première ligne utile).
-- Un aperçu une-ligne du contenu.
-- Un menu d'actions:
-  - Renommer
-  - Dupliquer
-  - Archiver / Désarchiver
-  - Supprimer
+Volets éphémères :
+- **Demande en langage naturel** (`⌘K`) : une phrase, un mode choisi, une action
+  locale (voir §5.6). Dictée possible via le micro.
+- **Toast** en bas : retour des actions (archivée, copiée, mode appliqué…).
 
-Les notes archivées sont regroupées dans une section repliable `Archives`.
+### 3.1 Création et suppression
 
-### 3.2 Création et suppression
-
-- Une note vide peut être créée rapidement depuis les commandes.
-- La suppression est une suppression logique (`soft delete`) pour permettre la cohérence de sync.
+- `⌥⌘N`, le bouton en haut à droite, ou swiper au-delà de la dernière note.
+- Swiper depuis une note vide la supprime. Les notes vides sont supprimées quand la
+  fenêtre se cache (réglable).
+- Supprimer une note non vide demande confirmation ; la suppression est logique
+  (`soft delete`) pour la synchronisation.
 
 ## 4. Navigation et raccourcis
 
-Raccourcis disponibles:
-- `⌥A` : afficher/masquer AlphaNote (global hotkey).
-- `⌥⌘N` : nouvelle note.
-- `⌥⌘L` : afficher/masquer la liste des notes.
-- `⌘⇧L` : convertir la note active en mode liste (raccourci configurable).
-- `⌘,` : ouvrir les réglages.
-- `⌘⇧H` : ouvrir le centre d'aide AlphaNote.
-
-Navigation:
-- Swipe horizontal trackpad (gauche/droite) dans la zone d'édition.
-- Sélection directe d'une note dans la liste.
+- Raccourci global (défaut `⌥A`) : afficher / masquer.
+- `Échap` : fermer la demande ⌘K, sinon cacher la fenêtre.
+- `⌥⌘N` : nouvelle note · `⌥⌘←` / `⌥⌘→` : note précédente / suivante.
+- `⌥⌘L` : afficher / masquer le volet des notes · `⇧⌘F` : rechercher dans les notes.
+- `⌘K` : demande en langage naturel.
+- `⌥⌘1` … `⌥⌘5` : mode Texte, Math, Liste, Code, Minuteur.
+- `⇧⌘L` (réglable) : convertir la note en liste.
+- `⌥⌘P` : épingler · `⌥⌘E` : archiver · `⌥⌘⌫` : supprimer.
+- `⌘F` : rechercher dans la note · `⌘,` : réglages · `⇧⌘H` : aide.
+- Swipe horizontal (trackpad) dans l'éditeur.
 
 ## 5. Modes de note
 
-Le mode est détecté par la première ligne.
+Un seul éditeur sert à tous les modes texte : changer de mode ne détruit jamais
+l'éditeur, le focus ni le curseur. Le mode ne fait que décorer le texte.
 
-### 5.1 Mode texte (par défaut)
+### 5.1 Texte (par défaut)
 
-Aucun mot-clé spécial. La note reste une zone texte standard.
+Aucun mot-clé. Les adresses web sont cliquables.
 
-### 5.2 Mode `math`
+### 5.2 `math`
 
-Activez avec:
-- `math`
-- `math: Mon titre`
+Activez avec `math` ou `math: Mon titre`.
 
-Fonctionnalités:
-- Évaluation en ligne des expressions avec `=`.
-- Variables via `nom: expression`.
-- Réutilisation des variables dans les lignes suivantes.
-- Pourcentages et opérateurs usuels (`+`, `-`, `*`, `/`, `^`, parenthèses).
-- Conversions d'unités/currency depuis les expressions (`to`, `in`, `en`).
+- Variables : `loyer: 900`. `nom: expr =` affiche aussi le résultat.
+- Résultat inline sur toute ligne terminée par `=`.
+- Opérateurs `+ - * / ^`, parenthèses, `x` ou `×` pour multiplier, virgule décimale.
+- Fonctions : `sqrt`, `abs`, `round`, `floor`, `ceil`, `ln`, `log`, `log2`, `exp`,
+  `sin`, `cos`, `tan`, `min`, `max` ; factorielle `5!` ; constante `pi`.
+- Pourcentages : `50% of 200 =`, `prix - 15% =`, variables en pourcentage
+  (`tva: 21%` puis `total + tva =` ajoute 21 % de `total`).
+- Unités : `10 kg + 500 g =` (résultat dans la première unité), `12 km to mi =`,
+  `72°F to °C =`. Unités incompatibles : `⚠︎ unités incompatibles`.
+- Devises : `100 USD to EUR =`. Taux BCE (Frankfurter) avec repli, mis en cache
+  une heure. Pendant le chargement, la ligne affiche `…`.
+- `//` commence un commentaire. Les mots inconnus sont ignorés (`5 pommes + 3 =`).
+- Si une ligne avec `=` ne peut plus être évaluée, la partie droite est vidée.
 
-Exemples:
-- `budget: 1200`
-- `taxe: 21%`
-- `total =`
-- `12 km to mi =`
-- `72 kg in lb =`
-- `100 USD to EUR =`
+### 5.3 `list`
 
-Comportements utiles:
-- Si une ligne avec `=` ne peut plus être évaluée, la partie droite est vidée (`expression =`).
-- Les unités incompatibles peuvent produire `⚠︎ mixed units`.
+Activez avec `list` ou `list: Courses`.
 
-### 5.3 Mode `list`
+- Chaque ligne non vide est un élément ; cliquez la case en marge pour cocher.
+- Une ligne cochée se termine par le déclencheur (défaut `/x`, réglable).
+- `# Titre`, `## Sous-titre` pour les sections ; `// texte` pour un commentaire.
+- Entrée après une ligne commençant par `- ` continue la puce ; Entrée sur une puce
+  vide la retire.
+- `⇧⌘L` convertit n'importe quelle note (les virgules deviennent des lignes).
 
-Activez avec:
-- `list`
-- `list: Courses`
+### 5.4 `code`
 
-Fonctionnalités:
-- Checklist cliquable.
-- Marquage coché avec déclencheur configurable (par défaut `/x`).
-- Titres de section avec `#`, `##`, `###`.
-- Commentaires avec préfixe `//`.
+Activez avec `code` ou `code: swift`. Police monospace, interligne serré.
 
-Exemple:
-- `list: Déploiement`
-- `# Backend`
-- `Migrer la base`
-- `Vérifier les logs /x`
-- `// relancer un backup après prod`
+### 5.5 `timer`
 
-### 5.4 Mode `code`
+Activez avec `timer` ou `timer: focus`, ou via `⌘K` (« minuteur 25 min »).
 
-Activez avec:
-- `code`
-- `code: swift`
+- Minuteur, Chrono, Pomodoro (25 min par défaut) ; préréglages 5 min à 1 h.
+- Le minuteur continue si vous changez de note ou cachez la fenêtre, et est
+  restauré au redémarrage.
+- À la fin : sonnerie en boucle jusqu'à « Arrêter la sonnerie », icône du Dock
+  qui rebondit.
+- Espace démarre / met en pause.
 
-Fonctionnalités:
-- Éditeur monospace.
-- Badge de langage détecté depuis le titre (swift, python, javascript/js, rust, ruby, go, c++, java, html, css, shell/bash/zsh).
+### 5.6 Demande en langage naturel (⌘K)
 
-### 5.5 Mode `timer`
+Une phrase est **classée** dans un mode, puis une action locale déterministe est
+appliquée. L'IA ne rédige jamais.
 
-Activez avec:
-- `timer`
-- `timer: focus`
-
-Modes disponibles:
-- Stopwatch
-- Countdown
-- Pomodoro
-
-Fonctionnalités:
-- Démarrer / pause / reprise.
-- Reset.
-- Notification locale à la fin d'un countdown/pomodoro.
-
-### 5.6 Barre de question (routage de mode)
-
-Une barre de question permet d'écrire une demande en langage naturel ; AlphaNote
-la **classe** dans un mode puis applique localement, sans jamais rédiger à votre
-place :
-
-- `math` : l'expression est notée dans la note (calcul fait par la note).
-- `list` : les éléments (virgules) deviennent une checklist.
-- `timer` : crée une note minuteur/chrono/pomodoro.
-- `code` : convertit la note en mode code.
+- `math` : l'expression est notée dans la note, calculée par la note.
+- `list` : les éléments (virgules) deviennent une liste cochable.
+- `timer` : crée une note minuteur / chrono / pomodoro.
+- `code` : passe la note en mode code.
 - `plain` : rien n'est appliqué.
 
-Un badge affiche le mode détecté (`MODE ?` en direct, puis `MODE · source` après
-envoi), la source étant `JEV` ou `mots-clés`. Une ligne de statut précise
-l'éventuel échec du serveur JEV.
+Pendant la saisie, une pastille `MODE ?` montre la prévision par mots-clés. Après
+envoi, le toast indique `Mode X via JEV` ou `via mots-clés`, et la raison si le
+serveur JEV n'a pas répondu.
 
-La recherche sémantique (colonne gauche) rapproche les notes par sens ; elle est
-entièrement locale et fonctionne hors-ligne.
+La recherche du volet des notes combine filtre texte et similarité sémantique
+locale (embeddings hash-64, aucun réseau).
 
 ## 6. Réglages
 
-Les réglages sont structurés en 5 onglets.
+### 6.1 Général
 
-### 6.1 General
+- Raccourci global : activé, combinaison (cliquez le champ puis appuyez).
+  Le raccourci est physique : l'étiquette suit la disposition du clavier.
+- Toujours au premier plan.
+- Afficher dans le Dock / dans la barre des menus (l'un des deux reste actif).
+- Supprimer les notes vides à la fermeture.
 
-Options visibles:
-- Enable global hotkey (`⌥A`)
-- Show in Dock
-- Show in Menu Bar
-- Auto-cleanup empty notes
+### 6.2 Apparence
 
-### 6.2 Appearance
+- Thème : Système / Clair / Sombre (« Encre & or », appliqué à toutes les fenêtres).
+- Taille du texte : 10 à 24.
+- Déclencheur « coché » ; raccourci « Convertir en liste ».
 
-- Theme: System / Light / Dark
-- Font size: 10 à 24
+### 6.3 Synchronisation
 
-### 6.3 Keywords
+- Nextcloud : activation, serveur, utilisateur, mot de passe d'application,
+  intervalle, test, sync manuelle.
+- Imports : Nextcloud Notes (dossier .md/.txt) et Apple Notes.
 
-- Keyword `math`
-- Keyword `list`
-- Keyword `code`
-- Keyword `timer`
-- Déclencheur check-list (ex: `/x`)
-- Raccourci "Convertir en liste" (modifieurs + touche)
+### 6.4 IA
 
-### 6.4 AI
+- Activation du routage de mode par serveur JEV (désactivé par défaut).
+- URL du serveur, délai, test.
+- Transparence : le schéma exact envoyé est affiché (un champ `mode`, enum).
+- Sans serveur, AlphaNote reste sur les mots-clés et l'écran le dit.
 
-L'IA d'AlphaNote **classe, elle ne rédige jamais** (contrat JEV).
+### 6.5 Mises à jour
 
-- Toggle `Activer le routage de mode IA` (désactivé par défaut).
-- URL du serveur de décision JEV (défaut suggéré : `http://192.168.3.169:8096`).
-- Délai (ms).
-- Bouton `Tester le serveur` : sonde un appel de décision, vert si joignable,
-  rouge + message sinon.
-- **Transparence** : l'onglet affiche le schéma exact envoyé au serveur (le
-  champ `mode` et la description de chaque mode).
+- Appcast, vérification, installation avec contrôle d'identité du paquet.
 
-Si le serveur est injoignable ou désactivé, AlphaNote retombe sur les mots-clés
-déterministes et l'écran l'affiche. La recherche sémantique, elle, reste 100 %
-locale (aucun réseau, aucun modèle).
+### 6.6 Avancé
 
-### 6.5 Advanced
-
-- Emplacement de la base de données SQLite
-- Synchronisation Nextcloud
-- Test connection
-- Sync now
-- Export JSON
-- Reveal in Finder
+- Dossier de la base : affichage, déplacement (copie + relance), Finder.
+- Export JSON (toutes les notes actives) et Markdown (un fichier par note).
 
 ## 7. Synchronisation Nextcloud
 
-AlphaNote peut synchroniser les notes via WebDAV.
-
 ### 7.1 Pré-requis
 
-- URL Nextcloud valide (HTTP/HTTPS).
-- Nom d'utilisateur Nextcloud.
-- Mot de passe applicatif (recommandé).
+- URL Nextcloud (HTTPS recommandé), identifiant, mot de passe d'application.
 
-### 7.2 Configuration
+### 7.2 Détails techniques
 
-1. Ouvrez `Settings > Advanced`.
-2. Activez `Enable cloud sync`.
-3. Renseignez URL, username, app password.
-4. Cliquez `Test connection`.
-5. Ajustez l'intervalle (1 à 60 min).
-
-### 7.3 Détails techniques
-
-- Dossier distant: `AlphaNote/notes/` + `manifest.json`.
-- Format des notes: un JSON par UUID.
-- Conflits: résolution par `updatedAt`, puis `lastModifiedByDeviceId`, puis état supprimé.
-- Suppressions: propagation distante + purge différée des tombstones (au-delà de 30 jours).
+- Dossier distant `AlphaNote/notes/` + `manifest.json` ; un JSON par UUID.
+- Sync toutes les N minutes, 30 s après une modification locale, et au lancement.
+- Les notes distantes dont l'ETag n'a pas changé ne sont pas re-téléchargées.
+- Conflit : `updatedAt` le plus récent gagne, puis `lastModifiedByDeviceId`.
+- Suppressions propagées ; tombstones purgés après 30 jours.
 
 ## 8. Données, stockage, sécurité
 
-### 8.1 Stockage local
-
-- Base SQLite (GRDB) dans le dossier configuré.
-- Nom de fichier par défaut: `alph note.sqlite`.
-
-### 8.2 Mot de passe cloud
-
-- Stockage dans le Keychain macOS.
-- Pas de mot de passe en clair dans la base.
-
-### 8.3 Export
-
-- Export JSON manuel depuis `Settings > Advanced > Export Data`.
+- Base SQLite (GRDB) `alphanote.sqlite` dans le dossier configuré (par défaut
+  `~/Library/Application Support/AlphaNote`).
+- Écritures groupées : une sauvegarde au plus toutes les 400 ms par note, et
+  immédiate quand on change de note ou cache la fenêtre.
+- Mot de passe Nextcloud dans le trousseau macOS.
+- Signature : une app signée ad-hoc change d'identité à chaque build, et macOS
+  redemande l'accès au trousseau. Utilisez `CODESIGN_IDENTITY` avec
+  `scripts/build-app.sh` pour une identité stable.
 
 ## 9. Dépannage
 
-### 9.1 Le hotkey global ne fonctionne pas
+- **Raccourci muet** : vérifiez Réglages › Général ; une autre app peut l'utiliser.
+- **Sync en erreur** : « Tester la connexion » ; vérifiez le WebDAV
+  (`remote.php/dav/files/<utilisateur>/`).
+- **Devise `…`** : taux en cours de chargement, ou pas de réseau.
+- **Base introuvable** : Réglages › Avancé › Afficher dans le Finder. Si le dossier
+  configuré est inaccessible, AlphaNote revient au dossier par défaut et l'indique.
+- **Note disparue** : volet des notes › Archives ; notes vides supprimées à la
+  fermeture (réglable).
 
-- Vérifiez qu'AlphaNote est en cours d'exécution.
-- Vérifiez les conflits avec un autre raccourci global.
+## 10. Confidentialité
 
-### 9.2 La sync échoue
+- Local-first. Réseau uniquement pour : Nextcloud (si activé), taux de change en
+  mode math (Frankfurter / open.er-api), serveur JEV (si activé), appcast (si configuré).
+- L'IA ne reçoit que la phrase de la demande, jamais le contenu des notes.
+- La recherche sémantique est entièrement locale.
 
-- Vérifiez URL, username, app password.
-- Relancez `Test connection`.
-- Vérifiez que l'endpoint WebDAV est disponible côté Nextcloud.
+## 11. Support
 
-### 9.3 Je ne trouve pas la base de données
-
-- Allez dans `Settings > Advanced`.
-- Utilisez `Reveal in Finder`.
-
-### 9.4 Certaines notes semblent "disparaître"
-
-- Vérifiez la section `Archives` dans la barre latérale.
-- Vérifiez si la note a été supprimée logiquement, puis synchronisée.
-
-## 10. État réel de certaines options
-
-Le code actuel expose certaines options dans l'interface qui ne pilotent pas encore entièrement le comportement runtime.
-
-Au 21 mai 2026:
-- `fontSize`: appliqué.
-- `listCheckTrigger`: appliqué.
-- raccourci `Convertir en liste`: appliqué.
-- `theme`: option présente, application visuelle partielle/non centralisée.
-- `keywordMath/keywordList/keywordCode/keywordTimer`: options présentes, routing principal encore basé sur les mots-clés standards codés.
-- `hotkeyEnabled`, `showInDock`, `showInMenuBar`, `autoCleanup`: options présentes, branchement runtime incomplet.
-
-## 11. Confidentialité
-
-- L'app est local-first.
-- L'accès réseau est limité aux opérations de synchronisation Nextcloud, aux
-  conversions de devises en mode math, et — si le routage de mode IA est activé —
-  à l'appel du serveur de décision JEV configuré dans Réglages > AI.
-- L'IA ne classe que la demande (un seul champ `mode`) ; elle ne lit pas le
-  contenu des notes et n'en rédige aucune.
-- La recherche sémantique est 100 % locale (embeddings hash-64) : aucun réseau.
-
-## 12. Raccourci support
-
-Le centre d'aide est disponible via:
-- Menu `Help` > `AlphaNote Help`
-- `⌘⇧H`
+- Menu `Aide` › `Aide AlphaNote`, ou `⇧⌘H`.

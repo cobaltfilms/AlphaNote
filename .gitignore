@@ -24,3 +24,8 @@ Android/**/.DS_Store
 .vscode/
 .hermes/
 .secret.md
+
+# Archives et exports locaux (jamais dans le dépôt)
+/_old_XCode.zip
+/*.zip
+/Resolve Packages_*.txt
