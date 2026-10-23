@@ -18,7 +18,14 @@ struct NoteEditorView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let textView = NoteTextView(frame: .zero)
+        // Pile TextKit 1 explicite : la marge à cases (mode liste) lit les
+        // rectangles de ligne via NSLayoutManager, absent d'une vue TextKit 2.
+        let storage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        layoutManager.addTextContainer(container)
+        let textView = NoteTextView(frame: .zero, textContainer: container)
         textView.delegate = context.coordinator
         textView.isEditable = true
         textView.isSelectable = true
@@ -270,7 +277,7 @@ struct NoteEditorView: NSViewRepresentable {
 
             storage.endEditing()
             textView.itemLines = itemLines
-            textView.needsDisplay = true
+            textView.setNeedsDisplay(textView.bounds)
         }
 
         private static func range(of url: URL, in text: NSString, searchRange: NSRange) -> NSRange? {
@@ -444,8 +451,13 @@ final class NoteTextView: NSTextView {
         let checked: Bool
     }
 
-    var listGutterEnabled = false
-    var itemLines: [ItemLine] = []
+    var listGutterEnabled = false {
+        didSet { updateGutter() }
+    }
+    var itemLines: [ItemLine] = [] {
+        didSet { gutter?.needsDisplay = true }
+    }
+    private var gutter: ListGutterView?
     var onEscape: () -> Void = {}
     var onToggleItem: (NSRange) -> Void = { _ in }
 
@@ -456,58 +468,67 @@ final class NoteTextView: NSTextView {
         onEscape()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard listGutterEnabled, !itemLines.isEmpty, let layoutManager, let textContainer else { return }
+    // MARK: Marge à cases
+    //
+    // Le dessin se fait dans une sous-vue dédiée : sur macOS 14, ce qu'un
+    // NSTextView dessine dans `draw(_:)` en dehors du texte n'atteint pas
+    // l'écran (le rendu passe par sa propre couche). Une NSView ordinaire,
+    // enfant du text view, défile avec lui et se redessine normalement.
 
-        for item in itemLines {
-            guard let frame = lineFragmentFrame(for: item.range, layoutManager: layoutManager, container: textContainer) else { continue }
-            let box = NSRect(
-                x: textContainerInset.width - boxSize - 10,
-                y: frame.minY + (frame.height - boxSize) / 2 + textContainerInset.height,
-                width: boxSize, height: boxSize
-            )
-            let path = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
-            if item.checked {
-                Palette.list.setFill()
-                path.fill()
-                let check = NSBezierPath()
-                check.lineWidth = 2
-                check.lineCapStyle = .round
-                check.lineJoinStyle = .round
-                check.move(to: NSPoint(x: box.minX + 3.5, y: box.midY))
-                check.line(to: NSPoint(x: box.minX + 6.5, y: box.minY + 3.5))
-                check.line(to: NSPoint(x: box.maxX - 3.5, y: box.maxY - 3.5))
-                Palette.content.setStroke()
-                check.stroke()
-            } else {
-                path.lineWidth = 1.5
-                Palette.secondary.setStroke()
-                path.stroke()
+    private func updateGutter() {
+        if listGutterEnabled {
+            if gutter == nil {
+                let view = ListGutterView(frame: NSRect(x: 0, y: 0, width: textContainerInset.width, height: bounds.height))
+                view.autoresizingMask = [.height]
+                view.textView = self
+                addSubview(view)
+                gutter = view
             }
+            gutter?.frame.size.width = textContainerInset.width
+            gutter?.isHidden = false
+            gutter?.needsDisplay = true
+        } else {
+            gutter?.isHidden = true
         }
+    }
+
+    override var textContainerInset: NSSize {
+        didSet { gutter?.frame.size.width = textContainerInset.width }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        gutter?.frame.size.height = newSize.height
+        gutter?.needsDisplay = true
+    }
+
+    /// Rectangle de la case pour une ligne d'élément, en coordonnées du text view.
+    fileprivate func checkboxRect(for item: ItemLine) -> NSRect? {
+        guard let layoutManager, let textContainer,
+              let frame = lineFragmentFrame(for: item.range, layoutManager: layoutManager, container: textContainer) else { return nil }
+        return NSRect(
+            x: textContainerInset.width - boxSize - 10,
+            y: frame.minY + (frame.height - boxSize) / 2 + textContainerInset.height,
+            width: boxSize, height: boxSize
+        )
+    }
+
+    /// Élément dont la ligne contient le point (coordonnées du text view).
+    fileprivate func itemLine(at point: NSPoint) -> ItemLine? {
+        guard let layoutManager, let textContainer else { return nil }
+        let containerPoint = NSPoint(x: max(0, point.x - textContainerInset.width), y: point.y - textContainerInset.height)
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        return itemLines.first { charIndex >= $0.range.location && charIndex <= NSMaxRange($0.range) }
     }
 
     override func mouseDown(with event: NSEvent) {
         guard listGutterEnabled else { return super.mouseDown(with: event) }
         let point = convert(event.locationInWindow, from: nil)
-        guard point.x < textContainerInset.width - 4, let layoutManager, let textContainer else {
+        guard point.x < textContainerInset.width - 4, let item = itemLine(at: point) else {
             return super.mouseDown(with: event)
         }
-        let containerPoint = NSPoint(x: point.x - textContainerInset.width, y: point.y - textContainerInset.height)
-        let glyphIndex = layoutManager.glyphIndex(for: NSPoint(x: max(0, containerPoint.x), y: containerPoint.y), in: textContainer)
-        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-        if let item = itemLines.first(where: { charIndex >= $0.range.location && charIndex <= NSMaxRange($0.range) }) {
-            onToggleItem(item.range)
-            return
-        }
-        super.mouseDown(with: event)
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        guard listGutterEnabled else { return }
-        addCursorRect(NSRect(x: 0, y: 0, width: textContainerInset.width - 4, height: bounds.height), cursor: .pointingHand)
+        onToggleItem(item.range)
     }
 
     /// Entrée en mode liste : continue la puce « - » si la ligne en a une.
@@ -544,5 +565,53 @@ final class NoteTextView: NSTextView {
             return layoutManager.extraLineFragmentRect
         }
         return layoutManager.lineFragmentRect(forGlyphAt: min(glyphIndex, max(0, layoutManager.numberOfGlyphs - 1)), effectiveRange: nil)
+    }
+}
+
+/// Marge gauche du mode liste : une case par élément, cliquable.
+final class ListGutterView: NSView {
+    weak var textView: NoteTextView?
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let textView, textView.listGutterEnabled else { return }
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+
+        for item in textView.itemLines {
+            guard let box = textView.checkboxRect(for: item) else { continue }
+            let path = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
+            if item.checked {
+                Palette.list.setFill()
+                path.fill()
+                let check = NSBezierPath()
+                check.lineWidth = 2
+                check.lineCapStyle = .round
+                check.lineJoinStyle = .round
+                check.move(to: NSPoint(x: box.minX + 3.5, y: box.midY))
+                check.line(to: NSPoint(x: box.minX + 6.5, y: box.maxY - 3.5))
+                check.line(to: NSPoint(x: box.maxX - 3.5, y: box.minY + 3.5))
+                Palette.content.setStroke()
+                check.stroke()
+            } else {
+                path.lineWidth = 1.5
+                Palette.secondary.setStroke()
+                path.stroke()
+            }
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let textView else { return }
+        let point = textView.convert(event.locationInWindow, from: nil)
+        if let item = textView.itemLine(at: point) {
+            textView.onToggleItem(item.range)
+        } else {
+            textView.window?.makeFirstResponder(textView)
+        }
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }
