@@ -25,8 +25,9 @@ echo "› validation"
 bash scripts/validate.sh "$VERSION"
 
 echo "› tag v$VERSION"
-git tag -a "v$VERSION" -m "AlphaNote $VERSION"
-git push origin "v$VERSION" 2>/dev/null || echo "  (tag non poussé — pouss-le à la main)"
+# Le tag peut déjà exister : Mac et Android partagent la release v<version>.
+git rev-parse "v$VERSION" >/dev/null 2>&1 || git tag -a "v$VERSION" -m "AlphaNote $VERSION"
+git push origin "v$VERSION" 2>/dev/null || true
 
 echo "› zip : $ZIP"
 

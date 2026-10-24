@@ -1,7 +1,7 @@
 {
-  "version": "0.2.1",
-  "versionCode": 201,
-  "notes": "AlphaNote Android 0.2.1 : parit\u00e9 avec macOS (\u00e9diteur unique, cases \u00e0 cocher, math/devises, minuteur, routage JEV), synchro Nextcloud compatible Mac, correctif de sauvegarde des notes, notes tri\u00e9es par date de cr\u00e9ation.",
-  "url": "https://git.cobaltfilms.be/attachments/16a51f8f-e502-4189-b32f-c3c037989b4c",
+  "version": "0.2.2",
+  "versionCode": 202,
+  "notes": "AlphaNote Android 0.2.2 : les mises \u00e0 jour passent d\u00e9sormais par GitHub (canal public).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.2/AlphaNote-0.2.2.apk",
   "minimumSdk": 26
 }
