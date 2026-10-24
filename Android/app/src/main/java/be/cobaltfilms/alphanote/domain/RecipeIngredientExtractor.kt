@@ -71,7 +71,61 @@ object RecipeIngredientExtractor {
 
     // ---- Analyse (pure) ----
 
-    fun extract(html: String): Recipe? = extractFromJsonLd(html) ?: extractFromMicrodata(html)
+    fun extract(html: String): Recipe? {
+        val recipe = extractFromJsonLd(html) ?: extractFromMicrodata(html) ?: return null
+        // Certains sites (WordPress) ne publient que les noms, sans quantités
+        // (« Ail », « Carottes »…) : on reprend alors la liste visible sous le
+        // titre « Ingrédients », si elle recouvre bien ces noms.
+        if (lacksQuantities(recipe.ingredients)) {
+            visibleIngredientList(html, recipe.ingredients)?.let { return Recipe(recipe.title, it) }
+        }
+        return recipe
+    }
+
+    // ---- Liste visible (quantités absentes des données structurées) ----
+
+    fun lacksQuantities(items: List<String>): Boolean =
+        items.count { item -> item.any(Char::isDigit) } < items.size * 0.3
+
+    private val SCRIPT_OR_STYLE = Regex("(?is)<(script|style)\\b.*?</\\1>")
+    private val INGREDIENTS_ANCHOR = Regex("(?i)ingr[ée]dients?")
+    private val LIST_ITEM = Regex("(?is)<li\\b[^>]*>(.*?)</li>")
+    private val STOP_HEADING = Regex("(?i)<h[1-6][^>]*>(?:\\s|<[^>]+>)*(pr[ée]paration|instructions?|[ée]tapes|d[ée]roul[ée]|method|directions|steps)")
+
+    /**
+     * Les `<li>` qui suivent un titre « Ingrédients », jusqu'au titre de la
+     * préparation. Gardés seulement s'ils recouvrent au moins 60 % des noms
+     * structurés : un menu ou une autre liste de la page ne passe pas.
+     */
+    fun visibleIngredientList(html: String, names: List<String>): List<String>? {
+        val page = SCRIPT_OR_STYLE.replace(html, "")
+        val keys = names.mapNotNull(::matchKey)
+        if (keys.isEmpty()) return null
+        for (anchor in INGREDIENTS_ANCHOR.findAll(page)) {
+            val start = anchor.range.last + 1
+            var end = minOf(page.length, start + 20_000)
+            STOP_HEADING.find(page.substring(start, end))?.let { end = start + it.range.first }
+            val lines = clean(LIST_ITEM.findAll(page.substring(start, end)).map { it.groupValues[1] }.toList())
+                .filter { it.length <= 200 && !it.endsWith(":") }
+            if (lines.size < (names.size + 1) / 2) continue
+            val folded = lines.map(::fold)
+            val covered = keys.count { key -> folded.any { it.contains(key) } }
+            if (covered >= keys.size * 0.6) return lines
+        }
+        return null
+    }
+
+    /** « Patates douces » → « patate » : premier mot, sans accent ni pluriel. */
+    private fun matchKey(name: String): String? {
+        var word = fold(name).split(Regex("[^\\p{L}]+")).firstOrNull { it.isNotEmpty() } ?: return null
+        if (word.length > 4 && (word.endsWith("s") || word.endsWith("x"))) word = word.dropLast(1)
+        return word.takeIf { it.length >= 3 }
+    }
+
+    private fun fold(text: String): String =
+        java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace('’', '\'')
 
     private val JSON_LD = Regex(
         """<script[^>]*type\s*=\s*["']?application/ld\+json["']?[^>]*>(.*?)</script>""",
@@ -149,8 +203,12 @@ object RecipeIngredientExtractor {
         return result
     }
 
+    // Balises en ligne retirées sans espace (« d’<a>ail</a> » → « d’ail »),
+    // les autres séparent des mots.
+    private val INLINE_TAG = Regex("(?i)</?(a|strong|em|b|i|u|span|small|sup|sub|mark)\\b[^>]*>")
+
     fun cleanText(raw: String): String =
-        decodeEntities(raw.replace(Regex("<[^>]+>"), " "))
+        decodeEntities(raw.replace(INLINE_TAG, "").replace(Regex("<[^>]+>"), " "))
             .replace(Regex("\\s+"), " ")
             .trim()
 

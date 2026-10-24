@@ -50,6 +50,37 @@ final class RecipeIngredientExtractorTests: XCTestCase {
         XCTAssertEqual(RecipeIngredientExtractor.extract(fromHTML: html)?.ingredients, ["200 g de sucre", "1 pincée de sel"])
     }
 
+    func testNamesOnlyRecipeTakesQuantitiesFromVisibleList() {
+        // Cas papillesetpupilles.fr : JSON-LD sans quantités, liste visible complète.
+        let html = """
+        <script type="application/ld+json">{"@type":"Recipe","name":"Poulet mafé",
+         "recipeIngredient":["Ail","Carottes","Huile d'olive","Oignons","Patates douces","Poulet entier"]}</script>
+        <nav><ul><li>Accueil</li><li>Recettes</li></ul></nav>
+        <h2>Ingrédients</h2>
+        <p>Il vous faut pour 8/10 personnes :</p>
+        <ul><li>1 <a href="#"><strong>poulet</strong></a> fermier</li>
+        <li>12 gousses d&rsquo;<a href="#">ail</a></li>
+        <li>3 cuillères à soupe d&rsquo;huile d&rsquo;olive</li>
+        <li>1 oignon</li><li>4 carottes (225 g)</li><li>1 patate douce</li>
+        <li>Pour terminer :</li><li>1 pincée de sel</li></ul>
+        <h2>Préparation</h2><ul><li>Coupez le poulet en morceaux.</li></ul>
+        """
+        let recipe = RecipeIngredientExtractor.extract(fromHTML: html)
+        XCTAssertEqual(recipe?.title, "Poulet mafé")
+        XCTAssertEqual(recipe?.ingredients, [
+            "1 poulet fermier", "12 gousses d’ail", "3 cuillères à soupe d’huile d’olive",
+            "1 oignon", "4 carottes (225 g)", "1 patate douce", "1 pincée de sel"
+        ])
+    }
+
+    func testNamesOnlyRecipeWithoutMatchingListKeepsNames() {
+        let html = """
+        <script type="application/ld+json">{"@type":"Recipe","recipeIngredient":["Ail","Carottes","Poulet"]}</script>
+        <h2>Ingrédients</h2><ul><li>Accueil</li><li>Contact</li></ul>
+        """
+        XCTAssertEqual(RecipeIngredientExtractor.extract(fromHTML: html)?.ingredients, ["Ail", "Carottes", "Poulet"])
+    }
+
     func testPageWithoutRecipeIsNil() {
         let html = #"<script type="application/ld+json">{"@type":"Article","name":"x"}</script>"#
         XCTAssertNil(RecipeIngredientExtractor.extract(fromHTML: html))

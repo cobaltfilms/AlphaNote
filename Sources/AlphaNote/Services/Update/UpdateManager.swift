@@ -135,8 +135,20 @@ final class UpdateManager: ObservableObject {
             do {
                 var request = URLRequest(url: url)
                 request.cachePolicy = .reloadIgnoringLocalCacheData
-                let (data, _) = try await URLSession.shared.data(for: request)
-                let info = try JSONDecoder().decode(UpdateInfo.self, from: data)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                    phase = .failed("Vérification impossible : le canal répond HTTP \(http.statusCode).")
+                    return
+                }
+                // Une page de connexion (dépôt privé, Gitea) au lieu du JSON.
+                if String(decoding: data.prefix(64), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") {
+                    phase = .failed("Vérification impossible : le canal renvoie une page web (connexion requise ?), pas un appcast.")
+                    return
+                }
+                guard let info = try? JSONDecoder().decode(UpdateInfo.self, from: data) else {
+                    phase = .failed("Vérification impossible : l'appcast est illisible.")
+                    return
+                }
 
                 let candidate = (info.build?.isEmpty == false ? info.build! : info.version)
                 if VersionComparator.isNewer(candidate, than: currentVersion) {

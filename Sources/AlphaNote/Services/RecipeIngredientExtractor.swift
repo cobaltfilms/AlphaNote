@@ -59,10 +59,74 @@ enum RecipeIngredientExtractor {
     // MARK: - Analyse (pure)
 
     static func extract(fromHTML html: String) -> Recipe? {
-        if let recipe = extractFromJSONLD(html) {
-            return recipe
+        guard let recipe = extractFromJSONLD(html) ?? extractFromMicrodata(html) else {
+            return nil
         }
-        return extractFromMicrodata(html)
+        // Certains sites (WordPress) ne publient que les noms, sans quantités
+        // (« Ail », « Carottes »…) : on reprend alors la liste visible sous le
+        // titre « Ingrédients », si elle recouvre bien ces noms.
+        if lacksQuantities(recipe.ingredients),
+           let visible = visibleIngredientList(html, matching: recipe.ingredients) {
+            return Recipe(title: recipe.title, ingredients: visible)
+        }
+        return recipe
+    }
+
+    // MARK: - Liste visible (quantités absentes des données structurées)
+
+    static func lacksQuantities(_ items: [String]) -> Bool {
+        let withDigits = items.filter { $0.rangeOfCharacter(from: .decimalDigits) != nil }.count
+        return Double(withDigits) < Double(items.count) * 0.3
+    }
+
+    private static let stopHeading = try? NSRegularExpression(
+        pattern: #"<h[1-6][^>]*>(?:\s|<[^>]+>)*(pr[ée]paration|instructions?|[ée]tapes|d[ée]roul[ée]|method|directions|steps)"#,
+        options: [.caseInsensitive]
+    )
+
+    /// Les `<li>` qui suivent un titre « Ingrédients », jusqu'au titre de la
+    /// préparation. Gardés seulement s'ils recouvrent au moins 60 % des noms
+    /// structurés : un menu ou une autre liste de la page ne passe pas.
+    static func visibleIngredientList(_ html: String, matching names: [String]) -> [String]? {
+        let page = html.replacingOccurrences(of: #"(?is)<(script|style)\b.*?</\1>"#, with: "", options: .regularExpression)
+        guard let anchor = try? NSRegularExpression(pattern: #"ingr[ée]dients?"#, options: [.caseInsensitive]),
+              let item = try? NSRegularExpression(pattern: #"<li\b[^>]*>(.*?)</li>"#, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
+            return nil
+        }
+        let nsPage = page as NSString
+        let keys = names.compactMap(matchKey)
+        guard !keys.isEmpty else { return nil }
+
+        for match in anchor.matches(in: page, range: NSRange(location: 0, length: nsPage.length)) {
+            let start = match.range.location + match.range.length
+            var end = min(nsPage.length, start + 20_000)
+            if let stop = stopHeading?.firstMatch(in: page, range: NSRange(location: start, length: end - start)) {
+                end = stop.range.location
+            }
+            let segment = NSRange(location: start, length: end - start)
+            let lines = clean(item.matches(in: page, range: segment).map { nsPage.substring(with: $0.range(at: 1)) })
+                .filter { $0.count <= 200 && !$0.hasSuffix(":") }
+            guard lines.count >= (names.count + 1) / 2 else { continue }
+
+            let folded = lines.map(fold)
+            let covered = keys.filter { key in folded.contains { $0.contains(key) } }.count
+            if Double(covered) >= Double(keys.count) * 0.6 {
+                return lines
+            }
+        }
+        return nil
+    }
+
+    /// « Patates douces » → « patate » : premier mot, sans accent ni pluriel.
+    private static func matchKey(_ name: String) -> String? {
+        guard var word = fold(name).split(whereSeparator: { !$0.isLetter }).first.map(String.init) else { return nil }
+        if word.count > 4, word.hasSuffix("s") || word.hasSuffix("x") { word.removeLast() }
+        return word.count >= 3 ? word : nil
+    }
+
+    private static func fold(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr"))
+            .replacingOccurrences(of: "’", with: "'")
     }
 
     private static func extractFromJSONLD(_ html: String) -> Recipe? {
@@ -156,7 +220,11 @@ enum RecipeIngredientExtractor {
     }
 
     static func cleanText(_ raw: String) -> String {
-        let withoutTags = raw.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+        // Balises en ligne retirées sans espace (« d’<a>ail</a> » → « d’ail »),
+        // les autres séparent des mots.
+        let withoutTags = raw
+            .replacingOccurrences(of: #"(?i)</?(a|strong|em|b|i|u|span|small|sup|sub|mark)\b[^>]*>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
         return decodeEntities(withoutTags)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
