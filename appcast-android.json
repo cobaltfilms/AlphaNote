@@ -1,7 +1,7 @@
 {
-  "version": "0.2.4",
-  "versionCode": 204,
-  "notes": "AlphaNote 0.2.4 : les recettes gardent leurs quantit\u00e9s m\u00eame quand le site ne les publie que dans le texte (ex. papillesetpupilles.fr) ; message clair en cas d'\u00e9chec de v\u00e9rification des mises \u00e0 jour.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.4/AlphaNote-0.2.4.apk",
+  "version": "0.2.5",
+  "versionCode": 205,
+  "notes": "Dict\u00e9e vocale : bouton micro dans la barre de demande en langage naturel.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.5/AlphaNote-0.2.5.apk",
   "minimumSdk": 26
 }
