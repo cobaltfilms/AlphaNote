@@ -18,6 +18,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -26,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +43,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Code
@@ -103,6 +113,26 @@ fun CommandField(
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
+    // Dictée : le texte remplit le champ au fil de la parole, puis la demande
+    // part toute seule après le silence (comme sur Mac).
+    val context = LocalContext.current
+    val dictation = remember { VoiceDictation(context) }
+    dictation.onFinished = { text -> if (!isRouting) { onSubmit(text); draft = "" } }
+    DisposableEffect(Unit) { onDispose { dictation.release() } }
+    LaunchedEffect(dictation.transcript) { if (dictation.transcript.isNotEmpty()) draft = dictation.transcript }
+    LaunchedEffect(dictation.error) { dictation.error?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) dictation.start()
+        else Toast.makeText(context, "AlphaNote a besoin du microphone pour la dictée. Autorisez-le dans Réglages › Applis › AlphaNote.", Toast.LENGTH_LONG).show()
+    }
+    val toggleDictation = {
+        when {
+            dictation.isListening -> dictation.stop()
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> dictation.start()
+            else -> micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -136,6 +166,16 @@ fun CommandField(
                 style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                 modifier = Modifier.background(palette.modeBackground(preview), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 3.dp)
             )
+        }
+        if (!isRouting) {
+            IconButton(onClick = toggleDictation, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    if (dictation.isListening) Icons.Default.GraphicEq else Icons.Default.Mic,
+                    contentDescription = if (dictation.isListening) "Arrêter l'écoute" else "Dicter",
+                    tint = if (dictation.isListening) palette.timer else palette.secondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
         if (isRouting) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = palette.accent)

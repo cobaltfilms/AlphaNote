@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Installation des mises à jour téléchargées -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Dictée de la barre de commande -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Android 11+ : rendre visible le service de reconnaissance vocale -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".AlphaNoteApp"
