@@ -36,7 +36,7 @@ class AppSettingsRepository(context: Context) {
             listCheckTrigger = (prefs[LIST_TRIGGER] ?: "/x").ifBlank { "/x" },
             autoCleanup = prefs[AUTO_CLEANUP] ?: true,
             confirmDelete = prefs[CONFIRM_DELETE] ?: true,
-            appcastUrl = prefs[APPCAST_URL] ?: APPCAST_URL_DEFAULT
+            appcastUrl = prefs[APPCAST_URL]?.takeUnless { it == LEGACY_APPCAST_URL } ?: APPCAST_URL_DEFAULT
         )
     }
 
@@ -48,7 +48,9 @@ class AppSettingsRepository(context: Context) {
     suspend fun setAppcastUrl(url: String) { dataStore.edit { it[APPCAST_URL] = url.trim() } }
 
     companion object {
-        const val APPCAST_URL_DEFAULT = "https://git.cobaltfilms.be/paul/AlphaNote/raw/branch/main/appcast-android.json"
+        /** Dépôt public de releases : Gitea exige une connexion, même pour un dépôt public. */
+        const val APPCAST_URL_DEFAULT = "https://raw.githubusercontent.com/cobaltfilms/AlphaNote/main/appcast-android.json"
+        private const val LEGACY_APPCAST_URL = "https://git.cobaltfilms.be/paul/AlphaNote/raw/branch/main/appcast-android.json"
         private val THEME = stringPreferencesKey("theme")
         private val FONT_SIZE = floatPreferencesKey("font_size")
         private val LIST_TRIGGER = stringPreferencesKey("list_check_trigger")

@@ -128,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appliedHotkey: (UInt32, UInt)?
     private var observers: [NSObjectProtocol] = []
 
+    static let defaultAppcastURL = "https://raw.githubusercontent.com/cobaltfilms/AlphaNote/main/appcast.json"
+    private static let legacyAppcastURL = "https://git.cobaltfilms.be/paul/AlphaNote/raw/branch/main/appcast.json"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [
             HotkeySettings.enabledKey: true,
@@ -138,9 +141,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.themeKey: "system",
             "fontSize": 14.0,
             "listCheckTrigger": "/x",
-            // Canal de mise à jour par défaut : l'appcast publié à la racine du dépôt.
-            AISettingsKeys.updateAppcastURL: "https://git.cobaltfilms.be/paul/AlphaNote/raw/branch/main/appcast.json"
+            // Canal de mise à jour par défaut : l'appcast du dépôt public de releases
+            // (Gitea exige une connexion, même pour un dépôt public).
+            AISettingsKeys.updateAppcastURL: Self.defaultAppcastURL
         ])
+        if UserDefaults.standard.string(forKey: AISettingsKeys.updateAppcastURL) == Self.legacyAppcastURL {
+            UserDefaults.standard.removeObject(forKey: AISettingsKeys.updateAppcastURL)
+        }
 
         PreferencesMigration.migrateLegacyDefaultsIfNeeded()
         DatabaseManager.shared.setup()
