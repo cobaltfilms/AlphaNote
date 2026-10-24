@@ -1,1 +1,7 @@
-{}
+{
+  "version": "0.2.2",
+  "versionCode": 202,
+  "notes": "AlphaNote Android 0.2.2 : les mises \u00e0 jour passent d\u00e9sormais par GitHub (canal public).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.2/AlphaNote-0.2.2.apk",
+  "minimumSdk": 26
+}
