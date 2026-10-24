@@ -1,6 +1,6 @@
 {
-  "version": "0.2.2",
-  "notes": "AlphaNote 0.2.2 : notes tri\u00e9es par date de cr\u00e9ation (plus r\u00e9centes en haut), pourcentage relatif (100 - 20% = 80), mises \u00e0 jour via GitHub (canal public).",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.2/AlphaNote-0.2.2.zip",
+  "version": "0.2.3",
+  "notes": "AlphaNote 0.2.3 : un lien de recette devient la liste des ingr\u00e9dients ; en mode math, une demande en mots devient une formule r\u00e9dig\u00e9e par l'IA (\u00e0 v\u00e9rifier, d\u00e9sactivable dans R\u00e9glages \u203a IA).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.3/AlphaNote-0.2.3.zip",
   "minimumSystemVersion": "14.0"
 }
