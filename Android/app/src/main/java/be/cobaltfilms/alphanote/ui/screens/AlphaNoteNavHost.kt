@@ -11,17 +11,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 
-/**
- * Evénement de partage texte injecté depuis Activity.
- */
-data class SharedTextEvent(
-    val id: Long,
-    val text: String
-)
+/** Événement de partage texte injecté depuis l'Activity. */
+data class SharedTextEvent(val id: Long, val text: String)
 
-/**
- * Navigation principale AlphaNote.
- */
 @Composable
 fun AlphaNoteNavHost(
     modifier: Modifier = Modifier,
@@ -37,45 +29,21 @@ fun AlphaNoteNavHost(
         onSharedTextConsumed(payload.id)
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = "notes",
-        modifier = modifier
-    ) {
+    NavHost(navController = navController, startDestination = "notes", modifier = modifier) {
         composable("notes") {
             NoteListScreen(
                 viewModel = noteViewModel,
-                onCreateNote = { text ->
-                    val noteId = noteViewModel.createNoteAndGetId(content = text)
-                    navController.navigate("note/$noteId")
-                },
-                onNoteClick = { noteId ->
-                    navController.navigate("note/$noteId")
-                },
-                onSettingsClick = {
-                    navController.navigate("settings")
-                }
+                onCreateNote = { text -> navController.navigate("note/${noteViewModel.createNoteAndGetId(content = text)}") },
+                onNoteClick = { noteId -> navController.navigate("note/$noteId") },
+                onSettingsClick = { navController.navigate("settings") }
             )
         }
-
-        composable(
-            "note/{noteId}",
-            arguments = listOf(navArgument("noteId") { type = NavType.LongType })
-        ) { backStackEntry ->
+        composable("note/{noteId}", arguments = listOf(navArgument("noteId") { type = NavType.LongType })) { backStackEntry ->
             val noteId = backStackEntry.arguments?.getLong("noteId") ?: return@composable
-
-            NoteEditScreen(
-                noteId = noteId,
-                viewModel = noteViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            NoteEditScreen(noteId = noteId, viewModel = noteViewModel, onBack = { navController.popBackStack() })
         }
-
         composable("settings") {
-            SettingsScreen(
-                viewModel = noteViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            SettingsScreen(viewModel = noteViewModel, onBack = { navController.popBackStack() })
         }
     }
 }

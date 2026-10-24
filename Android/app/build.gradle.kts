@@ -1,3 +1,5 @@
+import java.util.Properties
+
 // AlphaNote Android — Configuration du module application
 // Stack : Kotlin 1.9+ / Jetpack Compose / Material 3 / Room / Coroutines
 
@@ -15,12 +17,31 @@ android {
         applicationId = "be.cobaltfilms.alphanote"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        // versionCode = major*10000 + minor*100 + patch (lisible, monotone).
+        versionCode = 201
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    // Signature de release : ~/.alphanote/keystore.properties (hors dépôt), ou la
+    // variable ALPHANOTE_KEYSTORE_PROPS. Sans fichier, la release est signée en
+    // debug (installable, mais les mises à jour in-app exigent une clé stable).
+    val keystorePropsFile = file(System.getenv("ALPHANOTE_KEYSTORE_PROPS") ?: "${System.getProperty("user.home")}/.alphanote/keystore.properties")
+    val keystoreProps = Properties().apply { if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) } }
+    val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
         }
     }
 
@@ -31,6 +52,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
         debug {
             isMinifyEnabled = false
@@ -48,6 +70,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -104,6 +127,7 @@ dependencies {
 
     // Tests unitaires
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013") // org.json réel dans les tests JVM (sinon « not mocked »)
     testImplementation("org.jetbrains.kotlin:kotlin-test:1.9.20")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 

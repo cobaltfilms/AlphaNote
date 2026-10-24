@@ -15,11 +15,11 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface NoteDao {
 
-    /** Toutes les notes non supprimées, triées par épinglé puis position */
+    /** Toutes les notes non supprimées : épinglées d'abord, puis les plus récemment créées */
     @Query("""
         SELECT * FROM note 
         WHERE isDeleted = 0 AND archived = 0
-        ORDER BY isPinned DESC, position ASC
+        ORDER BY isPinned DESC, createdAt DESC, id DESC
     """)
     fun observeActiveNotes(): Flow<List<Note>>
 
@@ -27,9 +27,12 @@ interface NoteDao {
     @Query("""
         SELECT * FROM note 
         WHERE isDeleted = 0 AND archived = 0
-        ORDER BY isPinned DESC, position ASC
+        ORDER BY isPinned DESC, createdAt DESC, id DESC
     """)
     suspend fun getActiveNotes(): List<Note>
+
+    @Query("SELECT * FROM note ORDER BY position ASC")
+    suspend fun getAllIncludingDeleted(): List<Note>
 
     @Query("""
         SELECT * FROM note
@@ -62,17 +65,17 @@ interface NoteDao {
 
     @Query("""
         UPDATE note 
-        SET isDeleted = 1, deletedAt = :now, updatedAt = :now 
+        SET isDeleted = 1, deletedAt = :now, updatedAt = :now, lastModifiedByDeviceId = :deviceId
         WHERE id = :id
     """)
-    suspend fun softDelete(id: Long, now: Long = System.currentTimeMillis())
+    suspend fun softDelete(id: Long, deviceId: String, now: Long = System.currentTimeMillis())
 
     @Query("""
         UPDATE note
-        SET archived = :archived, updatedAt = :now
+        SET archived = :archived, updatedAt = :now, lastModifiedByDeviceId = :deviceId
         WHERE id = :id
     """)
-    suspend fun setArchived(id: Long, archived: Boolean, now: Long = System.currentTimeMillis())
+    suspend fun setArchived(id: Long, archived: Boolean, deviceId: String, now: Long = System.currentTimeMillis())
 
     @Query("""
         DELETE FROM note 
@@ -82,10 +85,23 @@ interface NoteDao {
 
     @Query("""
         UPDATE note 
-        SET isDeleted = 1, deletedAt = :now, updatedAt = :now 
+        SET isDeleted = 1, deletedAt = :now, updatedAt = :now, lastModifiedByDeviceId = :deviceId
         WHERE TRIM(content) = '' AND isDeleted = 0
     """)
-    suspend fun softDeleteEmpty(now: Long = System.currentTimeMillis())
+    suspend fun softDeleteEmpty(deviceId: String, now: Long = System.currentTimeMillis())
+
+    @Query("""
+        UPDATE note
+        SET isPinned = :pinned, updatedAt = :now, lastModifiedByDeviceId = :deviceId
+        WHERE id = :id
+    """)
+    suspend fun setPinned(id: Long, pinned: Boolean, deviceId: String, now: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM note WHERE isDeleted = 0 ORDER BY archived ASC, isPinned DESC, createdAt DESC, id DESC")
+    suspend fun getAllNotDeleted(): List<Note>
+
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM note WHERE isDeleted = 0")
+    suspend fun nextPosition(): Int
 
     /** Met à jour le timestamp de dernière synchronisation */
     @Query("UPDATE note SET lastSyncedAt = :timestamp WHERE uuid = :uuid")

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.AlphaNote" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.AlphaNote" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF241F18</item>
+        <item name="android:statusBarColor">#FF141108</item>
+    </style>
 </resources>

@@ -1,8 +1,8 @@
 package be.cobaltfilms.alphanote.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,38 +12,37 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,37 +51,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.unit.sp
+import be.cobaltfilms.alphanote.ai.NoteMode
 import be.cobaltfilms.alphanote.model.Note
-import be.cobaltfilms.alphanote.ui.theme.AlphaSpacing
-import be.cobaltfilms.alphanote.ui.theme.Blue20
-import be.cobaltfilms.alphanote.ui.theme.Blue30
-import be.cobaltfilms.alphanote.ui.theme.Blue40
-import be.cobaltfilms.alphanote.ui.theme.Blue90
-import be.cobaltfilms.alphanote.ui.theme.CodeColor
-import be.cobaltfilms.alphanote.ui.theme.ListColor
-import be.cobaltfilms.alphanote.ui.theme.MathColor
-import be.cobaltfilms.alphanote.ui.theme.TimerColor
+import be.cobaltfilms.alphanote.ui.components.ModeDot
+import be.cobaltfilms.alphanote.ui.components.NoteDates
+import be.cobaltfilms.alphanote.ui.editor.EditorDecorations
+import be.cobaltfilms.alphanote.ui.theme.LocalAlphaPalette
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
-private data class CreateTemplate(
-    val label: String,
-    val initialContent: String,
-    val color: Color
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Liste des notes — même structure que le volet macOS : recherche (texte +
+ * sémantique), Épinglées / Notes / Archives, titre + date + aperçu.
+ */
 @Composable
 fun NoteListScreen(
     viewModel: NoteViewModel,
@@ -90,461 +76,205 @@ fun NoteListScreen(
     onNoteClick: (Long) -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val palette = LocalAlphaPalette.current
     val activeNotes by viewModel.activeNotes.collectAsState()
     val archivedNotes by viewModel.archivedNotes.collectAsState()
-    val confirmDelete by viewModel.confirmDelete.collectAsState()
-    val dateFormat = rememberDateFormat()
+    val semanticResults by viewModel.semanticResults.collectAsState()
+    val settings by viewModel.settings.collectAsState()
     val scope = rememberCoroutineScope()
-    val createTemplates = remember {
-        listOf(
-            CreateTemplate("Note", "", Blue40),
-            CreateTemplate("Liste", "list\n", ListColor),
-            CreateTemplate("Math", "math\n", MathColor),
-            CreateTemplate("Code", "code\n", CodeColor),
-            CreateTemplate("Timer", "timer\n", TimerColor)
-        )
-    }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    var pendingDeleteNote by remember { mutableStateOf<Note?>(null) }
+    var query by remember { mutableStateOf("") }
+    var showArchived by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<Note?>(null) }
+    var renaming by remember { mutableStateOf<Note?>(null) }
 
-    fun createNote(initialContent: String) {
-        scope.launch { onCreateNote(initialContent) }
+    LaunchedEffect(Unit) { viewModel.toast.collect { snackbarHostState.showSnackbar(it) } }
+    LaunchedEffect(query) { viewModel.semanticSearch(query) }
+    LaunchedEffect(Unit) { if (settings.autoCleanup) viewModel.deleteEmptyNotes() }
+
+    val filtered = remember(activeNotes, query, semanticResults) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) activeNotes else {
+            val lower = trimmed.lowercase()
+            val textMatches = activeNotes.filter { it.content.lowercase().contains(lower) || it.title.lowercase().contains(lower) }
+            val textIDs = textMatches.map { it.uuid }.toSet()
+            textMatches + semanticResults.filter { !it.archived && it.uuid !in textIDs }
+        }
     }
+    val pinned = filtered.filter { it.isPinned }
+    val others = filtered.filter { !it.isPinned }
 
     Scaffold(
-        topBar = {
-            AlphaTopHero(
-                activeCount = activeNotes.size,
-                onSettingsClick = onSettingsClick
-            )
-        },
+        containerColor = palette.sidebar,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            CreateFabActions(
-                templates = createTemplates,
-                onCreateDefault = { createNote("") },
-                onCreateTemplate = { template -> createNote(template.initialContent) }
-            )
+            FloatingActionButton(
+                onClick = { scope.launch { onCreateNote("") } },
+                containerColor = palette.accent, contentColor = palette.window
+            ) { Icon(Icons.Default.Add, contentDescription = "Nouvelle note") }
         }
     ) { padding ->
-        if (activeNotes.isEmpty() && archivedNotes.isEmpty()) {
-            EmptyState(
-                modifier = Modifier.padding(padding),
-                templates = createTemplates,
-                onCreateTemplate = { template -> createNote(template.initialContent) }
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(
-                    horizontal = AlphaSpacing.screenHorizontal,
-                    vertical = AlphaSpacing.sectionVertical
-                ),
-                verticalArrangement = Arrangement.spacedBy(AlphaSpacing.itemGap)
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                item {
-                    QuickCreateRow(
-                        templates = createTemplates,
-                        onCreateTemplate = { template -> createNote(template.initialContent) }
-                    )
-                }
+                Text("AlphaNote", color = palette.text, style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+                IconButton(onClick = onSettingsClick) { Icon(Icons.Default.Settings, contentDescription = "Réglages", tint = palette.secondary) }
+            }
 
-                if (activeNotes.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Actives",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                    .background(palette.field, RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null, tint = palette.secondary, modifier = Modifier.size(16.dp))
+                BasicTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    textStyle = TextStyle(color = palette.text, fontSize = 14.sp),
+                    cursorBrush = SolidColor(palette.accent),
+                    decorationBox = { inner -> if (query.isEmpty()) Text("Rechercher", color = palette.secondary, fontSize = 14.sp); inner() }
+                )
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }, modifier = Modifier.size(20.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Effacer", tint = palette.secondary, modifier = Modifier.size(14.dp))
                     }
                 }
+            }
 
-                items(activeNotes, key = { it.id }) { note ->
-                    NoteListCard(
-                        note = note,
-                        dateFormat = dateFormat,
-                        archived = false,
-                        onOpen = { onNoteClick(note.id) },
-                        onArchiveToggle = { viewModel.archiveNote(note) },
-                        onDelete = {
-                            if (confirmDelete) {
-                                pendingDeleteNote = note
-                            } else {
-                                viewModel.deleteNote(note)
-                            }
-                        }
-                    )
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 96.dp)) {
+                if (pinned.isNotEmpty()) {
+                    item { SectionHeader("Épinglées", pinned = true) }
+                    items(pinned, key = { "p${it.id}" }) { note ->
+                        NoteRow(note, archived = false, onOpen = { onNoteClick(note.id) },
+                            onPin = { viewModel.togglePin(note) }, onRename = { renaming = note }, onDuplicate = { viewModel.duplicate(note) },
+                            onArchive = { viewModel.archive(note) }, onDelete = { if (settings.confirmDelete && note.content.isNotBlank()) pendingDelete = note else viewModel.delete(note) })
+                    }
                 }
-
+                if (others.isNotEmpty()) {
+                    if (pinned.isNotEmpty()) item { SectionHeader("Notes", pinned = false) }
+                    items(others, key = { "n${it.id}" }) { note ->
+                        NoteRow(note, archived = false, onOpen = { onNoteClick(note.id) },
+                            onPin = { viewModel.togglePin(note) }, onRename = { renaming = note }, onDuplicate = { viewModel.duplicate(note) },
+                            onArchive = { viewModel.archive(note) }, onDelete = { if (settings.confirmDelete && note.content.isNotBlank()) pendingDelete = note else viewModel.delete(note) })
+                    }
+                }
+                if (filtered.isEmpty()) {
+                    item {
+                        Text(if (query.isEmpty()) "Aucune note. Appuie sur + pour écrire." else "Aucun résultat",
+                            color = palette.secondary, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
+                    }
+                }
                 if (archivedNotes.isNotEmpty()) {
                     item {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Archives",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    items(archivedNotes, key = { it.id }) { note ->
-                        NoteListCard(
-                            note = note,
-                            dateFormat = dateFormat,
-                            archived = true,
-                            onOpen = { onNoteClick(note.id) },
-                            onArchiveToggle = { viewModel.unarchiveNote(note) },
-                            onDelete = {
-                                if (confirmDelete) {
-                                    pendingDeleteNote = note
-                                } else {
-                                    viewModel.deleteNote(note)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    pendingDeleteNote?.let { note ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteNote = null },
-            title = { Text("Supprimer la note") },
-            text = {
-                Text(
-                    "Cette note sera placée dans la suppression logicielle. " +
-                        "Tu pourras toujours restaurer via synchronisation/backup si nécessaire."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteNote(note)
-                    pendingDeleteNote = null
-                }) {
-                    Text("Supprimer")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteNote = null }) {
-                    Text("Annuler")
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun EmptyState(
-    templates: List<CreateTemplate>,
-    onCreateTemplate: (CreateTemplate) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = AlphaSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(20.dp))
-        ElevatedCard(
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Bienvenue", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    "Capture rapidement tes idées, puis structure-les en mode math, list, code ou timer.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                QuickCreateRow(
-                    templates = templates,
-                    onCreateTemplate = onCreateTemplate
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AlphaTopHero(
-    activeCount: Int,
-    onSettingsClick: () -> Unit
-) {
-    val containerShape: Shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp)
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(containerShape)
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(Blue40, Blue30, Blue20)
-                )
-            )
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 28.dp, y = (-22).dp)
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(Blue90.copy(alpha = 0.22f))
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 8.dp, y = 42.dp)
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(Blue90.copy(alpha = 0.18f))
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(start = AlphaSpacing.screenHorizontal, end = 10.dp, top = 10.dp, bottom = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "AlphaNote",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Text(
-                    text = "$activeCount note${if (activeCount > 1) "s" else ""} actives",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f)
-                )
-            }
-
-            IconButton(onClick = onSettingsClick) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = "Paramètres",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CreateFabActions(
-    templates: List<CreateTemplate>,
-    onCreateDefault: () -> Unit,
-    onCreateTemplate: (CreateTemplate) -> Unit
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        ExtendedFloatingActionButton(
-            onClick = onCreateDefault,
-            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-            text = { Text("Nouvelle note") },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        )
-
-        Box {
-            FloatingActionButton(
-                onClick = { menuExpanded = true },
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            ) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Choisir un type de note")
-            }
-
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
-            ) {
-                templates.forEach { template ->
-                    DropdownMenuItem(
-                        text = { Text("Nouveau ${template.label.lowercase()}") },
-                        onClick = {
-                            menuExpanded = false
-                            onCreateTemplate(template)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().combinedClickableNoRipple { showArchived = !showArchived }.padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(if (showArchived) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = palette.secondary, modifier = Modifier.size(16.dp))
+                            Text("Archives · ${archivedNotes.size}", color = palette.secondary, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
                         }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickCreateRow(
-    templates: List<CreateTemplate>,
-    onCreateTemplate: (CreateTemplate) -> Unit
-) {
-    val scroll = rememberScrollState()
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Créer rapidement",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(scroll),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            templates.forEach { template ->
-                SuggestionChip(
-                    onClick = { onCreateTemplate(template) },
-                    label = { Text("Nouveau ${template.label.lowercase()}") },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = template.color.copy(alpha = 0.14f),
-                        labelColor = template.color
-                    )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NoteListCard(
-    note: Note,
-    dateFormat: SimpleDateFormat,
-    archived: Boolean,
-    onOpen: () -> Unit,
-    onArchiveToggle: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val keywordColor = keywordToColor(note.keyword)
-    val preview = note.content.lines()
-        .drop(if (note.keyword.isNotEmpty()) 1 else 0)
-        .firstOrNull { it.trim().isNotEmpty() }
-        ?.trim()
-        .orEmpty()
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen),
-        colors = CardDefaults.cardColors(
-            containerColor = if (archived) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (archived) 0.dp else 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .width(4.dp)
-                    .height(44.dp)
-                    .background(
-                        color = if (note.keyword.isBlank()) {
-                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                        } else {
-                            keywordColor
-                        },
-                        shape = MaterialTheme.shapes.small
-                    )
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = note.effectiveTitle.ifEmpty { "Sans titre" },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (preview.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = preview,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = dateFormat.format(Date(note.updatedAt)),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (note.keyword.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text(note.keyword.uppercase(), style = MaterialTheme.typography.labelSmall) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = keywordColor.copy(alpha = 0.14f),
-                                labelColor = keywordColor
-                            )
-                        )
+                    }
+                    if (showArchived) {
+                        items(archivedNotes, key = { "a${it.id}" }) { note ->
+                            NoteRow(note, archived = true, onOpen = { onNoteClick(note.id) },
+                                onPin = { viewModel.togglePin(note) }, onRename = { renaming = note }, onDuplicate = { viewModel.duplicate(note) },
+                                onArchive = { viewModel.unarchive(note) }, onDelete = { pendingDelete = note })
+                        }
                     }
                 }
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onArchiveToggle) {
-                    Icon(
-                        imageVector = if (archived) Icons.Default.Unarchive else Icons.Default.Archive,
-                        contentDescription = if (archived) "Désarchiver" else "Archiver",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Supprimer",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                item {
+                    Divider(color = palette.line, modifier = Modifier.padding(top = 12.dp))
+                    Text("${activeNotes.size} note${if (activeNotes.size > 1) "s" else ""}", color = palette.secondary, fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).navigationBarsPadding())
                 }
             }
         }
     }
-}
 
-fun keywordToColor(keyword: String): Color {
-    return when (keyword.lowercase()) {
-        "math" -> MathColor
-        "list" -> ListColor
-        "code" -> CodeColor
-        "timer" -> TimerColor
-        else -> Blue40
+    pendingDelete?.let { note ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Supprimer cette note ?") },
+            text = { Text("« ${displayTitle(note)} » sera supprimée. Les notes vides se suppriment sans confirmation.") },
+            confirmButton = { TextButton(onClick = { viewModel.delete(note); pendingDelete = null }) { Text("Supprimer", color = palette.timer) } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Annuler") } }
+        )
     }
+
+    renaming?.let { note -> RenameDialog(note, onDismiss = { renaming = null }, onRename = { viewModel.rename(note, it); renaming = null }) }
 }
 
 @Composable
-private fun rememberDateFormat(): SimpleDateFormat {
-    return remember {
-        SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+fun RenameDialog(note: Note, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var draft by remember(note.id) { mutableStateOf(note.title.ifEmpty { displayTitle(note) }) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Renommer la note") },
+        text = { OutlinedTextField(value = draft, onValueChange = { draft = it }, singleLine = true, label = { Text("Nom (vide = première ligne)") }) },
+        confirmButton = { TextButton(onClick = { onRename(draft) }) { Text("Enregistrer") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
+    )
+}
+
+@Composable
+private fun SectionHeader(title: String, pinned: Boolean) {
+    val palette = LocalAlphaPalette.current
+    Row(modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (pinned) Icon(Icons.Default.PushPin, contentDescription = null, tint = palette.secondary, modifier = Modifier.size(11.dp))
+        Text(title.uppercase(), color = palette.secondary, style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp))
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NoteRow(
+    note: Note, archived: Boolean, onOpen: () -> Unit, onPin: () -> Unit, onRename: () -> Unit,
+    onDuplicate: () -> Unit, onArchive: () -> Unit, onDelete: () -> Unit
+) {
+    val palette = LocalAlphaPalette.current
+    var menu by remember { mutableStateOf(false) }
+    val mode = NoteMode.fromKeyword(note.keyword)
+    Box {
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .combinedClickable(onClick = onOpen, onLongClick = { menu = true })
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top
+        ) {
+            Box(modifier = Modifier.padding(top = 6.dp)) { ModeDot(mode) }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(displayTitle(note), color = palette.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(6.dp))
+                    Text(NoteDates.shortDate(note.updatedAt), color = palette.secondary.copy(alpha = 0.85f), fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(preview(note), color = palette.secondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text(if (note.isPinned) "Désépingler" else "Épingler") }, onClick = { menu = false; onPin() })
+            DropdownMenuItem(text = { Text("Renommer…") }, onClick = { menu = false; onRename() })
+            DropdownMenuItem(text = { Text("Dupliquer") }, onClick = { menu = false; onDuplicate() })
+            DropdownMenuItem(text = { Text(if (archived) "Désarchiver" else "Archiver") }, onClick = { menu = false; onArchive() })
+            DropdownMenuItem(text = { Text("Supprimer", color = palette.timer) }, onClick = { menu = false; onDelete() })
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.combinedClickableNoRipple(onClick: () -> Unit): Modifier = this.combinedClickable(onClick = onClick)
+
+fun displayTitle(note: Note): String = note.effectiveTitle.ifEmpty { "Note sans titre" }
+
+fun preview(note: Note): String {
+    var lines = note.content.split("\n")
+    if (lines.isNotEmpty() && EditorDecorations.isModeHeader(lines.first().trim())) lines = lines.drop(1)
+    if (note.title.isEmpty() && lines.isNotEmpty() && lines.first().trim() == note.effectiveTitle) lines = lines.drop(1)
+    val text = lines.joinToString(" ").trim().replace(Regex("\\s+"), " ")
+    return text.ifEmpty { "Vide" }
 }
