@@ -242,11 +242,15 @@ class MathEvaluator {
         return result
     }
 
-    private companion object {
-        val DECIMAL_COMMA = Regex("(?<=\\d),(?=\\d)")
-        val IMPLICIT_X = Regex("(?<=\\d|\\)|%)\\s*[xX]\\s*(?=\\d|\\(|[A-Za-z_π])")
+    companion object {
+        /** Nom de fonction ou de constante que l'évaluateur connaît. */
+        fun isKnownName(name: String): Boolean =
+            name.lowercase().let { FUNCTIONS.containsKey(it) || CONSTANTS.containsKey(it) }
 
-        val FUNCTIONS: Map<String, (List<Double>) -> Double?> = mapOf(
+        private val DECIMAL_COMMA = Regex("(?<=\\d),(?=\\d)")
+        private val IMPLICIT_X = Regex("(?<=\\d|\\)|%)\\s*[xX]\\s*(?=\\d|\\(|[A-Za-z_π])")
+
+        private val FUNCTIONS: Map<String, (List<Double>) -> Double?> = mapOf(
             "sqrt" to { a -> if (a.size == 1 && a[0] >= 0) sqrt(a[0]) else null },
             "abs" to { a -> if (a.size == 1) abs(a[0]) else null },
             "round" to { a -> if (a.size == 1) round(a[0]) else null },
@@ -263,6 +267,6 @@ class MathEvaluator {
             "max" to { a -> a.maxOrNull() }
         )
 
-        val CONSTANTS: Map<String, Double> = mapOf("pi" to Math.PI, "π" to Math.PI)
+        private val CONSTANTS: Map<String, Double> = mapOf("pi" to Math.PI, "π" to Math.PI)
     }
 }

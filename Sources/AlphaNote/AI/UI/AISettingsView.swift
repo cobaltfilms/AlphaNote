@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// Réglages IA réduits au strict contrat JEV : un serveur de décision qui
-/// CLASSE la demande dans un mode, jamais une IA qui rédige. Tout est
-/// transparent : on voit l'URL, le délai, et le schéma exact envoyé.
+/// Réglages IA du contrat JEV : un serveur de décision qui CLASSE la demande
+/// dans un mode. Seule exception : en mode math, l'IA peut rédiger une
+/// formule (désactivable). Tout est transparent : on voit l'URL, le délai,
+/// le schéma et la consigne exacts envoyés.
 struct AISettingsView: View {
     @AppStorage(AISettingsKeys.enabled) private var aiEnabled = false
     @AppStorage(AISettingsKeys.jevURL) private var jevURL = AISettingsKeys.jevURLDefault
     @AppStorage(AISettingsKeys.jevDelaiMs) private var jevDelaiMs = AISettingsKeys.jevDelaiMsDefault
+    @AppStorage(AISettingsKeys.formulaDraftEnabled) private var formulaDraftEnabled = true
 
     @State private var isTesting = false
     @State private var statusMessage: String?
@@ -16,11 +18,14 @@ struct AISettingsView: View {
         Form {
             Section {
                 HelpToggle("Activer le routage de mode IA", isOn: $aiEnabled,
-                           help: "Le serveur ne fait que classer la demande dans un mode. Il ne rédige jamais.")
+                           help: "Le serveur classe la demande dans un mode.")
+                HelpToggle("Laisser l'IA rédiger les formules", isOn: $formulaDraftEnabled,
+                           help: "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par l'IA, puis calculée par la note.")
+                    .disabled(!aiEnabled)
             } header: {
                 Text("Routage de mode")
             } footer: {
-                HelpNote("Désactivé, AlphaNote reste sur les mots-clés déterministes.")
+                HelpNote("Désactivé, AlphaNote reste sur les mots-clés déterministes. Une formule de l'IA n'est gardée que si la note sait la calculer, et elle est marquée « formule proposée par l'IA, à vérifier ».")
             }
 
             Section {
@@ -62,6 +67,18 @@ struct AISettingsView: View {
                 Text("Transparence — schéma envoyé")
             } footer: {
                 HelpNote("C'est exactement ce que le serveur reçoit : un seul champ « mode », enum, avec la description de chaque mode. La recherche sémantique reste 100 % locale (embeddings hash-64, hors-ligne).")
+            }
+
+            Section {
+                Text(FormulaDraftFeature.systemPrompt)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Transparence — consigne des formules")
+            } footer: {
+                HelpNote("Envoyée au même serveur (POST /v1/chat/completions), avec ta demande et rien d'autre : jamais le contenu des notes.")
             }
         }
         .formStyle(.grouped)

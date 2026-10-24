@@ -348,7 +348,9 @@ private enum HelpSection: String, CaseIterable, Identifiable {
 
             ## IA
 
-            - Routage de mode par serveur de décision JEV : il **classe** la demande, il ne rédige jamais. Le schéma envoyé est affiché.
+            - Routage de mode par serveur de décision JEV : il **classe** la demande. Le schéma envoyé est affiché.
+            - Seule exception : en mode math, l'IA peut rédiger une formule à partir d'une demande en mots. Elle est marquée « à vérifier » et désactivable.
+            - Un lien de recette devient la liste de ses ingrédients, lue dans la page (sans IA).
 
             ## Mises à jour
 

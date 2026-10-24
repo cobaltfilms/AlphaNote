@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // versionCode = major*10000 + minor*100 + patch (lisible, monotone).
-        versionCode = 202
-        versionName = "0.2.2"
+        versionCode = 203
+        versionName = "0.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -92,7 +92,7 @@ android {
 
 dependencies {
     // Compose BOM — Material 3
-    val composeBom = platform("androidx.compose:compose-bom:2024.01.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
 
     implementation("androidx.compose.ui:ui")

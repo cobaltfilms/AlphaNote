@@ -11,6 +11,11 @@ enum KeywordIntentRouter {
     }
 
     static func classify(_ question: String, noteKeyword: String?) -> NoteMode {
+        // Un lien = une recette à lire en liste ; à tester avant les maths,
+        // qu'une URL (chiffres, « / », « - ») déclencherait.
+        if !URLDetector.extractURLs(from: question).isEmpty {
+            return .list
+        }
         if isTimerRequest(question, noteKeyword: noteKeyword) {
             return .timer
         }

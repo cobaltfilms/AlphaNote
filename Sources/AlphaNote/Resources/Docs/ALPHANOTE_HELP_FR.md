@@ -120,11 +120,16 @@ Activez avec `timer` ou `timer: focus`, ou via `⌘K` (« minuteur 25 min »).
 
 ### 5.6 Demande en langage naturel (⌘K)
 
-Une phrase est **classée** dans un mode, puis une action locale déterministe est
-appliquée. L'IA ne rédige jamais.
+Une phrase est **classée** dans un mode, puis une action locale est appliquée.
+L'IA ne rédige qu'une chose : une formule, en mode math.
 
-- `math` : l'expression est notée dans la note, calculée par la note.
-- `list` : les éléments (virgules) deviennent une liste cochable.
+- `math` : l'expression est notée dans la note, calculée par la note. Une
+  demande en mots (« aire d'un cercle de rayon 3 », « mensualité d'un prêt de
+  200 000 € à 3 % sur 20 ans ») devient une formule rédigée par l'IA (une
+  dizaine de secondes), marquée « formule proposée par l'IA, à vérifier ».
+  Désactivable dans Réglages › IA.
+- `list` : les éléments (virgules) deviennent une liste cochable. Un lien de
+  recette devient la liste de ses ingrédients (lue dans la page, sans IA).
 - `timer` : crée une note minuteur / chrono / pomodoro.
 - `code` : passe la note en mode code.
 - `plain` : rien n'est appliqué.

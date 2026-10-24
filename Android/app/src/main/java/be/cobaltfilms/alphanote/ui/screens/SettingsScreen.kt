@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import be.cobaltfilms.alphanote.ai.FormulaDraftFeature
 import be.cobaltfilms.alphanote.ai.ModeRoutingFeature
 import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.sync.SyncRunState
@@ -157,7 +158,8 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
             }
 
             SettingsCard("IA — routage de mode (JEV)") {
-                SwitchSetting("Classer les demandes par le serveur JEV", "Le serveur ne fait que choisir un mode (math, liste, minuteur, code, texte). Il ne rédige jamais. Sans lui : mots-clés.", aiSettings.enabled, viewModel::setAiEnabled)
+                SwitchSetting("Classer les demandes par le serveur JEV", "Le serveur choisit un mode (math, liste, minuteur, code, texte). Sans lui : mots-clés.", aiSettings.enabled, viewModel::setAiEnabled)
+                SwitchSetting("Laisser l'IA rédiger les formules", "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par l'IA (une dizaine de secondes), gardée seulement si la note sait la calculer, et marquée « à vérifier ».", aiSettings.formulaDraftEnabled, viewModel::setFormulaDraftEnabled)
                 OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localJevUrl, onValueChange = { localJevUrl = it }, singleLine = true, label = { Text("URL du serveur de décision") })
                 OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localDelai, onValueChange = { localDelai = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text("Délai (secondes)") })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -168,7 +170,9 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 Text("Transparence — schéma envoyé", style = MaterialTheme.typography.titleSmall)
                 Text("mode (enum : ${ModeRoutingFeature.modeField.choices.joinToString(", ")})", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
                 Text(ModeRoutingFeature.modeField.description, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
-                Text("Seule la phrase de la demande est envoyée, jamais le contenu des notes.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                Text("Transparence — consigne des formules", style = MaterialTheme.typography.titleSmall)
+                Text(FormulaDraftFeature.systemPrompt, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                Text("Seule la phrase de la demande est envoyée, jamais le contenu des notes. Un lien de recette est lu directement sur le site, sans IA.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
             }
 
             SettingsCard("Mises à jour") {

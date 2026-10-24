@@ -54,10 +54,27 @@
 
 ## AI (JEV contract)
 
-AI in AlphaNote **classifies, it never drafts**. It follows the JEV contract
-(jevai.net, same as the cockpit project): a small model sorts a request into a
-strict schema (enum / bounded fields) and the app applies the chosen mode with
-deterministic local code. No AI ever writes note content.
+AI in AlphaNote **classifies, it never drafts** — with one exception (below).
+It follows the JEV contract (jevai.net, same as the cockpit project): a small
+model sorts a request into a strict schema (enum / bounded fields) and the app
+applies the chosen mode with deterministic local code.
+
+**Exception: math formulas (decided by Paul, 2026-10-24).** In math mode, a
+request in words ("aire d'un cercle de rayon 3", "mensualité d'un prêt…") may
+be turned into a formula **written by the model** (`FormulaDraftFeature`,
+`POST /v1/chat/completions` on the same server, Qwen3 with thinking — slower,
+~10 s, but the no-thinking answers were wrong on simple cases). Guardrails:
+- the formula is kept only if every word is a known function, `pi` or a
+  variable it defines, and the note actually computes the last line;
+- it is written under a `// … formule proposée par l'IA (modèle), à vérifier`
+  comment, and the status line says so;
+- only the request is sent, never note content; Settings → AI shows the exact
+  prompt and has a toggle to turn drafting off.
+
+**Recipe link → list (no AI).** A recipe URL in list mode is fetched and its
+schema.org `recipeIngredient` list (JSON-LD or microdata) becomes the list
+(`RecipeIngredientExtractor`). A page without structured data is a frank
+failure. This replaced the recipe part of the removed remote-context module.
 
 **Kept features**
 - **Semantic search** — local hash-64 embeddings (`AI/Storage/`), fully offline,

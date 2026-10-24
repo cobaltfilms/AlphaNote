@@ -71,6 +71,12 @@ final class MathEvaluator {
         "π": Double.pi
     ]
 
+    /// Nom de fonction ou de constante que l'évaluateur connaît.
+    static func isKnownName(_ name: String) -> Bool {
+        let key = name.lowercased()
+        return functions[key] != nil || constants[key] != nil
+    }
+
     // MARK: - Normalisation
 
     private func normalize(_ input: String) -> String {

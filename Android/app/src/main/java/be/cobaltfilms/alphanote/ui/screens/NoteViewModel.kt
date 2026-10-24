@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import be.cobaltfilms.alphanote.ai.AISettings
 import be.cobaltfilms.alphanote.ai.AISettingsRepository
+import be.cobaltfilms.alphanote.ai.FormulaDraftFeature
 import be.cobaltfilms.alphanote.ai.JEVClient
 import be.cobaltfilms.alphanote.ai.JEVOutcome
 import be.cobaltfilms.alphanote.ai.KeywordIntentRouter
@@ -19,6 +20,7 @@ import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.domain.Converter
 import be.cobaltfilms.alphanote.domain.ListModeFormatter
 import be.cobaltfilms.alphanote.domain.MathEvaluator
+import be.cobaltfilms.alphanote.domain.RecipeIngredientExtractor
 import be.cobaltfilms.alphanote.model.Note
 import be.cobaltfilms.alphanote.search.SemanticSearch
 import be.cobaltfilms.alphanote.sync.CloudJsonCoder
@@ -257,8 +259,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = question.trim()
         if (trimmed.isEmpty()) return
         val note = _currentNote.value
+        // Levé tout de suite (pas dans la coroutine) : l'écran garde la barre
+        // de demande ouverte, avec son indicateur, jusqu'à la réponse.
+        _isRouting.value = true
         viewModelScope.launch {
-            _isRouting.value = true
             try {
                 flush()
                 val decision = ModeRoutingFeature.route(trimmed, note?.keyword, _aiSettings.value.config)
@@ -281,18 +285,41 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         NoteMode.PLAIN -> "Aucun mode appliqué."
     }
 
+    /**
+     * Ordre : expression déjà écrite → conversion → formule rédigée par l'IA
+     * (seule exception au contrat JEV) → dernier recours déterministe.
+     */
     private suspend fun applyMath(question: String, note: Note?): String {
+        strictExpression(question)?.let {
+            writeMathBlock("$it =", note)
+            return "Expression notée, résultat calculé par la note."
+        }
         if (converter.convert(question) != null || CURRENCY_LIKE.matches(question.trim())) {
             writeMathBlock(question.trim().trimEnd('=').trim() + " =", note)
             return "Conversion notée."
         }
-        for (candidate in mathExpressionCandidates(question)) {
-            if (mathEvaluator.evaluate(candidate) != null) {
-                writeMathBlock("$candidate =", note)
-                return "Expression notée, résultat calculé par la note."
+
+        var draftFailure: String? = null
+        val ai = _aiSettings.value
+        val config = ai.config
+        if (config != null && ai.formulaDraftEnabled) {
+            when (val outcome = FormulaDraftFeature.draft(question, config)) {
+                is JEVOutcome.Ok -> {
+                    val origin = outcome.value.model?.let { "IA ($it)" } ?: "IA"
+                    val header = "// ${question.take(80)} — formule proposée par l'$origin, à vérifier"
+                    writeMathBlock((listOf(header) + outcome.value.lines).joinToString("\n"), note)
+                    return "Formule rédigée par l'$origin et calculée par la note — vérifie-la."
+                }
+                is JEVOutcome.Erreur -> draftFailure = outcome.message
             }
         }
-        return "Aucune expression évaluable trouvée — note inchangée."
+
+        val suffix = draftFailure?.let { " ($it)" }.orEmpty()
+        numericFragment(question)?.let {
+            writeMathBlock("$it =", note)
+            return "Expression notée, résultat calculé par la note.$suffix"
+        }
+        return "Aucune expression évaluable trouvée — note inchangée.$suffix"
     }
 
     private suspend fun writeMathBlock(block: String, note: Note?) {
@@ -308,6 +335,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun applyList(question: String, note: Note?): String {
+        RecipeIngredientExtractor.firstUrl(question)?.let { return applyRecipe(it, note) }
         val items = listItems(question)
         if (note == null) {
             repository.createNote("list: ${listTitle(question)}\n" + items.joinToString("\n") { "* $it" }, "list")
@@ -326,6 +354,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         if (normalized == note.content) return "Rien à mettre en liste — note inchangée."
         replaceCurrent(note, normalized)
         return "Note convertie en liste."
+    }
+
+    /** Ingrédients lus dans les données structurées de la page (schema.org), sans IA. */
+    private suspend fun applyRecipe(url: String, note: Note?): String {
+        val host = url.substringAfter("://").substringBefore('/').removePrefix("www.")
+        return when (val outcome = RecipeIngredientExtractor.fetch(url)) {
+            is RecipeIngredientExtractor.Outcome.Ok -> {
+                val recipe = outcome.recipe
+                val body = recipe.ingredients.joinToString("\n") { "* $it" }
+                // Source en fin de liste : l'aperçu de la note montre les ingrédients.
+                val block = "list: ${recipe.title ?: "Recette"}\n$body\n// $url"
+                val content = ListModeFormatter.normalizeForListMode(
+                    if (note == null || note.content.isBlank() || note.keyword == "list") block else "$block\n\n${note.content}",
+                    forceListHeader = true
+                )
+                if (note == null) repository.createNote(content, "list") else replaceCurrent(note, content)
+                "${recipe.ingredients.size} ingrédient(s) lus sur $host."
+            }
+            is RecipeIngredientExtractor.Outcome.Ko -> "Recette illisible sur $host : ${outcome.failure.message} — note inchangée."
+        }
     }
 
     private suspend fun applyTimer(question: String): String {
@@ -363,11 +411,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         syncEngine.notifyLocalChange()
     }
 
-    private fun mathExpressionCandidates(question: String): List<String> {
-        val cleaned = question.lowercase()
-            .replace(Regex("\\b(calcule|calcul|combien font|combien fait|combien|math|egal|égal|fait|font)\\b"), " ")
-            .replace("?", " ").replace("=", " ").replace(Regex("\\s+"), " ").trim()
-        return listOf(cleaned, question.trim().trimEnd('=', '?').trim()).filter { it.isNotEmpty() }.distinct()
+    /**
+     * La demande, débarrassée des mots d'appel, est déjà une expression
+     * complète : aucun mot inconnu (l'évaluateur les ignorerait en silence,
+     * « aire d'un cercle de rayon 3 » donnerait 3).
+     */
+    private fun strictExpression(question: String): String? {
+        val stripped = question
+            .replace(Regex("(?i)\\b(calcule|calcul|combien|resultat|résultat|donne|fait|font)\\b"), "")
+            .replace("?", "").trim().trimEnd('=').trim()
+        if (stripped.isEmpty() || stripped.none(Char::isDigit) || mathEvaluator.evaluate(stripped) == null) return null
+        // « of » fait partie de la syntaxe de l'évaluateur (« 50% of 200 »).
+        val words = Regex("[\\p{L}_][\\p{L}\\p{N}_]*").findAll(stripped).map { it.value }
+        return if (words.all { MathEvaluator.isKnownName(it) || it.lowercase() == "of" }) stripped else null
+    }
+
+    /** Dernier recours sans IA : le premier fragment numérique qui contient un opérateur (« 12*8 stp » → « 12*8 »). */
+    private fun numericFragment(question: String): String? {
+        val expression = Regex("[0-9(][0-9()+\\-*/^.,\\s]*[0-9)]").find(question)?.value?.trim() ?: return null
+        if (expression.none { it in "+-*/^" } || mathEvaluator.evaluate(expression) == null) return null
+        return expression
     }
 
     private fun listItems(text: String): List<String> {
@@ -426,6 +489,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun setAppcastUrl(url: String) = viewModelScope.launch { appSettingsRepository.setAppcastUrl(url) }
 
     fun setAiEnabled(enabled: Boolean) = viewModelScope.launch { aiSettingsRepository.setEnabled(enabled) }
+    fun setFormulaDraftEnabled(enabled: Boolean) = viewModelScope.launch { aiSettingsRepository.setFormulaDraftEnabled(enabled) }
     fun setJevUrl(url: String) = viewModelScope.launch { aiSettingsRepository.setJevUrl(url) }
     fun setJevDelaiMs(ms: Int) = viewModelScope.launch { aiSettingsRepository.setJevDelaiMs(ms) }
 

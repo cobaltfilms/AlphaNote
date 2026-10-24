@@ -51,11 +51,15 @@ struct ModeRoutingFeature {
         description: """
         Le mode que la demande appelle.
         - math : la demande cherche un résultat chiffré — calcul, pourcentage, \
-        réduction, écart de prix, conversion d'unités ou de devises. \
-        Exemples : « 12 * 8 », « pourcentage de réduction entre 120 et 90 », « 10 km to mi ».
+        réduction, écart de prix, conversion d'unités ou de devises, ou une formule \
+        décrite en mots (aire, volume, mensualité, intérêts…). \
+        Exemples : « 12 * 8 », « pourcentage de réduction entre 120 et 90 », « 10 km to mi », \
+        « aire d'un cercle de rayon 3 ».
         - list : la demande veut une liste, une check-list, des tâches, des courses, \
-        des ingrédients, ou ajouter des éléments à une liste. \
-        Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste ».
+        des ingrédients, ajouter des éléments à une liste, ou contient le lien d'une \
+        recette (ses ingrédients deviennent la liste). \
+        Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste », \
+        « https://www.marmiton.org/recettes/recette_crepes.aspx ».
         - timer : la demande veut un minuteur, un compte à rebours, un chronomètre \
         ou une session pomodoro. Exemples : « minuteur 25 minutes », « lance un chrono ».
         - code : la demande écrit, corrige ou range un snippet de code ou une commande.

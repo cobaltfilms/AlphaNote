@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.map
 data class AISettings(
     val enabled: Boolean = false,
     val jevUrl: String = AISettingsRepository.JEV_URL_DEFAULT,
-    val jevDelaiMs: Int = AISettingsRepository.JEV_DELAI_DEFAULT
+    val jevDelaiMs: Int = AISettingsRepository.JEV_DELAI_DEFAULT,
+    /** Exception au contrat JEV : l'IA peut rédiger une formule en mode math. */
+    val formulaDraftEnabled: Boolean = true
 ) {
     /** Configuration effective, null si l'IA est désactivée ou sans URL. */
     val config: JEVConfig?
@@ -32,7 +34,8 @@ class AISettingsRepository(context: Context) {
         AISettings(
             enabled = prefs[ENABLED] ?: false,
             jevUrl = prefs[JEV_URL] ?: JEV_URL_DEFAULT,
-            jevDelaiMs = prefs[JEV_DELAI] ?: JEV_DELAI_DEFAULT
+            jevDelaiMs = prefs[JEV_DELAI] ?: JEV_DELAI_DEFAULT,
+            formulaDraftEnabled = prefs[FORMULA_DRAFT] ?: true
         )
     }
 
@@ -40,6 +43,7 @@ class AISettingsRepository(context: Context) {
     suspend fun setEnabled(enabled: Boolean) { dataStore.edit { it[ENABLED] = enabled } }
     suspend fun setJevUrl(url: String) { dataStore.edit { it[JEV_URL] = url.trim() } }
     suspend fun setJevDelaiMs(ms: Int) { dataStore.edit { it[JEV_DELAI] = ms.coerceIn(1000, 120_000) } }
+    suspend fun setFormulaDraftEnabled(enabled: Boolean) { dataStore.edit { it[FORMULA_DRAFT] = enabled } }
 
     companion object {
         const val JEV_URL_DEFAULT = "http://192.168.3.169:8096"
@@ -47,5 +51,6 @@ class AISettingsRepository(context: Context) {
         private val ENABLED = booleanPreferencesKey("jev_enabled")
         private val JEV_URL = stringPreferencesKey("jev_url")
         private val JEV_DELAI = intPreferencesKey("jev_delai_ms")
+        private val FORMULA_DRAFT = booleanPreferencesKey("ai_formula_draft_enabled")
     }
 }

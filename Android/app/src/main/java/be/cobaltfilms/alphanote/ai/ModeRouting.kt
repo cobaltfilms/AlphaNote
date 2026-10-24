@@ -1,5 +1,7 @@
 package be.cobaltfilms.alphanote.ai
 
+import be.cobaltfilms.alphanote.domain.RecipeIngredientExtractor
+
 import java.text.Normalizer
 
 enum class NoteMode(val keyword: String, val label: String, val title: String) {
@@ -37,8 +39,8 @@ Réponds uniquement selon le schéma, sans rédiger. En cas de doute, plain."""
     val modeField = JEVField.Str(
         choices = NoteMode.raws,
         description = """Le mode que la demande appelle.
-- math : la demande cherche un résultat chiffré — calcul, pourcentage, réduction, écart de prix, conversion d'unités ou de devises. Exemples : « 12 * 8 », « pourcentage de réduction entre 120 et 90 », « 10 km to mi ».
-- list : la demande veut une liste, une check-list, des tâches, des courses, des ingrédients, ou ajouter des éléments à une liste. Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste ».
+- math : la demande cherche un résultat chiffré — calcul, pourcentage, réduction, écart de prix, conversion d'unités ou de devises, ou une formule décrite en mots (aire, volume, mensualité, intérêts…). Exemples : « 12 * 8 », « pourcentage de réduction entre 120 et 90 », « 10 km to mi », « aire d'un cercle de rayon 3 ».
+- list : la demande veut une liste, une check-list, des tâches, des courses, des ingrédients, ajouter des éléments à une liste, ou contient le lien d'une recette (ses ingrédients deviennent la liste). Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste », « https://www.marmiton.org/recettes/recette_crepes.aspx ».
 - timer : la demande veut un minuteur, un compte à rebours, un chronomètre ou une session pomodoro. Exemples : « minuteur 25 minutes », « lance un chrono ».
 - code : la demande écrit, corrige ou range un snippet de code ou une commande.
 - plain : cas par défaut — une pensée, une question, du texte, une note qui ne correspond à aucun autre mode."""
@@ -71,6 +73,9 @@ object KeywordIntentRouter {
     enum class TimerType { COUNTDOWN, STOPWATCH, POMODORO }
 
     fun classify(question: String, noteKeyword: String?): NoteMode = when {
+        // Un lien = une recette à lire en liste ; avant les maths, qu'une URL
+        // (chiffres, « / », « - ») déclencherait.
+        RecipeIngredientExtractor.firstUrl(question) != null -> NoteMode.LIST
         isTimerRequest(question, noteKeyword) -> NoteMode.TIMER
         isMathRequest(question, noteKeyword) -> NoteMode.MATH
         isListRequest(question, noteKeyword) -> NoteMode.LIST

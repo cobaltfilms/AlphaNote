@@ -45,17 +45,17 @@ final class AIStore {
 
         let decision = await routing.route(question: trimmed, noteKeyword: note.keyword)
         noteStore.lastRoute = decision
-        noteStore.aiStatusMessage = apply(decision: decision, question: trimmed, to: note)
+        noteStore.aiStatusMessage = await apply(decision: decision, question: trimmed, to: note)
     }
 
-    private func apply(decision: ModeDecision, question: String, to note: Note) -> String {
+    private func apply(decision: ModeDecision, question: String, to note: Note) async -> String {
         let via = "Mode \(decision.mode.label) via \(decision.source.label)"
         let detail: String
         switch decision.mode {
         case .math:
-            detail = applyMath(question: question, to: note)
+            detail = await applyMath(question: question, to: note)
         case .list:
-            detail = applyList(question: question, to: note)
+            detail = await applyList(question: question, to: note)
         case .timer:
             detail = applyTimer(question: question)
         case .code:
@@ -71,21 +71,39 @@ final class AIStore {
         return message
     }
 
-    private func applyMath(question: String, to note: Note) -> String {
+    /// Ordre : expression déjà écrite → conversion → formule rédigée par
+    /// l'IA (seule exception au contrat JEV) → dernier recours déterministe.
+    private func applyMath(question: String, to note: Note) async -> String {
+        if let expression = strictExpression(from: question) {
+            writeMathBlock("\(expression) =", to: note)
+            return "Expression notée, résultat calculé par la note."
+        }
+
         if converter.convert(question) != nil {
             let expression = conversionExpressionCandidate(from: question)
             writeMathBlock(expression, to: note)
             return "Conversion notée."
         }
 
-        for expression in mathExpressionCandidates(from: question) {
-            if mathEvaluator.evaluate(expression) != nil {
-                writeMathBlock("\(expression) =", to: note)
-                return "Expression notée, résultat calculé par la note."
+        var draftFailure: String?
+        if AIFeatureGate.isEnabled, FormulaDraftFeature.isEnabled, JEVClient.config() != nil {
+            switch await FormulaDraftFeature().draft(question: question) {
+            case let .ok(draft):
+                let origin = draft.model.map { "IA (\($0))" } ?? "IA"
+                let header = "// \(String(question.prefix(80))) — formule proposée par l'\(origin), à vérifier"
+                writeMathBlock(([header] + draft.lines).joined(separator: "\n"), to: note)
+                return "Formule rédigée par l'\(origin) et calculée par la note — vérifie-la."
+            case let .erreur(message):
+                draftFailure = message
             }
         }
 
-        return "Aucune expression évaluable trouvée — note inchangée."
+        if let expression = numericFragment(from: question) {
+            writeMathBlock("\(expression) =", to: note)
+            return "Expression notée, résultat calculé par la note." + (draftFailure.map { " (\($0))" } ?? "")
+        }
+
+        return "Aucune expression évaluable trouvée — note inchangée." + (draftFailure.map { " (\($0))" } ?? "")
     }
 
     private func writeMathBlock(_ block: String, to note: Note) {
@@ -104,7 +122,11 @@ final class AIStore {
         noteStore.updateNote(updated)
     }
 
-    private func applyList(question: String, to note: Note) -> String {
+    private func applyList(question: String, to note: Note) async -> String {
+        if let url = URLDetector.extractURLs(from: question).first {
+            return await applyRecipe(url: url, to: note)
+        }
+
         let items = listItems(from: question)
         var updated = note
 
@@ -133,6 +155,31 @@ final class AIStore {
         updated.detectKeyword()
         noteStore.updateNote(updated)
         return "Note convertie en liste."
+    }
+
+    /// Ingrédients lus dans les données structurées de la page (schema.org),
+    /// sans IA. Une page sans recette structurée laisse la note intacte.
+    private func applyRecipe(url: URL, to note: Note) async -> String {
+        let host = url.host?.replacingOccurrences(of: #"^www\."#, with: "", options: .regularExpression) ?? url.absoluteString
+        switch await RecipeIngredientExtractor.fetch(url) {
+        case let .success(recipe):
+            let body = recipe.ingredients.map { "* \($0)" }.joined(separator: "\n")
+            var updated = note
+            let title = recipe.title ?? "Recette"
+            // Source en fin de liste : l'aperçu de la note montre les ingrédients.
+            let block = "list: \(title)\n\(body)\n// \(url.absoluteString)"
+            if updated.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || updated.keyword == "list" {
+                updated.content = block
+            } else {
+                updated.content = "\(block)\n\n\(updated.content)"
+            }
+            updated.content = ListModeFormatter.normalizeForListMode(content: updated.content, forceListHeader: true)
+            updated.detectKeyword()
+            noteStore.updateNote(updated)
+            return "\(recipe.ingredients.count) ingrédient(s) lus sur \(host)."
+        case let .failure(failure):
+            return "Recette illisible sur \(host) : \(failure.message) — note inchangée."
+        }
     }
 
     private func applyTimer(question: String) -> String {
@@ -247,27 +294,35 @@ final class AIStore {
         return "list: \(note.effectiveTitle.isEmpty ? "Liste" : note.effectiveTitle)"
     }
 
-    private func mathExpressionCandidates(from question: String) -> [String] {
-        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-
-        var candidates = [trimmed]
-        let stripped = trimmed
-            .replacingOccurrences(of: #"(?i)\b(calcule|calcul|combien|resultat|résultat|donne)\b"#, with: "", options: .regularExpression)
+    /// La demande, débarrassée des mots d'appel, est déjà une expression
+    /// complète : aucun mot inconnu (l'évaluateur les ignorerait en silence,
+    /// « aire d'un cercle de rayon 3 » donnerait 3).
+    private func strictExpression(from question: String) -> String? {
+        let stripped = question
+            .replacingOccurrences(of: #"(?i)\b(calcule|calcul|combien|resultat|résultat|donne|fait|font)\b"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: "?", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !stripped.isEmpty {
-            candidates.append(stripped)
-        }
+        guard !stripped.isEmpty,
+              stripped.rangeOfCharacter(from: .decimalDigits) != nil,
+              mathEvaluator.evaluate(stripped) != nil else { return nil }
+        let words = stripped
+            .components(separatedBy: CharacterSet.letters.union(.decimalDigits).union(CharacterSet(charactersIn: "_")).inverted)
+            .filter { $0.first?.isLetter == true || $0.first == "_" }
+        // « of » fait partie de la syntaxe de l'évaluateur (« 50% of 200 »).
+        guard words.allSatisfy({ MathEvaluator.isKnownName($0) || $0.lowercased() == "of" }) else { return nil }
+        return stripped
+    }
 
-        if let range = stripped.range(of: #"[0-9\(\)\+\-\*\/\^\.\,\s]+"#, options: .regularExpression) {
-            let expression = String(stripped[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !expression.isEmpty {
-                candidates.append(expression)
-            }
+    /// Dernier recours sans IA : le premier fragment purement numérique qui
+    /// contient un opérateur (« 12*8 stp » → « 12*8 »).
+    private func numericFragment(from question: String) -> String? {
+        guard let range = question.range(of: #"[0-9\(][0-9\(\)\+\-\*\/\^\.\,\s]*[0-9\)]"#, options: .regularExpression) else {
+            return nil
         }
-
-        return Array(Set(candidates))
+        let expression = String(question[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard expression.rangeOfCharacter(from: CharacterSet(charactersIn: "+-*/^")) != nil,
+              mathEvaluator.evaluate(expression) != nil else { return nil }
+        return expression
     }
 
     private func conversionExpressionCandidate(from question: String) -> String {

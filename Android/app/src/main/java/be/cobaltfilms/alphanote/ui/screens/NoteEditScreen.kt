@@ -25,6 +25,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -81,7 +82,11 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { viewModel.toast.collect { snackbarHostState.showSnackbar(it) } }
+    LaunchedEffect(Unit) { viewModel.toast.collect { snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Long) } }
+    var awaitingRoute by remember { mutableStateOf(false) }
+    LaunchedEffect(isRouting, awaitingRoute) {
+        if (awaitingRoute && !isRouting) { awaitingRoute = false; showCommand = false }
+    }
     LaunchedEffect(noteId) { loadedNoteId = -1L; viewModel.open(noteId) }
 
     val note = currentNote
@@ -98,8 +103,13 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
             lastEdited = text
             if (text != n.content) viewModel.edit(text)
         } else if (n.content != editorValue.text && n.content != lastEdited) {
-            editorValue = TextFieldValue(n.content, TextRange(n.content.length.coerceAtMost(editorValue.selection.end).coerceAtLeast(0)))
-            lastEdited = n.content
+            // Une formule écrite par une demande ⌘K ou la synchro arrive sans
+            // ses résultats : on les calcule comme au chargement.
+            var text = n.content
+            if (NoteMode.fromKeyword(n.keyword) == NoteMode.MATH) text = MathInlineApplier.apply(text, text.length, evaluator, respectCaret = false).text
+            editorValue = TextFieldValue(text, TextRange(text.length.coerceAtMost(editorValue.selection.end).coerceAtLeast(0)))
+            lastEdited = text
+            if (text != n.content) viewModel.edit(text)
         }
     }
 
@@ -150,7 +160,9 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
                 if (showCommand) {
                     CommandField(
                         currentKeyword = note?.keyword, isRouting = isRouting,
-                        onSubmit = { viewModel.routeQuestion(it); showCommand = false },
+                        // La barre reste ouverte (indicateur visible) pendant la
+                        // demande : une formule rédigée par l'IA prend ~10 s.
+                        onSubmit = { viewModel.routeQuestion(it); awaitingRoute = true },
                         onClose = { showCommand = false }
                     )
                 }
