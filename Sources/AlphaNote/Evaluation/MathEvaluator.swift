@@ -33,6 +33,9 @@ final class MathEvaluator {
 
     private enum Token: Equatable {
         case number(Double)
+        /// Pourcentage littéral déjà divisé par 100 (« 20% » → 0.2) : relatif
+        /// quand il est seul à droite d'un + ou d'un − (« 100 - 20% » = 80).
+        case percentNumber(Double)
         case percent
         case factorial
         case `operator`(String)
@@ -169,7 +172,7 @@ final class MathEvaluator {
             let token = cleaned[index]
             if case .percent = token {
                 if let last = final.indices.last, case let .number(value) = final[last] {
-                    final[last] = .number(value / 100)
+                    final[last] = .percentNumber(value / 100)
                 }
                 if index + 1 < cleaned.count {
                     switch cleaned[index + 1] {
@@ -192,8 +195,12 @@ final class MathEvaluator {
         var result = try parseTerm(tokens, &pos)
         while pos < tokens.count, case let .operator(op) = tokens[pos], op == "+" || op == "-" {
             pos += 1
+            let rhsStart = pos
             let rhs = try parseTerm(tokens, &pos)
-            result = op == "+" ? result + rhs : result - rhs
+            var relative = false
+            if pos == rhsStart + 1, case .percentNumber = tokens[rhsStart] { relative = true }
+            let delta = relative ? result * rhs : rhs
+            result = op == "+" ? result + delta : result - delta
         }
         return result
     }
@@ -252,6 +259,10 @@ final class MathEvaluator {
 
         switch tokens[pos] {
         case let .number(value):
+            pos += 1
+            return value
+
+        case let .percentNumber(value):
             pos += 1
             return value
 

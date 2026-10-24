@@ -35,12 +35,11 @@ final class AlphaNoteTests: XCTestCase {
     }
 
     func testPercentAddition() {
-        // "100 + 15%" → 100 + 0.15 = 100.15 (literal percent)
-        // TODO: colloquial percent addition (15% of 100 → 115) for future version
+        // "100 + 15%" → pourcentage relatif : 100 + 15 % de 100 = 115.
         let result = evaluator.evaluate("100 + 15%")
         XCTAssertNotNil(result)
         if let result {
-            XCTAssertEqual(result, 100.15, accuracy: 0.01)
+            XCTAssertEqual(result, 115, accuracy: 0.01)
         }
     }
 

@@ -145,4 +145,12 @@ final class EvaluationTests: XCTestCase {
         let lines = document.transformed(content: "math\n10 CHF to NOK =").components(separatedBy: "\n")
         XCTAssertEqual(lines[1], "10 CHF to NOK = …")
     }
+
+    func testRelativePercentAfterPlusOrMinus() {
+        let evaluator = MathEvaluator()
+        XCTAssertEqual(evaluator.evaluate("100 - 20%"), 80)
+        XCTAssertEqual(evaluator.evaluate("200 + 10%"), 220)
+        XCTAssertEqual(evaluator.evaluate("50% of 200"), 100)
+        XCTAssertEqual(evaluator.evaluate("20% + 5"), 5.2)
+    }
 }

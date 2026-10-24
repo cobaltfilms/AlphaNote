@@ -170,7 +170,7 @@ extension Note {
         do {
             return try dbQueue.read { db in
                 var request = Note
-                    .order(Column("isPinned").desc, Column("position").asc)
+                    .order(Column("isPinned").desc, Column("createdAt").desc, Column("id").desc)
                 if !includeDeleted {
                     request = request.filter(Column("isDeleted") == false)
                 }
