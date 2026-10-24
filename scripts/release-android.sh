@@ -16,12 +16,12 @@ REPO="paul/AlphaNote"
 INSTANCE="https://git.cobaltfilms.be"
 export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
 
-GRADLE_VERSION="$(grep -E 'versionName = ' Android/app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')"
+GRADLE_VERSION="$(grep -E '^ *versionName = "' Android/app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')"
 if [[ "$GRADLE_VERSION" != "$VERSION" ]]; then
     echo "✗ build.gradle.kts dit $GRADLE_VERSION, pas $VERSION — mets versionName/versionCode à jour." >&2
     exit 1
 fi
-VERSION_CODE="$(grep -E 'versionCode = ' Android/app/build.gradle.kts | sed -E 's/.*= *([0-9]+).*/\1/')"
+VERSION_CODE="$(grep -E '^ *versionCode = [0-9]' Android/app/build.gradle.kts | sed -E 's/.*= *([0-9]+).*/\1/')"
 
 echo "› tests unitaires + APK release"
 (cd Android && ./gradlew --no-daemon -q :app:testDebugUnitTest :app:assembleRelease)
