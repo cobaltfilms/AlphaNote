@@ -1,1 +1,6 @@
-{}
+{
+  "version": "0.2.2",
+  "notes": "AlphaNote 0.2.2 : notes tri\u00e9es par date de cr\u00e9ation (plus r\u00e9centes en haut), pourcentage relatif (100 - 20% = 80), mises \u00e0 jour via GitHub (canal public).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.2/AlphaNote-0.2.2.zip",
+  "minimumSystemVersion": "14.0"
+}
