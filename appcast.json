@@ -1,6 +1,6 @@
 {
-  "version": "0.2.3",
-  "notes": "AlphaNote 0.2.3 : un lien de recette devient la liste des ingr\u00e9dients ; en mode math, une demande en mots devient une formule r\u00e9dig\u00e9e par l'IA (\u00e0 v\u00e9rifier, d\u00e9sactivable dans R\u00e9glages \u203a IA).",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.3/AlphaNote-0.2.3.zip",
+  "version": "0.2.4",
+  "notes": "AlphaNote 0.2.4 : les recettes gardent leurs quantit\u00e9s m\u00eame quand le site ne les publie que dans le texte (ex. papillesetpupilles.fr) ; message clair en cas d'\u00e9chec de v\u00e9rification des mises \u00e0 jour.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.4/AlphaNote-0.2.4.zip",
   "minimumSystemVersion": "14.0"
 }
