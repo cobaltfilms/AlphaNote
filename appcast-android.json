@@ -1,7 +1,7 @@
 {
-  "version": "0.2.7",
-  "versionCode": 207,
-  "notes": "Alignement de version avec macOS (aucun changement c\u00f4t\u00e9 Android depuis 0.2.6).",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.7/AlphaNote-0.2.7.apk",
+  "version": "0.2.8",
+  "versionCode": 208,
+  "notes": "Couleurs : six th\u00e8mes (Encre & or, Corail, Sauge, Lavande, Framboise, Bleu nuit), l'ic\u00f4ne suit le th\u00e8me.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.8/AlphaNote-0.2.8.apk",
   "minimumSdk": 26
 }

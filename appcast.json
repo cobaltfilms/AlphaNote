@@ -1,6 +1,6 @@
 {
-  "version": "0.2.7",
-  "notes": "Correctif : l'ic\u00f4ne redevenait l'ancienne au lancement.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.7/AlphaNote-0.2.7.zip",
+  "version": "0.2.8",
+  "notes": "Couleurs : six th\u00e8mes (Encre & or, Corail, Sauge, Lavande, Framboise, Bleu nuit), l'ic\u00f4ne suit le th\u00e8me.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.8/AlphaNote-0.2.8.zip",
   "minimumSystemVersion": "14.0"
 }
