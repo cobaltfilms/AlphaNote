@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 
 enum class ThemeMode(val raw: String, val label: String) {
     SYSTEM("system", "Système"), LIGHT("light", "Clair"), DARK("dark", "Sombre");
@@ -18,6 +19,7 @@ enum class ThemeMode(val raw: String, val label: String) {
 
 data class AppSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
+    val colorTheme: ColorTheme = ColorTheme.OR,
     val fontSize: Float = 16f,
     val listCheckTrigger: String = "/x",
     val autoCleanup: Boolean = true,
@@ -32,6 +34,7 @@ class AppSettingsRepository(context: Context) {
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
         AppSettings(
             theme = ThemeMode.fromRaw(prefs[THEME]),
+            colorTheme = ColorTheme.fromRaw(prefs[COLOR_THEME]),
             fontSize = (prefs[FONT_SIZE] ?: 16f).coerceIn(12f, 26f),
             listCheckTrigger = (prefs[LIST_TRIGGER] ?: "/x").ifBlank { "/x" },
             autoCleanup = prefs[AUTO_CLEANUP] ?: true,
@@ -41,6 +44,7 @@ class AppSettingsRepository(context: Context) {
     }
 
     suspend fun setTheme(mode: ThemeMode) { dataStore.edit { it[THEME] = mode.raw } }
+    suspend fun setColorTheme(theme: ColorTheme) { dataStore.edit { it[COLOR_THEME] = theme.raw } }
     suspend fun setFontSize(size: Float) { dataStore.edit { it[FONT_SIZE] = size.coerceIn(12f, 26f) } }
     suspend fun setListCheckTrigger(trigger: String) { dataStore.edit { it[LIST_TRIGGER] = trigger.trim().ifBlank { "/x" } } }
     suspend fun setAutoCleanup(enabled: Boolean) { dataStore.edit { it[AUTO_CLEANUP] = enabled } }
@@ -52,6 +56,7 @@ class AppSettingsRepository(context: Context) {
         const val APPCAST_URL_DEFAULT = "https://raw.githubusercontent.com/cobaltfilms/AlphaNote/main/appcast-android.json"
         private const val LEGACY_APPCAST_URL = "https://git.cobaltfilms.be/paul/AlphaNote/raw/branch/main/appcast-android.json"
         private val THEME = stringPreferencesKey("theme")
+        private val COLOR_THEME = stringPreferencesKey("color_theme")
         private val FONT_SIZE = floatPreferencesKey("font_size")
         private val LIST_TRIGGER = stringPreferencesKey("list_check_trigger")
         private val AUTO_CLEANUP = booleanPreferencesKey("auto_cleanup")

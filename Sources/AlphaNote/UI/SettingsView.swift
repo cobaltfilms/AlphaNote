@@ -84,8 +84,34 @@ struct GeneralSettingsView: View {
 
 // MARK: - Apparence
 
+/// Pastille d'un thème de couleur : fond de nuit + accent, anneau si choisi.
+private struct ColorThemeSwatch: View {
+    let theme: ColorTheme
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle().fill(Self.color(theme.night.window))
+                Circle().fill(Self.color(theme.night.accent)).padding(5)
+            }
+            .frame(width: 22, height: 22)
+            .overlay(Circle().stroke(isSelected ? Color.primary : Color.secondary.opacity(0.3), lineWidth: isSelected ? 2 : 1).padding(-2))
+        }
+        .buttonStyle(.plain)
+        .help(theme.label)
+        .accessibilityLabel(theme.label)
+    }
+
+    private static func color(_ hex: UInt32) -> Color {
+        Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+}
+
 struct AppearanceSettingsView: View {
     @AppStorage(AppDelegate.themeKey) private var theme = "system"
+    @AppStorage(ColorTheme.storageKey) private var colorTheme = ColorTheme.or.rawValue
     @AppStorage("fontSize") private var fontSize: Double = 14
     @AppStorage("listCheckTrigger") private var listCheckTrigger = "/x"
     @AppStorage("listModeShortcutKey") private var listModeShortcutKey = "l"
@@ -104,7 +130,22 @@ struct AppearanceSettingsView: View {
                     .pickerStyle(.segmented)
                     .fixedSize()
                 } label: {
-                    FieldLabel("Thème", help: "Encre & or : crème le jour, encre chaude la nuit.")
+                    FieldLabel("Thème", help: "Jour, nuit, ou selon le réglage du Mac.")
+                }
+
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        ForEach(ColorTheme.allCases) { option in
+                            ColorThemeSwatch(theme: option, isSelected: option.rawValue == colorTheme) {
+                                colorTheme = option.rawValue
+                            }
+                        }
+                        Text(ColorTheme(rawValue: colorTheme)?.label ?? ColorTheme.or.label)
+                            .font(.callout).foregroundStyle(.secondary)
+                            .frame(width: 80, alignment: .leading)
+                    }
+                } label: {
+                    FieldLabel("Couleurs", help: "Accent (contours, cases, curseur) et teinte des fonds assortie. L'icône du Dock suit.")
                 }
 
                 LabeledContent {

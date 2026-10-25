@@ -154,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SyncEngine.shared.start()
         applyTheme()
         applyActivationPolicy()
+        applyColorTheme()
 
         windowController = NoteWindowController()
         windowController?.showWindow()
@@ -200,7 +201,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyStatusItem()
         applyActivationPolicy()
         applyTheme()
+        applyColorTheme()
         windowController?.applyLevel()
+    }
+
+    private var appliedColorTheme: ColorTheme?
+
+    /// Thème de couleur : fond de la fenêtre (AppKit) et icône du Dock. Les
+    /// vues SwiftUI se reconstruisent d'elles-mêmes (NoteListView).
+    private func applyColorTheme() {
+        let theme = ColorTheme.current
+        guard theme != appliedColorTheme else { return }
+        appliedColorTheme = theme
+        windowController?.window?.backgroundColor = Palette.window
+        NSApp.applicationIconImage = AppIconRenderer.image(accent: theme.night.accent)
     }
 
     private func applyHotkey() {

@@ -24,13 +24,17 @@ private val AlphaNoteShapes = Shapes(
 )
 
 @Composable
-fun AlphaNoteTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+fun AlphaNoteTheme(
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    colorTheme: ColorTheme = ColorTheme.OR,
+    content: @Composable () -> Unit
+) {
     val darkTheme = when (themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val palette = if (darkTheme) NightPalette else DayPalette
+    val palette = alphaPalette(colorTheme, darkTheme)
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(

@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settingsRepository = remember { AppSettingsRepository(this) }
             val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
-            AlphaNoteTheme(themeMode = settings.theme) {
+            AlphaNoteTheme(themeMode = settings.theme, colorTheme = settings.colorTheme) {
                 AlphaNoteNavHost(
                     sharedTextEvent = sharedTextEvent,
                     onSharedTextConsumed = { consumedId -> if (sharedTextEvent?.id == consumedId) sharedTextEvent = null }

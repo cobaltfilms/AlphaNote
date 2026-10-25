@@ -17,6 +17,8 @@ import be.cobaltfilms.alphanote.data.AppSettings
 import be.cobaltfilms.alphanote.data.AppSettingsRepository
 import be.cobaltfilms.alphanote.data.NoteRepository
 import be.cobaltfilms.alphanote.data.ThemeMode
+import be.cobaltfilms.alphanote.services.LauncherIcons
+import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 import be.cobaltfilms.alphanote.domain.Converter
 import be.cobaltfilms.alphanote.domain.ListModeFormatter
 import be.cobaltfilms.alphanote.domain.MathEvaluator
@@ -482,6 +484,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     // ---- Réglages ----
 
     fun setTheme(mode: ThemeMode) = viewModelScope.launch { appSettingsRepository.setTheme(mode) }
+    fun setColorTheme(theme: ColorTheme) = viewModelScope.launch {
+        appSettingsRepository.setColorTheme(theme)
+        LauncherIcons.apply(getApplication(), theme)
+    }
     fun setFontSize(size: Float) = viewModelScope.launch { appSettingsRepository.setFontSize(size) }
     fun setListCheckTrigger(trigger: String) = viewModelScope.launch { appSettingsRepository.setListCheckTrigger(trigger) }
     fun setAutoCleanup(enabled: Boolean) = viewModelScope.launch { appSettingsRepository.setAutoCleanup(enabled) }

@@ -340,6 +340,7 @@ private enum HelpSection: String, CaseIterable, Identifiable {
             ## Apparence
 
             - Thème (système, clair, sombre) et taille du texte.
+            - Couleurs : Encre & or, Corail, Sauge, Lavande, Framboise ou Bleu nuit — accent et fonds assortis. L'icône du Dock suit pendant que l'app tourne.
             - Déclencheur « coché » et raccourci « Convertir en liste ».
 
             ## Synchronisation

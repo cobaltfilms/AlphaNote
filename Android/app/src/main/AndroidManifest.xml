@@ -34,11 +34,6 @@
             android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTask"
             android:theme="@style/Theme.AlphaNote">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
             <!-- Réception de texte partagé depuis d'autres apps -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -46,6 +41,88 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+
+        <!-- Icône de lancement par thème de couleur (services/LauncherIcons.kt) ;
+             « or » active par défaut. -->
+        <activity-alias
+            android:name=".LauncherOr"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:icon="@mipmap/ic_launcher_or"
+            android:roundIcon="@mipmap/ic_launcher_or_round"
+            android:label="AlphaNote">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherCorail"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_corail"
+            android:roundIcon="@mipmap/ic_launcher_corail_round"
+            android:label="AlphaNote">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherSauge"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_sauge"
+            android:roundIcon="@mipmap/ic_launcher_sauge_round"
+            android:label="AlphaNote">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherLavande"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_lavande"
+            android:roundIcon="@mipmap/ic_launcher_lavande_round"
+            android:label="AlphaNote">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherFramboise"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_framboise"
+            android:roundIcon="@mipmap/ic_launcher_framboise_round"
+            android:label="AlphaNote">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherBleu"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_bleu"
+            android:roundIcon="@mipmap/ic_launcher_bleu_round"
+            android:label="AlphaNote">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"

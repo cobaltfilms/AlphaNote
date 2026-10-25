@@ -1,5 +1,14 @@
 package be.cobaltfilms.alphanote.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,6 +60,7 @@ import be.cobaltfilms.alphanote.ai.FormulaDraftFeature
 import be.cobaltfilms.alphanote.ai.ModeRoutingFeature
 import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.sync.SyncRunState
+import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 import be.cobaltfilms.alphanote.ui.theme.LocalAlphaPalette
 import be.cobaltfilms.alphanote.update.UpdateManager
 import kotlinx.coroutines.launch
@@ -108,6 +118,13 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                         FilterChip(selected = settings.theme == mode, onClick = { viewModel.setTheme(mode) }, label = { Text(mode.label) })
                     }
                 }
+                Text("Couleurs : ${settings.colorTheme.label}", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ColorTheme.entries.forEach { option ->
+                        ColorThemeSwatch(option, selected = settings.colorTheme == option) { viewModel.setColorTheme(option) }
+                    }
+                }
+                Text("Accent et teinte des fonds assortie ; l'icône de l'app suit. Au changement, certains lanceurs retirent l'icône de l'écran d'accueil.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
                 Text("Taille du texte : ${settings.fontSize.toInt()}", style = MaterialTheme.typography.bodyMedium)
                 Slider(value = settings.fontSize, onValueChange = { viewModel.setFontSize(it) }, valueRange = 12f..26f, steps = 13)
                 OutlinedTextField(
@@ -258,4 +275,22 @@ private fun syncStatusText(status: SyncRunState, lastSyncAt: Long?, dateFormat: 
     SyncRunState.Restoring -> "Restauration en cours…"
     is SyncRunState.Success -> "Dernière opération réussie : ${dateFormat.format(Date(status.timestamp))}"
     is SyncRunState.Error -> status.message
+}
+
+/** Pastille d'un thème : fond de nuit + accent, anneau si choisi. */
+@Composable
+private fun ColorThemeSwatch(theme: ColorTheme, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalAlphaPalette.current
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .border(if (selected) 2.dp else 1.dp, if (selected) palette.text else palette.line, CircleShape)
+            .padding(3.dp)
+            .background(Color(0xFF000000.toInt() or theme.night.window), CircleShape)
+            .clickable(onClickLabel = theme.label, onClick = onClick)
+            .semantics { contentDescription = theme.label },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.size(18.dp).background(Color(0xFF000000.toInt() or theme.night.accent), CircleShape))
+    }
 }

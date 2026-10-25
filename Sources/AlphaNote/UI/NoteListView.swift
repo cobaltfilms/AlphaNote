@@ -14,6 +14,7 @@ struct NoteListView: View {
     @AppStorage(AppDelegate.autoCleanupKey) private var autoCleanup = true
 
     @AppStorage("sidebarVisible") private var isSidebarVisible = false
+    @AppStorage(ColorTheme.storageKey) private var colorTheme = ColorTheme.or.rawValue
     @State private var isCommandVisible = false
     @State private var showArchived = false
     @State private var searchQuery = ""
@@ -28,7 +29,10 @@ struct NoteListView: View {
     @FocusState private var isCommandFocused: Bool
 
     var body: some View {
+        // Les couleurs du thème sont lues à la création des vues : changer de
+        // thème reconstruit l'arbre (les notes et l'état ci-dessus restent).
         mainLayers
+            .id(colorTheme)
             .tint(Palette.accentColor)
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isSidebarVisible)
             .animation(.spring(response: 0.24, dampingFraction: 0.9), value: isCommandVisible)

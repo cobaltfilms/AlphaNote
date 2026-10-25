@@ -105,20 +105,31 @@ enum Palette {
         }
     }
 
+    /// Couleur du thème choisi (Réglages › Apparence › Couleurs). Calculée à
+    /// chaque lecture : un changement de thème vaut pour les vues recréées.
+    private static func themed(_ role: KeyPath<ColorTheme.Swatch, UInt32>) -> NSColor {
+        let theme = ColorTheme.current
+        return adaptive(rgb(theme.day[keyPath: role]), rgb(theme.night[keyPath: role]))
+    }
+
+    private static func rgb(_ hex: UInt32) -> (CGFloat, CGFloat, CGFloat) {
+        (CGFloat((hex >> 16) & 0xFF) / 255, CGFloat((hex >> 8) & 0xFF) / 255, CGFloat(hex & 0xFF) / 255)
+    }
+
     // Surfaces en camaïeu (du plus sombre au plus clair, ou l'inverse la nuit).
-    static let window    = adaptive((0.965, 0.945, 0.918), (0.078, 0.066, 0.051))
-    static let sidebar   = adaptive((0.937, 0.902, 0.847), (0.114, 0.094, 0.071))
-    static let content   = adaptive((1.000, 0.980, 0.953), (0.141, 0.122, 0.094))
-    static let field     = adaptive((1.000, 0.980, 0.953), (0.102, 0.086, 0.067))
-    static let selection = adaptive((0.925, 0.878, 0.804), (0.165, 0.137, 0.094))
-    static let line      = adaptive((0.886, 0.839, 0.769), (0.204, 0.173, 0.129))
+    static var window: NSColor    { themed(\.window) }
+    static var sidebar: NSColor   { themed(\.sidebar) }
+    static var content: NSColor   { themed(\.content) }
+    static var field: NSColor     { themed(\.field) }
+    static var selection: NSColor { themed(\.selection) }
+    static var line: NSColor      { themed(\.line) }
 
     // Texte.
-    static let text      = adaptive((0.141, 0.114, 0.082), (0.953, 0.918, 0.851))
-    static let secondary = adaptive((0.435, 0.380, 0.322), (0.663, 0.604, 0.502))
+    static var text: NSColor      { themed(\.text) }
+    static var secondary: NSColor { themed(\.secondary) }
 
-    // Accents opposés : or (primaire) et paon/sage (secondaire).
-    static let accent    = adaptive((0.604, 0.420, 0.122), (0.851, 0.643, 0.255))
+    // Accent du thème ; le secondaire (paon/sage) ne change pas.
+    static var accent: NSColor    { themed(\.accent) }
     static let accent2   = adaptive((0.184, 0.435, 0.400), (0.498, 0.655, 0.627))
 
     // Couleur sémantique par mode.
@@ -126,7 +137,7 @@ enum Palette {
     static let list  = adaptive((0.184, 0.435, 0.400), (0.498, 0.655, 0.627)) // paon/sage
     static let timer = adaptive((0.706, 0.314, 0.180), (0.812, 0.420, 0.341)) // terre cuite
     static let code  = adaptive((0.227, 0.373, 0.659), (0.616, 0.706, 0.839)) // bleu
-    static let plain = adaptive((0.435, 0.380, 0.322), (0.663, 0.604, 0.502)) // neutre
+    static var plain: NSColor { secondary }                                    // neutre
 
     static func mode(_ mode: NoteMode) -> NSColor {
         switch mode {
@@ -150,6 +161,60 @@ enum Palette {
     static var accentColor: Color { Color(nsColor: accent) }
     static var accent2Color: Color { Color(nsColor: accent2) }
     static func modeColor(_ mode: NoteMode) -> Color { Color(nsColor: Palette.mode(mode)) }
+}
+
+// MARK: - Thèmes de couleur
+
+/// Thèmes coordonnés : chacun fixe l'accent (contours, cases, curseur) et une
+/// teinte des fonds assortie, de nuit et de jour. Mêmes valeurs sur Android
+/// (ui/theme/Color.kt) ; l'icône du Dock reprend l'accent de nuit.
+enum ColorTheme: String, CaseIterable, Identifiable {
+    case or, corail, sauge, lavande, framboise, bleu
+
+    struct Swatch {
+        let window, sidebar, content, field, selection, line, text, secondary, accent: UInt32
+    }
+
+    static let storageKey = "colorTheme"
+
+    static var current: ColorTheme {
+        ColorTheme(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .or
+    }
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .or: return "Encre & or"
+        case .corail: return "Corail"
+        case .sauge: return "Sauge"
+        case .lavande: return "Lavande"
+        case .framboise: return "Framboise"
+        case .bleu: return "Bleu nuit"
+        }
+    }
+
+    var night: Swatch {
+        switch self {
+        case .or:        return Swatch(window: 0x14110D, sidebar: 0x1D1812, content: 0x241F18, field: 0x1A1611, selection: 0x2A2318, line: 0x342C21, text: 0xF3EAD9, secondary: 0xA99A80, accent: 0xD9A441)
+        case .corail:    return Swatch(window: 0x1B1F25, sidebar: 0x1F242B, content: 0x22272E, field: 0x1D2127, selection: 0x2D333B, line: 0x343B45, text: 0xEEF0F2, secondary: 0x9AA3AD, accent: 0xEF7B5F)
+        case .sauge:     return Swatch(window: 0x141A18, sidebar: 0x18201D, content: 0x1B2320, field: 0x161D1A, selection: 0x24302B, line: 0x2B3832, text: 0xE8EFEC, secondary: 0x93A59E, accent: 0x7FBFA8)
+        case .lavande:   return Swatch(window: 0x17151F, sidebar: 0x1B1924, content: 0x1F1C29, field: 0x191722, selection: 0x2A2638, line: 0x312C40, text: 0xEEEBF5, secondary: 0xA29CB5, accent: 0xA78BFA)
+        case .framboise: return Swatch(window: 0x1C1418, sidebar: 0x21181D, content: 0x251B20, field: 0x1E161A, selection: 0x33242C, line: 0x3A2A32, text: 0xF5EBEF, secondary: 0xB39AA4, accent: 0xE86A8E)
+        case .bleu:      return Swatch(window: 0x121821, sidebar: 0x161D28, content: 0x19212D, field: 0x141B25, selection: 0x223047, line: 0x283548, text: 0xE9EEF5, secondary: 0x97A4B6, accent: 0x5B9CF0)
+        }
+    }
+
+    var day: Swatch {
+        switch self {
+        case .or:        return Swatch(window: 0xF6F1EA, sidebar: 0xEFE6D8, content: 0xFFFAF3, field: 0xFFFAF3, selection: 0xECE0CD, line: 0xE2D6C4, text: 0x241D15, secondary: 0x6F6152, accent: 0x9A6B1F)
+        case .corail:    return Swatch(window: 0xF5F3F1, sidebar: 0xECE8E4, content: 0xFFFDFB, field: 0xFFFDFB, selection: 0xF2DFD8, line: 0xE2DCD6, text: 0x22272E, secondary: 0x626B75, accent: 0xC4553A)
+        case .sauge:     return Swatch(window: 0xF1F5F2, sidebar: 0xE4EBE6, content: 0xFBFDFB, field: 0xFBFDFB, selection: 0xD8E8E1, line: 0xD3DDD7, text: 0x1B2320, secondary: 0x5A6B64, accent: 0x2F6F66)
+        case .lavande:   return Swatch(window: 0xF4F2F8, sidebar: 0xE9E5F1, content: 0xFDFCFF, field: 0xFDFCFF, selection: 0xE3DBF7, line: 0xDDD8E8, text: 0x1F1C29, secondary: 0x665F7A, accent: 0x6D4FD1)
+        case .framboise: return Swatch(window: 0xF8F1F3, sidebar: 0xF0E4E8, content: 0xFFFBFC, field: 0xFFFBFC, selection: 0xF3D9E1, line: 0xE8D8DD, text: 0x251B20, secondary: 0x76606A, accent: 0xB83E63)
+        case .bleu:      return Swatch(window: 0xF1F4F8, sidebar: 0xE4EAF2, content: 0xFBFCFF, field: 0xFBFCFF, selection: 0xD9E5F6, line: 0xD6DEE9, text: 0x19212D, secondary: 0x5C6A7D, accent: 0x2F62B8)
+        }
+    }
 }
 
 // MARK: - Mode palette

@@ -153,7 +153,8 @@ locale (embeddings hash-64, aucun réseau).
 
 ### 6.2 Apparence
 
-- Thème : Système / Clair / Sombre (« Encre & or », appliqué à toutes les fenêtres).
+- Thème : Système / Clair / Sombre (appliqué à toutes les fenêtres).
+- Couleurs : six thèmes coordonnés (Encre & or par défaut, Corail, Sauge, Lavande, Framboise, Bleu nuit). Chacun change l'accent (contours, cases, curseur) et la teinte des fonds, de jour comme de nuit. L'icône du Dock prend la couleur du thème pendant que l'app tourne ; celle du Finder reste corail. Sur Android, l'icône de lancement suit aussi.
 - Taille du texte : 10 à 24.
 - Déclencheur « coché » ; raccourci « Convertir en liste ».
 
