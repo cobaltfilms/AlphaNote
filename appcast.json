@@ -1,6 +1,6 @@
 {
-  "version": "0.2.8",
-  "notes": "Couleurs : six th\u00e8mes (Encre & or, Corail, Sauge, Lavande, Framboise, Bleu nuit), l'ic\u00f4ne suit le th\u00e8me.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.8/AlphaNote-0.2.8.zip",
+  "version": "0.2.9",
+  "notes": "Fen\u00eatre Mac plus large, aper\u00e7u des minuteurs \u00e0 jour, minuteur r\u00e9glable \u00e0 la seconde.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.9/AlphaNote-0.2.9.zip",
   "minimumSystemVersion": "14.0"
 }
