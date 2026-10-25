@@ -1,6 +1,6 @@
 {
-  "version": "0.2.6",
-  "notes": "Nouvelle ic\u00f4ne de la famille Alpha (A + liste corail). Correctif : l'app Mac n'avait plus d'ic\u00f4ne.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.6/AlphaNote-0.2.6.zip",
+  "version": "0.2.7",
+  "notes": "Correctif : l'ic\u00f4ne redevenait l'ancienne au lancement.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.7/AlphaNote-0.2.7.zip",
   "minimumSystemVersion": "14.0"
 }
