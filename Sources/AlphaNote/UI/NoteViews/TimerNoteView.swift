@@ -4,6 +4,8 @@ import SwiftUI
 /// changer de note, cacher la fenêtre ou relancer l'app n'arrête rien.
 struct TimerNoteView: View {
     @ObservedObject var session: TimerSession
+    /// Mode ou durée changés : la note garde le réglage (« countdown 4:30 »).
+    var onSettingsChange: (TimerSession.Mode, TimeInterval) -> Void = { _, _ in }
     @AppStorage("fontSize") private var fontSize: Double = 14
 
     private let presets: [(label: String, seconds: TimeInterval)] = [
@@ -53,27 +55,30 @@ struct TimerNoteView: View {
             }
 
             if session.mode != .stopwatch, session.state == .stopped || session.state == .finished {
-                HStack(spacing: 8) {
+                // Grille souple : les boutons passent à la ligne au lieu d'être rognés.
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], spacing: 8) {
                     ForEach(presets, id: \.seconds) { preset in
                         Button(preset.label) { session.setTargetDuration(preset.seconds) }
                             .buttonStyle(.bordered)
                             .tint(session.targetDuration == preset.seconds ? Palette.accentColor : nil)
+                            .fixedSize()
                     }
                 }
+                .frame(maxWidth: 440)
 
-                Stepper(
-                    value: Binding(
-                        get: { session.targetDuration / 60 },
-                        set: { session.setTargetDuration($0 * 60) }
-                    ),
-                    in: 1...180,
-                    step: 1
-                ) {
-                    Text("\(Int(session.targetDuration / 60)) min")
-                        .font(.system(size: fontSize))
-                        .monospacedDigit()
+                HStack(spacing: 18) {
+                    Stepper(value: minutesBinding, in: 0...180, step: 1) {
+                        Text("\(Int(session.targetDuration) / 60) min")
+                            .font(.system(size: fontSize))
+                            .monospacedDigit()
+                    }
+                    Stepper(value: secondsBinding, in: 0...59, step: 5) {
+                        Text("\(Int(session.targetDuration) % 60) s")
+                            .font(.system(size: fontSize))
+                            .monospacedDigit()
+                    }
+                    .help("Secondes, par pas de 5 s.")
                 }
-                .frame(width: 140)
             }
 
             if session.isSoundPlaying {
@@ -111,6 +116,23 @@ struct TimerNoteView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: session.mode) { _, mode in onSettingsChange(mode, session.targetDuration) }
+        .onChange(of: session.targetDuration) { _, seconds in onSettingsChange(session.mode, seconds) }
+    }
+
+    // Minutes et secondes réglées séparément ; jamais moins de 5 s au total.
+    private var minutesBinding: Binding<Int> {
+        Binding(
+            get: { Int(session.targetDuration) / 60 },
+            set: { session.setTargetDuration(TimeInterval(max(5, $0 * 60 + Int(session.targetDuration) % 60))) }
+        )
+    }
+
+    private var secondsBinding: Binding<Int> {
+        Binding(
+            get: { Int(session.targetDuration) % 60 },
+            set: { session.setTargetDuration(TimeInterval(max(5, Int(session.targetDuration) / 60 * 60 + $0))) }
+        )
     }
 
     private var stateLabel: String {

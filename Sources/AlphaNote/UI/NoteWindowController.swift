@@ -16,12 +16,18 @@ private final class NoteWindow: NSWindow {
 /// cadre mémorisé, suit l'espace actif, se cache avec Échap ou le raccourci.
 final class NoteWindowController: NSWindowController, NSWindowDelegate {
     static let alwaysOnTopKey = "alwaysOnTop"
+    static let sidebarVisibleKey = "sidebarVisible"
+
+    /// Volet des notes (260) + zone de note assez large pour le minuteur.
+    private static let sidebarWidth: CGFloat = 260
+    private static let minimumNoteWidth: CGFloat = 400
+    private static let defaultWidth: CGFloat = 680
     private var hostingView: NSHostingView<NoteListView>!
     private var isHiding = false
 
     init() {
         let window = NoteWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: Self.defaultWidth, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -32,7 +38,6 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate {
         window.backgroundColor = Palette.window
         window.isOpaque = true // rien ne doit transparaître des fenêtres du dessous
         window.isMovableByWindowBackground = true
-        window.minSize = NSSize(width: 480, height: 320)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.setFrameAutosaveName("AlphaNoteMainWindow")
@@ -49,6 +54,7 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         applyLevel()
+        applyMinimumWidth()
     }
 
     required init?(coder: NSCoder) {
@@ -61,6 +67,23 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate {
         guard let window else { return }
         let onTop = UserDefaults.standard.object(forKey: Self.alwaysOnTopKey) as? Bool ?? true
         window.level = onTop ? .floating : .normal
+    }
+
+    /// Largeur minimale selon le volet des notes : ouvert, la fenêtre s'élargit
+    /// juste assez pour que la note garde sa place (sinon tout est rogné).
+    func applyMinimumWidth() {
+        guard let window else { return }
+        let sidebarVisible = UserDefaults.standard.bool(forKey: Self.sidebarVisibleKey)
+        let minimum = Self.minimumNoteWidth + (sidebarVisible ? Self.sidebarWidth + 1 : 0)
+        window.contentMinSize = NSSize(width: minimum, height: 320)
+        let content = window.contentRect(forFrameRect: window.frame)
+        guard content.width < minimum else { return }
+        var frame = window.frame
+        frame.size.width += minimum - content.width
+        if let screen = window.screen?.visibleFrame, frame.maxX > screen.maxX {
+            frame.origin.x = max(screen.minX, screen.maxX - frame.width)
+        }
+        window.setFrame(frame, display: true, animate: window.isVisible)
     }
 
     /// Passe temporairement au niveau normal (quand Réglages ou l'Aide est au

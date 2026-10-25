@@ -337,6 +337,39 @@ final class NoteStore: ObservableObject {
         return (mode, seconds)
     }
 
+    /// Réglage du minuteur reporté dans la note (« countdown 4:30 ») : l'aperçu
+    /// de la liste le montre, la synchro et le redémarrage le gardent.
+    func updateTimerLine(noteID: Int64?, mode: TimerSession.Mode, seconds: TimeInterval) {
+        guard let noteID, let note = (notes + archivedNotes).first(where: { $0.id == noteID }) else { return }
+        let content = Self.contentWithTimerLine(note.content, mode: mode, seconds: Int(seconds.rounded()))
+        guard content != note.content else { return }
+        var updated = note
+        updated.content = content
+        edit(updated)
+    }
+
+    static func timerLine(mode: TimerSession.Mode, seconds: Int) -> String {
+        mode == .stopwatch ? mode.rawValue : "\(mode.rawValue) \(seconds / 60):" + String(format: "%02d", seconds % 60)
+    }
+
+    /// Remplace la ligne de réglage (première ligne qui commence par un mode),
+    /// ou l'ajoute sous l'en-tête ; le reste de la note n'est pas touché.
+    static func contentWithTimerLine(_ content: String, mode: TimerSession.Mode, seconds: Int) -> String {
+        var lines = content.components(separatedBy: "\n")
+        let line = timerLine(mode: mode, seconds: seconds)
+        let modeWords = ["countdown", "stopwatch", "pomodoro", "minuteur", "chrono"]
+        if let index = lines.firstIndex(where: { candidate in
+            let first = candidate.trimmingCharacters(in: .whitespaces).lowercased().split(separator: " ").first.map(String.init) ?? ""
+            return modeWords.contains(first)
+        }) {
+            lines[index] = line
+        } else {
+            let headerIndex = lines.first.map { $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("timer") } == true ? 1 : 0
+            lines.insert(line, at: min(headerIndex, lines.count))
+        }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Privé
 
     private func reloadNotes(selecting selectedID: Int64? = nil) {

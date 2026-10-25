@@ -203,6 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyTheme()
         applyColorTheme()
         windowController?.applyLevel()
+        windowController?.applyMinimumWidth()
     }
 
     private var appliedColorTheme: ColorTheme?

@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -32,15 +33,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import be.cobaltfilms.alphanote.timer.TimerSession
+import kotlin.math.roundToInt
 import be.cobaltfilms.alphanote.ui.theme.LocalAlphaPalette
 
 /** Vue du mode minuteur, liée à une [TimerSession] (port de TimerNoteView.swift). */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun TimerNoteView(session: TimerSession, title: String, modifier: Modifier = Modifier) {
+fun TimerNoteView(
+    session: TimerSession,
+    title: String,
+    modifier: Modifier = Modifier,
+    onSettingsChange: (TimerSession.Mode, Int) -> Unit = { _, _ -> }
+) {
     val palette = LocalAlphaPalette.current
     val snapshot by session.snapshot.collectAsState()
     val presets = listOf(5, 10, 15, 25, 45, 60)
+    LaunchedEffect(snapshot.mode, snapshot.targetSeconds) {
+        onSettingsChange(snapshot.mode, snapshot.targetSeconds.roundToInt())
+    }
 
     Column(
         modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
@@ -124,9 +134,13 @@ fun TimerNoteView(session: TimerSession, title: String, modifier: Modifier = Mod
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { session.setTargetSeconds(snapshot.targetSeconds - 60) }) { Text("−1 min", color = palette.secondary) }
+                OutlinedButton(onClick = { session.setTargetSeconds(maxOf(5.0, snapshot.targetSeconds - 60)) }) { Text("−1 min", color = palette.secondary) }
                 Text(TimerSession.format(snapshot.targetSeconds), color = palette.text, fontFamily = FontFamily.Monospace)
                 OutlinedButton(onClick = { session.setTargetSeconds(snapshot.targetSeconds + 60) }) { Text("+1 min", color = palette.secondary) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { session.setTargetSeconds(maxOf(5.0, snapshot.targetSeconds - 5)) }) { Text("−5 s", color = palette.secondary) }
+                OutlinedButton(onClick = { session.setTargetSeconds(snapshot.targetSeconds + 5) }) { Text("+5 s", color = palette.secondary) }
             }
         }
     }

@@ -203,7 +203,13 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
             if (mode == NoteMode.TIMER) {
                 val (defaultMode, seconds) = TimerRegistry.parameters(note.content)
                 val session = remember(note.uuid) { TimerRegistry.shared.session(note.uuid, defaultMode, seconds) }
-                TimerNoteView(session = session, title = displayTitle(note), modifier = Modifier.fillMaxSize())
+                TimerNoteView(
+                    session = session, title = displayTitle(note), modifier = Modifier.fillMaxSize(),
+                    // Mode ou durée changés : la note garde le réglage (aperçu de la liste, synchro).
+                    onSettingsChange = { timerMode, seconds ->
+                        viewModel.edit(TimerRegistry.contentWithTimerLine(note.content, timerMode, seconds))
+                    }
+                )
             } else {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     NoteEditor(

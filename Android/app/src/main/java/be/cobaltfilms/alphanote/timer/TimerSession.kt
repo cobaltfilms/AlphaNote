@@ -285,5 +285,31 @@ class TimerRegistry private constructor() {
             }
             return mode to seconds
         }
+
+        /** Ligne de réglage écrite dans la note (« countdown 4:30 », « stopwatch »). */
+        fun timerLine(mode: TimerSession.Mode, seconds: Int): String = when (mode) {
+            TimerSession.Mode.STOPWATCH -> "stopwatch"
+            TimerSession.Mode.COUNTDOWN -> "countdown ${seconds / 60}:${"%02d".format(seconds % 60)}"
+            TimerSession.Mode.POMODORO -> "pomodoro ${seconds / 60}:${"%02d".format(seconds % 60)}"
+        }
+
+        /**
+         * Remplace la ligne de réglage (première ligne qui commence par un mode),
+         * ou l'ajoute sous l'en-tête ; le reste de la note n'est pas touché.
+         * Port de NoteStore.contentWithTimerLine (macOS).
+         */
+        fun contentWithTimerLine(content: String, mode: TimerSession.Mode, seconds: Int): String {
+            val lines = content.split("\n").toMutableList()
+            val line = timerLine(mode, seconds)
+            val modeWords = setOf("countdown", "stopwatch", "pomodoro", "minuteur", "chrono")
+            val index = lines.indexOfFirst { it.trim().lowercase().split(" ").first() in modeWords }
+            if (index >= 0) {
+                lines[index] = line
+            } else {
+                val headerIndex = if (lines.firstOrNull()?.trim()?.lowercase()?.startsWith("timer") == true) 1 else 0
+                lines.add(minOf(headerIndex, lines.size), line)
+            }
+            return lines.joinToString("\n")
+        }
     }
 }

@@ -13,7 +13,7 @@ struct NoteListView: View {
     @AppStorage("listCheckTrigger") private var listCheckTrigger: String = "/x"
     @AppStorage(AppDelegate.autoCleanupKey) private var autoCleanup = true
 
-    @AppStorage("sidebarVisible") private var isSidebarVisible = false
+    @AppStorage(NoteWindowController.sidebarVisibleKey) private var isSidebarVisible = false
     @AppStorage(ColorTheme.storageKey) private var colorTheme = ColorTheme.or.rawValue
     @State private var isCommandVisible = false
     @State private var showArchived = false
@@ -303,7 +303,9 @@ struct NoteListView: View {
     private func timerView(for note: Note) -> TimerNoteView {
         let parameters = store.timerParameters(for: note)
         let session = TimerRegistry.shared.session(for: note.uuid, defaultMode: parameters.mode, defaultSeconds: parameters.seconds)
-        return TimerNoteView(session: session)
+        return TimerNoteView(session: session) { mode, seconds in
+            store.updateTimerLine(noteID: note.id, mode: mode, seconds: seconds)
+        }
     }
 
     private func contentBinding(for note: Note) -> Binding<String> {
