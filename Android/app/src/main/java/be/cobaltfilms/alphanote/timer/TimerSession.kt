@@ -1,9 +1,6 @@
 package be.cobaltfilms.alphanote.timer
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -56,7 +53,7 @@ class TimerSession internal constructor(
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
 
     private var tickJob: Job? = null
-    private var player: MediaPlayer? = null
+    private val alarm = AlarmPlayer()
 
     val mode: Mode get() = _snapshot.value.mode
     val state: State get() = _snapshot.value.state
@@ -113,8 +110,7 @@ class TimerSession internal constructor(
     }
 
     fun stopSound() {
-        player?.let { runCatching { it.stop(); it.release() } }
-        player = null
+        alarm.stop()
         if (_snapshot.value.soundPlaying) _snapshot.value = _snapshot.value.copy(soundPlaying = false)
     }
 
@@ -147,19 +143,8 @@ class TimerSession internal constructor(
 
     private fun playSound() {
         val context = registry.context ?: return
-        stopSound()
-        runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val mp = MediaPlayer()
-            mp.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-            mp.setDataSource(context, uri)
-            mp.isLooping = true
-            mp.prepare()
-            mp.start()
-            player = mp
-            _snapshot.value = _snapshot.value.copy(soundPlaying = true)
-        }
+        alarm.play(context, registry.alarmSound, loop = true)
+        _snapshot.value = _snapshot.value.copy(soundPlaying = true)
         vibrate(context)
     }
 
@@ -208,6 +193,9 @@ class TimerRegistry private constructor() {
     internal var context: Context? = null
         private set
     private val sessions = mutableMapOf<String, TimerSession>()
+
+    /** Sonnerie choisie dans Réglages (tenue à jour par NoteViewModel). */
+    @Volatile var alarmSound: AlarmSound = AlarmSound.MINUTERIE
 
     fun attach(context: Context) { this.context = context.applicationContext }
 

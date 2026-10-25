@@ -1,5 +1,8 @@
 package be.cobaltfilms.alphanote.ui.screens
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import be.cobaltfilms.alphanote.timer.AlarmSound
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,7 +71,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
     val palette = LocalAlphaPalette.current
@@ -135,6 +138,20 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 )
                 SwitchSetting("Supprimer les notes vides", "À l'ouverture de la liste, les notes sans contenu disparaissent.", settings.autoCleanup, viewModel::setAutoCleanup)
                 SwitchSetting("Confirmer la suppression", "Demande confirmation avant de supprimer une note non vide.", settings.confirmDelete, viewModel::setConfirmDelete)
+            }
+
+            SettingsCard("Minuteur") {
+                Text("Sonnerie : ${settings.alarmSound.label}", style = MaterialTheme.typography.bodyMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AlarmSound.entries.forEach { sound ->
+                        FilterChip(
+                            selected = settings.alarmSound == sound,
+                            onClick = { if (settings.alarmSound == sound) viewModel.previewAlarm(sound) else viewModel.setAlarmSound(sound) },
+                            label = { Text(sound.label) }
+                        )
+                    }
+                }
+                Text("Jouée en boucle sur le canal alarme à la fin d'un minuteur. Toucher un choix le fait entendre.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
             }
 
             SettingsCard("Synchronisation Nextcloud") {

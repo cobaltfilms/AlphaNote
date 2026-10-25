@@ -43,8 +43,7 @@ final class TimerSession: ObservableObject, Identifiable {
 
     private var runStartDate: Date?
     private var tick: Timer?
-    private var audioPlayer: AVAudioPlayer?
-    private var fallbackSound: NSSound?
+    private let alarm = AlarmPlayer()
 
     init(id: String, mode: Mode, targetDuration: TimeInterval) {
         self.id = id
@@ -124,10 +123,7 @@ final class TimerSession: ObservableObject, Identifiable {
     }
 
     func stopSound() {
-        audioPlayer?.stop()
-        audioPlayer = nil
-        fallbackSound?.stop()
-        fallbackSound = nil
+        alarm.stop()
         isSoundPlaying = false
     }
 
@@ -168,23 +164,8 @@ final class TimerSession: ObservableObject, Identifiable {
     }
 
     private func playSound() {
-        stopSound()
-        if let url = Bundle.module.url(forResource: "timer_sound", withExtension: "mp3")
-            ?? Bundle.module.url(forResource: "timer_sound", withExtension: "aiff"),
-           let player = try? AVAudioPlayer(contentsOf: url) {
-            player.numberOfLoops = -1
-            player.prepareToPlay()
-            player.play()
-            audioPlayer = player
-            isSoundPlaying = true
-            return
-        }
-        if let sound = NSSound(named: "Ping") {
-            sound.loops = true
-            sound.play()
-            fallbackSound = sound
-            isSoundPlaying = true
-        }
+        alarm.play(AlarmSound.current, loop: true)
+        isSoundPlaying = true
     }
 
     static func format(_ interval: TimeInterval) -> String {

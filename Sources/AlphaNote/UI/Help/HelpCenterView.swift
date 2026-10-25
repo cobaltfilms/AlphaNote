@@ -299,9 +299,9 @@ private enum HelpSection: String, CaseIterable, Identifiable {
 
             ## `timer`
 
-            - Minuteur, chrono ou pomodoro ; préréglages 5 à 60 min.
+            - Minuteur, chrono ou pomodoro ; préréglages 5 à 60 min, réglage fin à la seconde (pas de 5 s).
             - Le minuteur continue si vous changez de note ou cachez la fenêtre, et survit au redémarrage.
-            - À la fin : sonnerie en boucle jusqu'à « Arrêter la sonnerie », et l'icône du Dock rebondit.
+            - À la fin : sonnerie en boucle jusqu'à « Arrêter la sonnerie », et l'icône du Dock rebondit. Sonnerie au choix dans Réglages › Général › Minuteur (▶︎ pour écouter).
             """
         case .sync:
             return """

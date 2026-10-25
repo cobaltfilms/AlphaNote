@@ -1,7 +1,11 @@
 package be.cobaltfilms.alphanote.ui.screens
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -22,6 +26,17 @@ fun AlphaNoteNavHost(
     onSharedTextConsumed: (Long) -> Unit = {},
     noteViewModel: NoteViewModel = viewModel()
 ) {
+    // Retour au premier plan : synchro de rattrapage (le système coupe le
+    // réseau des apps en arrière-plan, la synchro périodique n'y tourne pas).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) noteViewModel.onAppForeground()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     LaunchedEffect(sharedTextEvent?.id) {
         val payload = sharedTextEvent ?: return@LaunchedEffect
         val noteId = noteViewModel.createNoteAndGetId(content = payload.text)

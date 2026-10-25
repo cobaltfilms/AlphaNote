@@ -31,6 +31,8 @@ struct GeneralSettingsView: View {
     @AppStorage(AppDelegate.showInDockKey) private var showInDock = true
     @AppStorage(AppDelegate.showInMenuBarKey) private var showInMenuBar = true
     @AppStorage(AppDelegate.autoCleanupKey) private var autoCleanup = true
+    @AppStorage(AlarmSound.storageKey) private var alarmSound = AlarmSound.minuterie.rawValue
+    @State private var preview = AlarmPlayer()
 
     var body: some View {
         Form {
@@ -77,8 +79,37 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Fenêtre")
             }
+
+            Section {
+                LabeledContent {
+                    HStack {
+                        Picker("Sonnerie", selection: $alarmSound) {
+                            ForEach(AlarmSound.allCases) { sound in
+                                Text(sound.label).tag(sound.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .onChange(of: alarmSound) { _, raw in
+                            preview.play(AlarmSound(rawValue: raw) ?? .minuterie, loop: false)
+                        }
+
+                        Button {
+                            preview.play(AlarmSound(rawValue: alarmSound) ?? .minuterie, loop: false)
+                        } label: {
+                            Image(systemName: "play.fill")
+                        }
+                        .help("Écouter")
+                    }
+                } label: {
+                    FieldLabel("Sonnerie", help: "Jouée en boucle à la fin d'un minuteur ou d'un pomodoro, jusqu'à ce qu'on l'arrête.")
+                }
+            } header: {
+                Text("Minuteur")
+            }
         }
         .formStyle(.grouped)
+        .onDisappear { preview.stop() }
     }
 }
 

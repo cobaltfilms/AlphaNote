@@ -15,6 +15,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import org.json.JSONObject
+import java.io.IOException
+import java.net.UnknownHostException
 
 enum class SyncRunTrigger {
     STARTUP,
@@ -47,6 +56,8 @@ class SyncEngine(
     val state: StateFlow<SyncRunState> = _state.asStateFlow()
 
     private var localChangeJob: Job? = null
+    private var retryJob: Job? = null
+    private val etagStore = ETagStore(context.applicationContext)
     private var engineScope: CoroutineScope? = null
 
     /** Une modification locale : synchro 30 s plus tard (regroupe les frappes). */
@@ -63,16 +74,28 @@ class SyncEngine(
         engineScope = scope
         if (schedulerJob != null) return
 
+        // Seuls « activée » et l'intervalle relancent la boucle : l'heure de
+        // dernière synchro change aussi ces réglages, et relançait une synchro
+        // complète juste après chaque synchro (en annulant celle en cours).
         schedulerJob = scope.launch {
-            settingsRepository.settings.collectLatest { settings ->
-                if (!settings.syncEnabled) return@collectLatest
-                runSync(SyncRunTrigger.STARTUP)
-                while (isActive) {
-                    delay(TimeUnit.MINUTES.toMillis(settings.syncIntervalMinutes.toLong()))
-                    runSync(SyncRunTrigger.SCHEDULED)
+            settingsRepository.settings
+                .map { it.syncEnabled to it.syncIntervalMinutes }
+                .distinctUntilChanged()
+                .collectLatest { (enabled, interval) ->
+                    if (!enabled) return@collectLatest
+                    runSync(SyncRunTrigger.STARTUP)
+                    while (isActive) {
+                        delay(TimeUnit.MINUTES.toMillis(interval.toLong()))
+                        runSync(SyncRunTrigger.SCHEDULED)
+                    }
                 }
-            }
         }
+    }
+
+    /** L'app revient au premier plan : on rattrape tout de suite ce qui a changé. */
+    fun onForeground() {
+        val scope = engineScope ?: return
+        scope.launch { if (settingsRepository.currentSettings().syncEnabled) runSync(SyncRunTrigger.SCHEDULED) }
     }
 
     suspend fun runManualSync() {
@@ -144,6 +167,15 @@ class SyncEngine(
         }
     }
 
+    /**
+     * Même logique que macOS (SyncEngine.swift), en plus robuste aux coupures :
+     *  · seules les notes dont l'ETag a changé sont téléchargées (en parallèle) ;
+     *  · chaque note reçue est fusionnée et enregistrée aussitôt, et son ETag
+     *    retenu : une synchro interrompue (écran éteint, réseau coupé en
+     *    arrière-plan) ne repart pas de zéro ;
+     *  · une note illisible est ignorée et signalée, sans bloquer les autres ;
+     *  · une coupure réseau arrête la synchro et en relance une 30 s plus tard.
+     */
     private suspend fun performSync(trigger: SyncRunTrigger) {
         when (trigger) {
             SyncRunTrigger.STARTUP,
@@ -153,76 +185,136 @@ class SyncEngine(
         _state.value = SyncRunState.Syncing
 
         try {
+            val settings = settingsRepository.currentSettings()
             val client = makeClient()
+            val etagScope = "${settings.nextcloudUsername.trim()}@${settings.nextcloudServerUrl.trim()}"
+            val knownETags = etagStore.load(etagScope)
+            var skipped = 0
+
             client.ensureDirectories()
-            client.fetchManifest()
 
             val remoteEntries = client.listNotes()
+            val localByUUID = repository.getAllIncludingDeleted().associateBy { it.uuid }.toMutableMap()
             val remoteByUUID = mutableMapOf<String, CloudNoteDto>()
             val remoteEtagsByUUID = mutableMapOf<String, String>()
+            val seenRemoteUUIDs = mutableSetOf<String>()
+            val toFetch = mutableListOf<String>()
 
             remoteEntries.forEach { entry ->
                 val uuid = SyncMergePolicy.uuidFromRemoteHref(entry.href) ?: return@forEach
-                val payload = client.fetchNote(uuid) ?: return@forEach
-                remoteByUUID[uuid] = payload.dto
-                payload.etag?.let { remoteEtagsByUUID[uuid] = it }
+                seenRemoteUUIDs += uuid
+                val local = localByUUID[uuid]
+                if (entry.etag != null && knownETags[uuid] == entry.etag && local?.lastSyncedAt != null) {
+                    // Inchangée sur le serveur depuis notre dernière synchro.
+                    remoteByUUID[uuid] = CloudNoteDto.fromNote(local)
+                    remoteEtagsByUUID[uuid] = entry.etag
+                } else {
+                    toFetch += uuid
+                }
             }
 
-            val localNotes = repository.getAllIncludingDeleted()
-            val localByUUID = localNotes.associateBy { it.uuid }
-            val merged = SyncMergePolicy.merge(localByUUID, remoteByUUID)
             val syncTimestamp = System.currentTimeMillis()
-
-            merged.forEach { (uuid, dto) ->
-                val existing = localByUUID[uuid]
-                val existingDto = existing?.let { CloudNoteDto.fromNote(it) }
-                if (existingDto != dto) {
-                    repository.saveFromSync(dto.toNote(existingId = existing?.id, lastSyncedAt = syncTimestamp))
+            for (chunk in toFetch.chunked(DOWNLOAD_PARALLELISM)) {
+                val payloads = coroutineScope {
+                    chunk.map { uuid -> async { uuid to runCatching { client.fetchNote(uuid) } } }.awaitAll()
                 }
+                for ((uuid, result) in payloads) {
+                    val payload = result.getOrElse { error ->
+                        if (error.isNetworkFailure()) throw error
+                        skipped += 1
+                        null
+                    } ?: continue
+                    remoteByUUID[uuid] = payload.dto
+                    payload.etag?.let { remoteEtagsByUUID[uuid] = it }
+
+                    val existing = localByUUID[uuid]
+                    val existingDto = existing?.let { CloudNoteDto.fromNote(it) }
+                    val merged = existingDto?.let { SyncMergePolicy.resolveConflict(it, payload.dto) } ?: payload.dto
+                    if (merged != existingDto) {
+                        val saved = merged.toNote(existingId = existing?.id, lastSyncedAt = syncTimestamp)
+                        repository.saveFromSync(saved)
+                        localByUUID[uuid] = repository.getNoteByUuid(uuid) ?: saved
+                    } else if (existing != null && existing.lastSyncedAt == null && existingDto == payload.dto) {
+                        // Déjà identique sur le serveur : simplement notée comme synchronisée.
+                        repository.markLastSynced(uuid, syncTimestamp)
+                        localByUUID[uuid] = existing.copy(lastSyncedAt = syncTimestamp)
+                    }
+                    payload.etag?.let { knownETags[uuid] = it }
+                }
+                etagStore.save(etagScope, knownETags) // progression gardée si on est coupé
             }
 
             val refreshedLocal = repository.getAllIncludingDeleted()
             val cutoff = syncTimestamp - TimeUnit.DAYS.toMillis(TOMBSTONE_RETENTION_DAYS)
 
-            refreshedLocal.forEach { note ->
-                val localDto = CloudNoteDto.fromNote(note)
-                val remoteDto = remoteByUUID[note.uuid]
-
+            for (note in refreshedLocal) {
                 if (note.isDeleted && note.deletedAt != null && note.deletedAt < cutoff) {
                     client.deleteNote(note.uuid)
-                    return@forEach
+                    knownETags.remove(note.uuid)
+                    continue
                 }
+                val localDto = CloudNoteDto.fromNote(note)
+                val remoteDto = remoteByUUID[note.uuid]
+                if (!SyncMergePolicy.shouldUploadLocal(localDto, remoteDto, note.lastSyncedAt)) continue
 
-                if (SyncMergePolicy.shouldUploadLocal(localDto, remoteDto, note.lastSyncedAt)) {
-                    val remoteEtag = remoteEtagsByUUID[note.uuid]
-                    try {
-                        client.uploadNote(localDto, remoteEtag)
+                try {
+                    val newEtag = try {
+                        client.uploadNote(localDto, remoteEtagsByUUID[note.uuid])
                     } catch (error: NextcloudClientException.HttpStatus) {
                         if (error.code != 412) throw error
                         client.uploadNote(localDto, etag = null)
                     }
                     repository.markLastSynced(note.uuid, syncTimestamp)
+                    if (newEtag != null) knownETags[note.uuid] = newEtag else knownETags.remove(note.uuid)
+                } catch (error: Exception) {
+                    if (error is CancellationException || error.isNetworkFailure()) throw error
+                    skipped += 1
                 }
             }
 
-            refreshedLocal
-                .filter { it.isDeleted && it.deletedAt != null && it.deletedAt < cutoff }
-                .forEach { client.deleteNote(it.uuid) }
             repository.purgeDeleted(cutoff)
+            knownETags.keys.retainAll { it in seenRemoteUUIDs || localByUUID[it]?.lastSyncedAt != null }
+            etagStore.save(etagScope, knownETags)
 
             val finalNotes = repository.getAllIncludingDeleted()
-            val manifest = ManifestDto(
-                deviceId = DeviceIdentity.currentDeviceId(appContext),
-                exportedAt = syncTimestamp,
-                noteUUIDs = finalNotes.map { it.uuid }.sorted()
+            client.uploadManifest(
+                ManifestDto(
+                    deviceId = DeviceIdentity.currentDeviceId(appContext),
+                    exportedAt = syncTimestamp,
+                    noteUUIDs = finalNotes.map { it.uuid }.sorted()
+                )
             )
-            client.uploadManifest(manifest)
             settingsRepository.markLastSync(syncTimestamp)
-            _state.value = SyncRunState.Success(syncTimestamp)
+            _state.value = if (skipped == 0) SyncRunState.Success(syncTimestamp)
+            else SyncRunState.Error("Synchronisation faite, mais $skipped note(s) illisible(s) ou refusée(s) par le serveur ont été ignorées.")
+        } catch (error: CancellationException) {
+            _state.value = SyncRunState.Idle
+            throw error
         } catch (error: Exception) {
-            _state.value = SyncRunState.Error(error.message ?: "Synchronisation Nextcloud impossible.")
+            _state.value = SyncRunState.Error(describe(error))
+            if (error.isNetworkFailure()) scheduleRetry()
         }
     }
+
+    /** Coupure réseau : nouvel essai dans 30 s (tant que l'app tourne). */
+    private fun scheduleRetry() {
+        val scope = engineScope ?: return
+        retryJob?.cancel()
+        retryJob = scope.launch {
+            delay(NETWORK_RETRY_MS)
+            if (settingsRepository.currentSettings().syncEnabled) runSync(SyncRunTrigger.SCHEDULED)
+        }
+    }
+
+    private fun describe(error: Exception): String = when {
+        error is UnknownHostException || error.cause is UnknownHostException ->
+            "Serveur injoignable (pas de réseau, ou l'app était en arrière-plan). Nouvel essai dans 30 s."
+        error.isNetworkFailure() -> "Connexion au serveur interrompue. Nouvel essai dans 30 s."
+        else -> error.message ?: "Synchronisation Nextcloud impossible."
+    }
+
+    private fun Throwable.isNetworkFailure(): Boolean =
+        this is IOException || cause is IOException
 
     private suspend fun makeClient(): NextcloudWebDavClient {
         val settings = settingsRepository.currentSettings()
@@ -240,5 +332,24 @@ class SyncEngine(
     private companion object {
         const val TOMBSTONE_RETENTION_DAYS = 30L
         const val LOCAL_CHANGE_DEBOUNCE_MS = 30_000L
+        const val NETWORK_RETRY_MS = 30_000L
+        const val DOWNLOAD_PARALLELISM = 8
+    }
+}
+
+/** ETag connu de chaque note distante, par compte (miroir de syncRemoteETagsV1 sur macOS). */
+internal class ETagStore(context: Context) {
+    private val prefs = context.getSharedPreferences("alphanote_sync_etags", Context.MODE_PRIVATE)
+
+    fun load(scope: String): MutableMap<String, String> {
+        val raw = prefs.getString(scope, null) ?: return mutableMapOf()
+        return runCatching {
+            val obj = JSONObject(raw)
+            obj.keys().asSequence().associateWith { obj.getString(it) }.toMutableMap()
+        }.getOrDefault(mutableMapOf())
+    }
+
+    fun save(scope: String, etags: Map<String, String>) {
+        prefs.edit().putString(scope, JSONObject(etags).toString()).apply()
     }
 }

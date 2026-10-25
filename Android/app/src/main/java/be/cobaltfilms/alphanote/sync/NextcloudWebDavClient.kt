@@ -98,10 +98,11 @@ class NextcloudWebDavClient(
         val url = notesFolderUrl.newBuilder().addPathSegment("$uuid.json").build()
         val result = sendRequest(url, "GET", expectedStatusCodes = setOf(200, 404))
         if (result.statusCode == 404) return null
-        return RemoteNotePayload(CloudJsonCoder.decodeNote(result.body), result.headers["etag"] ?: result.headers["ETag"])
+        return RemoteNotePayload(CloudJsonCoder.decodeNote(result.body), result.headers["etag"] ?: result.headers["oc-etag"])
     }
 
-    suspend fun uploadNote(dto: CloudNoteDto, etag: String?) {
+    /** Envoie la note ; rend le nouvel ETag (nil si le serveur ne le donne pas). */
+    suspend fun uploadNote(dto: CloudNoteDto, etag: String?): String? {
         val url = notesFolderUrl.newBuilder().addPathSegment("${dto.uuid}.json").build()
         val headers = if (etag.isNullOrBlank()) emptyMap() else mapOf("If-Match" to etag)
         val result = sendRequest(
@@ -114,6 +115,7 @@ class NextcloudWebDavClient(
         if (result.statusCode == 412) {
             throw NextcloudClientException.HttpStatus(412)
         }
+        return (result.headers["etag"] ?: result.headers["oc-etag"])?.takeIf { it.isNotBlank() }
     }
 
     suspend fun deleteNote(uuid: String) {

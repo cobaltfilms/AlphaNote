@@ -18,6 +18,8 @@ import be.cobaltfilms.alphanote.data.AppSettingsRepository
 import be.cobaltfilms.alphanote.data.NoteRepository
 import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.services.LauncherIcons
+import be.cobaltfilms.alphanote.timer.AlarmPlayer
+import be.cobaltfilms.alphanote.timer.AlarmSound
 import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 import be.cobaltfilms.alphanote.domain.Converter
 import be.cobaltfilms.alphanote.domain.ListModeFormatter
@@ -115,10 +117,22 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         syncEngine.start(viewModelScope)
         viewModelScope.launch { repository.activeNotes.collectLatest { _activeNotes.value = it } }
         viewModelScope.launch { repository.archivedNotes.collectLatest { _archivedNotes.value = it } }
-        viewModelScope.launch { appSettingsRepository.settings.collectLatest { _settings.value = it } }
+        viewModelScope.launch {
+            appSettingsRepository.settings.collectLatest {
+                _settings.value = it
+                TimerRegistry.shared.alarmSound = it.alarmSound
+            }
+        }
         viewModelScope.launch { aiSettingsRepository.settings.collectLatest { _aiSettings.value = it } }
         viewModelScope.launch { syncSettingsRepository.settings.collectLatest { _syncSettings.value = it } }
-        viewModelScope.launch { syncEngine.state.collectLatest { _syncStatus.value = it } }
+        viewModelScope.launch {
+            syncEngine.state.collectLatest {
+                // Une nouvelle synchro efface l'ancien message (« Synchronisation terminée »
+                // restait affiché sous une erreur plus récente).
+                if (it == SyncRunState.Syncing) _syncMessage.value = ""
+                _syncStatus.value = it
+            }
+        }
     }
 
     // ---- Notes ----
@@ -484,6 +498,21 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     // ---- Réglages ----
 
     fun setTheme(mode: ThemeMode) = viewModelScope.launch { appSettingsRepository.setTheme(mode) }
+    private val alarmPreview = AlarmPlayer()
+
+    /** Choix de la sonnerie, joué une fois pour l'entendre. */
+    fun setAlarmSound(sound: AlarmSound) {
+        viewModelScope.launch { appSettingsRepository.setAlarmSound(sound) }
+        previewAlarm(sound)
+    }
+
+    fun previewAlarm(sound: AlarmSound) = alarmPreview.play(getApplication(), sound, loop = false)
+
+    override fun onCleared() {
+        alarmPreview.stop()
+        super.onCleared()
+    }
+
     fun setColorTheme(theme: ColorTheme) = viewModelScope.launch {
         appSettingsRepository.setColorTheme(theme)
         LauncherIcons.apply(getApplication(), theme)
@@ -526,6 +555,9 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 .onFailure { _syncMessage.value = it.message ?: "Impossible d'enregistrer le mot de passe." }
         }
     }
+    /** L'app revient au premier plan : synchro de rattrapage. */
+    fun onAppForeground() = syncEngine.onForeground()
+
     fun setSyncEnabled(enabled: Boolean) = viewModelScope.launch { syncSettingsRepository.setSyncEnabled(enabled) }
     fun setSyncIntervalMinutes(minutes: Int) = viewModelScope.launch { syncSettingsRepository.setSyncIntervalMinutes(minutes) }
 

@@ -29,3 +29,6 @@ Android/**/.DS_Store
 /_old_XCode.zip
 /*.zip
 /Resolve Packages_*.txt
+
+# WAV maîtres, régénérés par scripts/make-sounds.py
+design/sounds/

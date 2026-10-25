@@ -111,9 +111,13 @@ Activez avec `code` ou `code: swift`. Police monospace, interligne serré.
 
 Activez avec `timer` ou `timer: focus`, ou via `⌘K` (« minuteur 25 min »).
 
-- Minuteur, Chrono, Pomodoro (25 min par défaut) ; préréglages 5 min à 1 h.
+- Minuteur, Chrono, Pomodoro (25 min par défaut) ; préréglages 5 min à 1 h,
+  réglage fin en minutes et en secondes (pas de 5 s).
 - Le minuteur continue si vous changez de note ou cachez la fenêtre, et est
   restauré au redémarrage.
+- Sonnerie au choix dans Réglages › Général › Minuteur : dix sonneries
+  (Minuterie, Cloche, Téléphone, Réveil, Alerte, Montre, Sonar, Cristal, Bois,
+  Pulsation) ou Verre (macOS) ; ▶︎ pour écouter.
 - À la fin : sonnerie en boucle jusqu'à « Arrêter la sonnerie », icône du Dock
   qui rebondit.
 - Espace démarre / met en pause.
