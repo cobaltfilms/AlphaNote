@@ -1,6 +1,6 @@
 {
-  "version": "0.2.4",
-  "notes": "AlphaNote 0.2.4 : les recettes gardent leurs quantit\u00e9s m\u00eame quand le site ne les publie que dans le texte (ex. papillesetpupilles.fr) ; message clair en cas d'\u00e9chec de v\u00e9rification des mises \u00e0 jour.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.4/AlphaNote-0.2.4.zip",
+  "version": "0.2.6",
+  "notes": "Nouvelle ic\u00f4ne de la famille Alpha (A + liste corail). Correctif : l'app Mac n'avait plus d'ic\u00f4ne.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.6/AlphaNote-0.2.6.zip",
   "minimumSystemVersion": "14.0"
 }
