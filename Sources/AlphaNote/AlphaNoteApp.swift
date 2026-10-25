@@ -154,7 +154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SyncEngine.shared.start()
         applyTheme()
         applyActivationPolicy()
-        configureDockIcon()
 
         windowController = NoteWindowController()
         windowController?.showWindow()
@@ -269,37 +268,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             windowController?.demote()
         }
-    }
-
-    // MARK: Icône
-
-    private func configureDockIcon() {
-        let size = NSSize(width: 1024, height: 1024)
-        let image = NSImage(size: size)
-        image.lockFocus()
-
-        let bgRect = NSRect(x: 96, y: 96, width: 832, height: 832)
-        let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 186, yRadius: 186)
-        NSGraphicsContext.current?.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 18
-        shadow.shadowOffset = NSSize(width: 0, height: -6)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.22)
-        shadow.set()
-        NSColor(srgbRed: 0.078, green: 0.066, blue: 0.051, alpha: 1).setFill()
-        bgPath.fill()
-        NSGraphicsContext.current?.restoreGraphicsState()
-
-        let font = NSFont(name: "Menlo-Bold", size: 560) ?? NSFont.systemFont(ofSize: 560, weight: .bold)
-        NSString(string: "A").draw(at: NSPoint(x: 305, y: 245), withAttributes: [
-            .font: font,
-            .foregroundColor: NSColor(srgbRed: 0.953, green: 0.918, blue: 0.851, alpha: 1)
-        ])
-        NSColor(srgbRed: 0.851, green: 0.643, blue: 0.255, alpha: 1).setFill()
-        NSBezierPath(roundedRect: NSRect(x: 596, y: 298, width: 36, height: 405), xRadius: 10, yRadius: 10).fill()
-        image.unlockFocus()
-
-        NSApp.applicationIconImage = image
     }
 
     // MARK: Menu de la barre des menus
