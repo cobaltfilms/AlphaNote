@@ -44,6 +44,17 @@ for bundle in "$BIN"/*_"$APP_NAME".bundle; do
     cp -R "$bundle" "$APP/Contents/Resources/"
 done
 
+# Icône : AppIcon.icns construit depuis l'appiconset (sans lui, le Finder
+# affiche l'icône générique).
+ICONSET_SRC="$ROOT/Sources/AlphaNote/Resources/Assets.xcassets/AppIcon.appiconset"
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+cp "$ICONSET_SRC"/icon_*.png "$ICONSET/"
+[[ -e "$ICONSET/icon_512x512@2x.png" ]] || cp "$ICONSET_SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png"
+rm -f "$ICONSET/icon_1024x1024.png"
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+rm -rf "$(dirname "$ICONSET")"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -54,6 +65,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleExecutable</key>      <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>      <string>$BUNDLE_ID</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundleShortVersionString</key> <string>$VERSION</string>
     <key>CFBundleVersion</key>         <string>$VERSION</string>
     <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>

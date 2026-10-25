@@ -1,0 +1,11 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Alpha suite icon: shared slate tile + serif family mark A -->
+  <rect width="1024" height="1024" rx="220" fill="#22272e"/>
+  <rect x="44" y="44" width="936" height="936" rx="192" fill="none" stroke="#2d333b" stroke-width="8"/>
+  <text x="512" y="600" font-family="Didot, 'Times New Roman', serif" font-weight="bold" font-size="560" fill="#ffffff" text-anchor="middle">A</text>
+  <!-- note motif: two checklist rows (coral) -->
+  <rect x="232" y="672" width="56" height="56" rx="14" fill="#ef7b5f"/>
+  <rect x="320" y="679" width="472" height="42" rx="21" fill="#ef7b5f"/>
+  <rect x="232" y="752" width="56" height="56" rx="14" fill="none" stroke="#ef7b5f" stroke-opacity="0.65" stroke-width="10"/>
+  <rect x="320" y="759" width="312" height="42" rx="21" fill="#ef7b5f" opacity="0.65"/>
+</svg>
