@@ -1,7 +1,7 @@
 {
-  "version": "0.2.5",
-  "versionCode": 205,
-  "notes": "Dict\u00e9e vocale : bouton micro dans la barre de demande en langage naturel.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.5/AlphaNote-0.2.5.apk",
+  "version": "0.2.6",
+  "versionCode": 206,
+  "notes": "Nouvelle ic\u00f4ne de la famille Alpha (A + liste corail).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.6/AlphaNote-0.2.6.apk",
   "minimumSdk": 26
 }
