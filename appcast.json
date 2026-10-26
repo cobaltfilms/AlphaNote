@@ -1,6 +1,6 @@
 {
-  "version": "0.2.10",
-  "notes": "Sonneries au choix (10 sonneries), synchronisation Android fiable.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.10/AlphaNote-0.2.10.zip",
+  "version": "0.2.11",
+  "notes": "Correctif macOS : la synchronisation n'expire plus sur un serveur lent.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.11/AlphaNote-0.2.11.zip",
   "minimumSystemVersion": "14.0"
 }
