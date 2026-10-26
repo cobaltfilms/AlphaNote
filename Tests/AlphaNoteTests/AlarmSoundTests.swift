@@ -23,3 +23,14 @@ final class AlarmSoundTests: XCTestCase {
         XCTAssertEqual(AlarmSound.current, .minuterie)
     }
 }
+
+final class SyncErrorMessageTests: XCTestCase {
+    func testTimeoutIsExplainedInFrench() {
+        let timeout = NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)
+        XCTAssertTrue(SyncEngine.isNetworkFailure(timeout))
+        XCTAssertTrue(SyncEngine.describe(timeout).contains("trop de temps"))
+        let other = NSError(domain: "AlphaNote", code: 1, userInfo: [NSLocalizedDescriptionKey: "autre"])
+        XCTAssertFalse(SyncEngine.isNetworkFailure(other))
+        XCTAssertEqual(SyncEngine.describe(other), "autre")
+    }
+}

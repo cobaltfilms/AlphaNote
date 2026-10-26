@@ -64,8 +64,11 @@ final class NextcloudWebDAVClient {
         self.password = password
 
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 15
-        config.timeoutIntervalForResource = 15
+        // Silence maximal entre deux paquets, puis durée totale d'une requête :
+        // lister ~450 notes peut prendre plus de 15 s quand le serveur est
+        // chargé, et l'ancienne limite totale de 15 s faisait échouer la synchro.
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 180
         self.session = URLSession(configuration: config)
 
         let normalizedServer = NextcloudWebDAVClient.removeTrailingSlash(from: baseURL)

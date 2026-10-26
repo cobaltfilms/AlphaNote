@@ -30,6 +30,7 @@ final class SyncEngine: ObservableObject {
     private var timer: Timer?
     private var syncTask: Task<Void, Never>?
     private var localChangeTask: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
     private var rerunRequested = false
     /// Délai entre une modification locale et la sync qui la pousse.
     private let localChangeDelay: UInt64 = 30_000_000_000
@@ -204,7 +205,38 @@ final class SyncEngine: ObservableObject {
             status = .success(syncTimestamp)
             NotificationCenter.default.post(name: .alphaNoteDidSync, object: nil)
         } catch {
-            status = .error(error.localizedDescription)
+            status = .error(Self.describe(error))
+            if Self.isNetworkFailure(error) { scheduleRetry() }
+        }
+    }
+
+    /// Coupure ou lenteur réseau : nouvel essai dans une minute, sans attendre
+    /// l'intervalle (5 min par défaut).
+    private func scheduleRetry() {
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.runSync(trigger: .scheduled) }
+        }
+    }
+
+    nonisolated static func isNetworkFailure(_ error: Error) -> Bool {
+        (error as NSError).domain == NSURLErrorDomain
+    }
+
+    nonisolated static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        guard nsError.domain == NSURLErrorDomain else { return error.localizedDescription }
+        switch nsError.code {
+        case NSURLErrorTimedOut:
+            return "Le serveur Nextcloud a mis trop de temps à répondre. Nouvel essai dans une minute."
+        case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost:
+            return "Pas de connexion réseau. Nouvel essai dans une minute."
+        case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed, NSURLErrorCannotConnectToHost:
+            return "Serveur Nextcloud injoignable. Nouvel essai dans une minute."
+        default:
+            return "Erreur réseau (\(nsError.localizedDescription)). Nouvel essai dans une minute."
         }
     }
 
