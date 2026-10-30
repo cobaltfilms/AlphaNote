@@ -168,12 +168,12 @@ fun CommandField(
             )
         }
         if (!isRouting) {
-            IconButton(onClick = toggleDictation, modifier = Modifier.size(28.dp)) {
+            IconButton(onClick = toggleDictation, modifier = Modifier.size(40.dp)) {
                 Icon(
                     if (dictation.isListening) Icons.Default.GraphicEq else Icons.Default.Mic,
                     contentDescription = if (dictation.isListening) "Arrêter l'écoute" else "Dicter",
-                    tint = if (dictation.isListening) palette.timer else palette.secondary,
-                    modifier = Modifier.size(16.dp)
+                    tint = if (dictation.isListening) palette.timer else palette.accent,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }

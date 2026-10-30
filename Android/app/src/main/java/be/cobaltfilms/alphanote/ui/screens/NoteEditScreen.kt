@@ -1,6 +1,15 @@
 package be.cobaltfilms.alphanote.ui.screens
 
+import android.content.ClipData
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,12 +60,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import be.cobaltfilms.alphanote.ai.NoteMode
+import be.cobaltfilms.alphanote.domain.NoteAttachments
+import be.cobaltfilms.alphanote.model.Note
 import be.cobaltfilms.alphanote.domain.CurrencyRateService
 import be.cobaltfilms.alphanote.domain.MathDocumentEvaluator
 import be.cobaltfilms.alphanote.domain.MathInlineApplier
 import be.cobaltfilms.alphanote.timer.TimerRegistry
 import be.cobaltfilms.alphanote.ui.components.CommandField
 import be.cobaltfilms.alphanote.ui.components.ModeChip
+import be.cobaltfilms.alphanote.ui.components.NoteImageStrip
 import be.cobaltfilms.alphanote.ui.editor.EditorDecorations
 import be.cobaltfilms.alphanote.ui.editor.NoteEditor
 import be.cobaltfilms.alphanote.ui.editor.TimerNoteView
@@ -70,6 +82,8 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
     val settings by viewModel.settings.collectAsState()
     val isRouting by viewModel.isRouting.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(viewModel::addImage) }
     val snackbarHostState = remember { SnackbarHostState() }
     val focusRequester = remember { FocusRequester() }
     val evaluator = remember { MathDocumentEvaluator() }
@@ -182,6 +196,8 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                 )
                 if (note != null) {
+                    IconButton(onClick = { showCommand = true }) { Icon(Icons.Default.AutoAwesome, contentDescription = "Demande à l'IA", tint = palette.accent) }
+                    IconButton(onClick = { shareNote(context, note, editorValue.text) }) { Icon(Icons.Default.Share, contentDescription = "Partager la note", tint = palette.accent) }
                     ModeChip(mode = mode, onSelect = { viewModel.setMode(it) })
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "Actions", tint = palette.secondary) }
@@ -217,6 +233,12 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
                         mode = mode, fontSize = settings.fontSize, checkTrigger = settings.listCheckTrigger,
                         focusRequester = focusRequester
                     )
+                    NoteImageStrip(
+                        noteUuid = note.uuid,
+                        names = NoteAttachments.names(editorValue.text),
+                        onAdd = { pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
+                        onRemove = viewModel::removeImage
+                    )
                 }
                 LaunchedEffect(note.id) { if (note.content.isBlank()) runCatching { focusRequester.requestFocus() } }
             }
@@ -234,4 +256,30 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Annuler") } }
         )
     }
+}
+
+/**
+ * Partage la note : texte (titre et contenu sans les lignes d'images) et, s'il y en a,
+ * les images jointes. La fiche de partage d'Android propose toutes les apps.
+ */
+private fun shareNote(context: android.content.Context, note: Note, content: String) {
+    val text = listOf(displayTitle(note), NoteAttachments.textWithoutImages(content)).filter { it.isNotBlank() }.joinToString("\n\n")
+    val uris = NoteAttachments.names(content)
+        .map { NoteAttachments.file(context, note.uuid, it) }
+        .filter { it.exists() }
+        .map { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it) }
+    val intent = if (uris.isEmpty()) {
+        Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
+    } else {
+        val clip = ClipData.newUri(context.contentResolver, "AlphaNote", uris.first())
+        uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "image/*"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            putExtra(Intent.EXTRA_TEXT, text)
+            this.clipData = clip
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+    context.startActivity(Intent.createChooser(intent, "Partager la note"))
 }

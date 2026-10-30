@@ -1,6 +1,7 @@
 package be.cobaltfilms.alphanote.ui.screens
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import be.cobaltfilms.alphanote.ai.AISettings
@@ -24,6 +25,7 @@ import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 import be.cobaltfilms.alphanote.domain.Converter
 import be.cobaltfilms.alphanote.domain.ListModeFormatter
 import be.cobaltfilms.alphanote.domain.MathEvaluator
+import be.cobaltfilms.alphanote.domain.NoteAttachments
 import be.cobaltfilms.alphanote.domain.RecipeIngredientExtractor
 import be.cobaltfilms.alphanote.model.Note
 import be.cobaltfilms.alphanote.search.SemanticSearch
@@ -36,6 +38,7 @@ import be.cobaltfilms.alphanote.sync.SyncSettingsRepository
 import be.cobaltfilms.alphanote.timer.TimerRegistry
 import be.cobaltfilms.alphanote.update.AppUpdateInfo
 import be.cobaltfilms.alphanote.update.UpdateManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -154,6 +157,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Modification en mémoire, persistée au plus toutes les 400 ms. */
+    /** Copie une image choisie dans la note courante et ajoute sa ligne au texte. */
+    fun addImage(source: Uri) {
+        val current = _currentNote.value ?: return
+        viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) { NoteAttachments.import(getApplication(), current.uuid, source) }
+            if (name == null) { showToast("Cette image ne peut pas être lue."); return@launch }
+            val text = _currentNote.value?.content ?: current.content
+            val separator = if (text.isEmpty() || text.endsWith("\n")) "" else "\n"
+            edit(text + separator + NoteAttachments.markdown(name) + "\n")
+        }
+    }
+
+    /** Retire la ligne d'une image et son fichier. */
+    fun removeImage(name: String) {
+        val current = _currentNote.value ?: return
+        NoteAttachments.remove(getApplication(), current.uuid, name)
+        val text = current.content.lines().filterNot { line -> NoteAttachments.names(line).contains(name) }.joinToString("\n")
+        edit(text)
+    }
+
     fun edit(content: String) {
         val current = _currentNote.value ?: return
         if (current.content == content) return
