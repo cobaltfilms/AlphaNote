@@ -1,7 +1,7 @@
 {
-  "version": "0.2.11",
-  "versionCode": 211,
-  "notes": "Correctif macOS : la synchronisation n'expire plus sur un serveur lent.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.11/AlphaNote-0.2.11.apk",
+  "version": "0.2.12",
+  "versionCode": 212,
+  "notes": "Images dans les notes (vignettes, aper\u00e7u, suppression), partage de la note, bouton IA et dict\u00e9e plus visibles.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.12/AlphaNote-0.2.12.apk",
   "minimumSdk": 26
 }
