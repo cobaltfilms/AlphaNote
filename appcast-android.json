@@ -1,7 +1,7 @@
 {
-  "version": "0.3.0",
-  "versionCode": 300,
-  "notes": "Synchro directe avec le Mac sur le m\u00eame Wi-Fi (R\u00e9glages \u203a Mac sur le Wi-Fi, code \u00e0 6 chiffres). Demandes de liste : \u00ab \u2026 \u00e0 mes courses \u00bb est mieux compris. IA : jeton d'acc\u00e8s Cloudflare pour joindre le serveur JEV sans VPN.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.3.0/AlphaNote-0.3.0.apk",
+  "version": "0.3.1",
+  "versionCode": 301,
+  "notes": "Synchro directe Mac \u2194 Android sur le m\u00eame Wi-Fi, sans Nextcloud (R\u00e9glages \u203a Mac sur le Wi-Fi, code \u00e0 6 chiffres). Demandes de liste : \u00ab \u2026 \u00e0 mes courses \u00bb est mieux compris, et les \u00e9l\u00e9ments s'ajoutent \u00e0 une liste existante. IA : jeton d'acc\u00e8s Cloudflare pour joindre le serveur JEV sans VPN.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.3.1/AlphaNote-0.3.1.apk",
   "minimumSdk": 26
 }
