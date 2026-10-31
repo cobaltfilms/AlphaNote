@@ -65,6 +65,7 @@ import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.sync.SyncRunState
 import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 import be.cobaltfilms.alphanote.ui.theme.LocalAlphaPalette
+import be.cobaltfilms.alphanote.sync.LanSyncCoordinator
 import be.cobaltfilms.alphanote.update.UpdateManager
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -96,6 +97,11 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
     var localDelai by remember(aiSettings.jevDelaiMs) { mutableStateOf((aiSettings.jevDelaiMs / 1000).toString()) }
     var localTrigger by remember(settings.listCheckTrigger) { mutableStateOf(settings.listCheckTrigger) }
     var localAppcast by remember(settings.appcastUrl) { mutableStateOf(settings.appcastUrl) }
+    val lanEnabled by viewModel.lanSync.enabled.collectAsState()
+    val lanPaired by viewModel.lanSync.pairedName.collectAsState()
+    val lanState by viewModel.lanSync.state.collectAsState()
+    var lanCode by remember { mutableStateOf("") }
+    var lanMessage by remember { mutableStateOf("") }
 
     LaunchedEffect(syncSettings.nextcloudServerUrl) { localServerUrl = syncSettings.nextcloudServerUrl }
     LaunchedEffect(syncSettings.nextcloudUsername) { localUsername = syncSettings.nextcloudUsername }
@@ -152,6 +158,28 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                     }
                 }
                 Text("Jouée en boucle sur le canal alarme à la fin d'un minuteur. Toucher un choix le fait entendre.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+            }
+
+            SettingsCard("Mac sur le Wi-Fi") {
+                SwitchSetting("Synchroniser avec mon Mac", "Sur le même Wi-Fi, les notes passent directement, sans Nextcloud. Côté Mac : Réglages › Synchronisation › Réseau local.", lanEnabled, viewModel::setLanEnabled)
+                if (lanEnabled) {
+                    val paired = lanPaired
+                    if (paired != null) {
+                        Text("Appairé avec $paired", style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(modifier = Modifier.weight(1f), onClick = viewModel::syncLanNow) { Text("Synchroniser") }
+                            OutlinedButton(modifier = Modifier.weight(1f), onClick = { lanMessage = ""; viewModel.forgetLan() }) { Text("Oublier") }
+                        }
+                    } else {
+                        Text("Sur le Mac, ouvrez Réglages › Synchronisation › Réseau local et appuyez sur « Appairer un téléphone ».", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                        OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = lanCode, onValueChange = { lanCode = it.filter(Char::isDigit).take(6) }, singleLine = true, label = { Text("Code affiché sur le Mac") })
+                        Button(modifier = Modifier.fillMaxWidth(), enabled = lanCode.length == 6, onClick = {
+                            viewModel.pairLan(lanCode) { message -> lanMessage = message; if (message.startsWith("Appairé")) lanCode = "" }
+                        }) { Text("Appairer") }
+                    }
+                    Text(lanStatusText(lanState, dateFormat), style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                    if (lanMessage.isNotBlank()) Text(lanMessage, style = MaterialTheme.typography.bodySmall, color = palette.accent)
+                }
             }
 
             SettingsCard("Synchronisation Nextcloud") {
@@ -310,4 +338,13 @@ private fun ColorThemeSwatch(theme: ColorTheme, selected: Boolean, onClick: () -
     ) {
         Box(Modifier.size(18.dp).background(Color(0xFF000000.toInt() or theme.night.accent), CircleShape))
     }
+}
+
+private fun lanStatusText(state: LanSyncCoordinator.State, dateFormat: SimpleDateFormat): String = when (state) {
+    LanSyncCoordinator.State.Idle -> ""
+    LanSyncCoordinator.State.Searching -> "Recherche du Mac sur le Wi-Fi…"
+    LanSyncCoordinator.State.Syncing -> "Synchronisation avec le Mac…"
+    LanSyncCoordinator.State.NotFound -> "Mac introuvable sur ce Wi-Fi : est-il allumé, sur le même réseau ?"
+    is LanSyncCoordinator.State.Done -> "Dernière synchro : ${dateFormat.format(Date(state.at))} — ${state.applied} reçue(s), ${state.pushed} envoyée(s)."
+    is LanSyncCoordinator.State.Failed -> state.message
 }

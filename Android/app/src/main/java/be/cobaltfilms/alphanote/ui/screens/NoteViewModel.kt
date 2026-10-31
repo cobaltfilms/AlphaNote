@@ -31,6 +31,7 @@ import be.cobaltfilms.alphanote.model.Note
 import be.cobaltfilms.alphanote.search.SemanticSearch
 import be.cobaltfilms.alphanote.sync.CloudJsonCoder
 import be.cobaltfilms.alphanote.sync.CloudNoteDto
+import be.cobaltfilms.alphanote.sync.LanSyncCoordinator
 import be.cobaltfilms.alphanote.sync.SyncEngine
 import be.cobaltfilms.alphanote.sync.SyncRunState
 import be.cobaltfilms.alphanote.sync.SyncSettings
@@ -66,6 +67,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val aiSettingsRepository = AISettingsRepository(application)
     private val syncSettingsRepository = SyncSettingsRepository(application)
     private val syncEngine = SyncEngine(application, repository, syncSettingsRepository)
+    val lanSync = LanSyncCoordinator(application, repository)
     private val updateManager = UpdateManager(application)
     private val semanticSearchEngine = SemanticSearch()
     private val converter = Converter()
@@ -118,6 +120,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         syncEngine.start(viewModelScope)
+        lanSync.attach(viewModelScope)
+        lanSync.requestSync(0)
         viewModelScope.launch { repository.activeNotes.collectLatest { _activeNotes.value = it } }
         viewModelScope.launch { repository.archivedNotes.collectLatest { _archivedNotes.value = it } }
         viewModelScope.launch {
@@ -206,7 +210,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         if (_currentNote.value?.id == saved.id) {
             _currentNote.value = _currentNote.value?.copy(updatedAt = saved.updatedAt, keyword = saved.keyword)
         }
-        syncEngine.notifyLocalChange()
+        noteChanged()
     }
 
     private fun persistNow(note: Note) {
@@ -214,7 +218,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             dirtyNote = null; pendingSave?.cancel()
             val saved = repository.updateNote(note)
             if (_currentNote.value?.id == saved.id) _currentNote.value = saved
-            syncEngine.notifyLocalChange()
+            noteChanged()
         }
     }
 
@@ -232,7 +236,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             repository.archiveNote(note)
             if (_currentNote.value?.id == note.id) _currentNote.value = _currentNote.value?.copy(archived = true)
             showToast("Note archivée")
-            syncEngine.notifyLocalChange()
+            noteChanged()
         }
     }
 
@@ -240,7 +244,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.unarchiveNote(note)
             if (_currentNote.value?.id == note.id) _currentNote.value = _currentNote.value?.copy(archived = false)
-            syncEngine.notifyLocalChange()
+            noteChanged()
         }
     }
 
@@ -260,7 +264,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             if (_currentNote.value?.id == note.id) { dirtyNote = null; pendingSave?.cancel(); _currentNote.value = null }
             repository.deleteNote(note)
             TimerRegistry.shared.discard(note.uuid)
-            syncEngine.notifyLocalChange()
+            noteChanged()
         }
     }
 
@@ -447,7 +451,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         val updated = note.copy(content = content, keyword = note.copy(content = content).detectKeyword())
         val saved = repository.updateNote(updated)
         if (_currentNote.value?.id == note.id) _currentNote.value = saved
-        syncEngine.notifyLocalChange()
+        noteChanged()
     }
 
     /**
@@ -579,7 +583,21 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     /** L'app revient au premier plan : synchro de rattrapage. */
-    fun onAppForeground() = syncEngine.onForeground()
+    fun onAppForeground() {
+        syncEngine.onForeground()
+        lanSync.requestSync(0)
+    }
+
+    /** Une modification : synchro Nextcloud (30 s) et, si appairé, passe sur le réseau local (3 s). */
+    private fun noteChanged() {
+        syncEngine.notifyLocalChange()
+        lanSync.requestSync(LAN_CHANGE_DELAY_MS)
+    }
+
+    fun setLanEnabled(enabled: Boolean) = lanSync.setEnabled(enabled)
+    fun syncLanNow() = viewModelScope.launch { lanSync.syncNow() }
+    fun forgetLan() = lanSync.forget()
+    fun pairLan(code: String, onResult: (String) -> Unit) = viewModelScope.launch { onResult(lanSync.pair(code)) }
 
     fun setSyncEnabled(enabled: Boolean) = viewModelScope.launch { syncSettingsRepository.setSyncEnabled(enabled) }
     fun setSyncIntervalMinutes(minutes: Int) = viewModelScope.launch { syncSettingsRepository.setSyncIntervalMinutes(minutes) }
@@ -649,6 +667,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val SAVE_DEBOUNCE_MS = 400L
+        private const val LAN_CHANGE_DELAY_MS = 3_000L
         private val CURRENCY_LIKE = Regex("(?i)^\\s*[-+]?\\d+(?:[.,]\\d+)?\\s*[A-Za-z]{3}\\s+(to|in|en)\\s+[A-Za-z]{3}\\s*=?\\s*$")
     }
 }

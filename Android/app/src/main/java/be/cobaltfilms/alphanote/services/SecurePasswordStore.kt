@@ -13,8 +13,13 @@ import javax.crypto.spec.GCMParameterSpec
  * Stockage de mot de passe avec fallback robuste.
  * Essaye Android Keystore (AES/GCM), si ça échoue utilise SharedPreferences en clair avec warning.
  */
-class SecurePasswordStore(context: Context) {
+class SecurePasswordStore(context: Context, slot: String? = null) {
     private val appContext = context.applicationContext
+    // Emplacement par usage : null = mot de passe Nextcloud (noms historiques conservés).
+    private val passwordKey = slot?.let { "${it}_password" } ?: PASSWORD_KEY
+    private val fallbackKey = slot?.let { "${it}_password_fb" } ?: PASSWORD_FALLBACK
+    private val ivKey = slot?.let { "${it}_password_iv" } ?: IV_KEY
+    private val keyAlias = slot?.let { "AlphaNote${it.replaceFirstChar { c -> c.uppercase() }}PasswordKey" } ?: KEY_ALIAS
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private var keystoreFailed = false
 
@@ -67,9 +72,9 @@ class SecurePasswordStore(context: Context) {
 
     fun clearPassword() {
         prefs.edit()
-            .remove(IV_KEY)
-            .remove(PASSWORD_KEY)
-            .remove(PASSWORD_FALLBACK)
+            .remove(ivKey)
+            .remove(passwordKey)
+            .remove(fallbackKey)
             .remove("keystore_failed")
             .apply()
     }
@@ -82,15 +87,15 @@ class SecurePasswordStore(context: Context) {
         val encrypted = cipher.doFinal(password.toByteArray(Charsets.UTF_8))
 
         prefs.edit()
-            .putString(IV_KEY, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .putString(PASSWORD_KEY, Base64.encodeToString(encrypted, Base64.NO_WRAP))
-            .remove(PASSWORD_FALLBACK)
+            .putString(ivKey, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString(passwordKey, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .remove(fallbackKey)
             .apply()
     }
 
     private fun readWithKeystore(): String? {
-        val iv = prefs.getString(IV_KEY, null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
-        val encrypted = prefs.getString(PASSWORD_KEY, null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
+        val iv = prefs.getString(ivKey, null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
+        val encrypted = prefs.getString(passwordKey, null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
 
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
@@ -99,26 +104,26 @@ class SecurePasswordStore(context: Context) {
 
     private fun saveFallback(password: String) {
         prefs.edit()
-            .putString(PASSWORD_FALLBACK, password)
-            .remove(IV_KEY)
-            .remove(PASSWORD_KEY)
+            .putString(fallbackKey, password)
+            .remove(ivKey)
+            .remove(passwordKey)
             .apply()
     }
 
     private fun readFallback(): String? {
-        return prefs.getString(PASSWORD_FALLBACK, null)
+        return prefs.getString(fallbackKey, null)
     }
 
     @Suppress("DEPRECATION")
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let {
+        (keyStore.getEntry(keyAlias, null) as? KeyStore.SecretKeyEntry)?.let {
             return it.secretKey
         }
 
         val generator = KeyGenerator.getInstance("AES", ANDROID_KEYSTORE)
         val spec = android.security.keystore.KeyGenParameterSpec.Builder(
-            KEY_ALIAS,
+            keyAlias,
             android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
         )
             .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)

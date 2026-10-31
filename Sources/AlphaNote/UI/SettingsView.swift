@@ -232,6 +232,62 @@ struct AppearanceSettingsView: View {
 
 // MARK: - Synchronisation
 
+/// Synchro directe avec un téléphone sur le même réseau (0.3.0).
+struct LANSyncSettingsSection: View {
+    @AppStorage(LANSyncServer.enabledKey) private var lanEnabled = false
+    @State private var pairingCode: String?
+    @State private var devices: [LANPairedDevice] = []
+
+    var body: some View {
+        Section {
+            HelpToggle("Synchroniser sur le réseau local", isOn: $lanEnabled,
+                       help: "Annonce ce Mac sur le Wi-Fi. Un téléphone appairé synchronise directement, sans Nextcloud.")
+                .onChange(of: lanEnabled) {
+                    if lanEnabled { LANSyncServer.shared.start() } else { LANSyncServer.shared.stop(); pairingCode = nil }
+                }
+
+            if lanEnabled {
+                HStack {
+                    Button("Appairer un téléphone") {
+                        pairingCode = LANSyncServer.shared.pairing.beginPairing()
+                    }
+                    Spacer()
+                    if let pairingCode {
+                        Text(pairingCode)
+                            .font(.system(.title2, design: .monospaced).weight(.semibold))
+                            .textSelection(.enabled)
+                    }
+                }
+                if pairingCode != nil {
+                    Text("Saisissez ce code dans AlphaNote sur le téléphone. Valable 5 minutes.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(devices, id: \.deviceId) { device in
+                    HStack {
+                        Text(device.name)
+                        Spacer()
+                        Button("Retirer", role: .destructive) {
+                            LANSyncServer.shared.pairing.unpair(deviceId: device.deviceId)
+                            refreshDevices()
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Réseau local")
+        } footer: {
+            HelpNote("Échange en HTTP sur le Wi-Fi, protégé par un jeton propre à chaque téléphone. Le trafic n'est pas chiffré (TLS) dans cette version : à utiliser sur un réseau de confiance.")
+        }
+        .onAppear(perform: refreshDevices)
+    }
+
+    private func refreshDevices() {
+        devices = LANSyncServer.shared.pairing.pairedDevices
+    }
+}
+
 struct SyncSettingsView: View {
     @ObservedObject private var syncEngine = SyncEngine.shared
 
@@ -250,6 +306,8 @@ struct SyncSettingsView: View {
 
     var body: some View {
         Form {
+            LANSyncSettingsSection()
+
             Section {
                 HelpToggle("Synchroniser via Nextcloud", isOn: $syncEnabled,
                            help: "WebDAV : un fichier JSON par note dans AlphaNote/notes.")
