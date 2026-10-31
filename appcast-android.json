@@ -1,7 +1,7 @@
 {
-  "version": "0.5.1",
-  "versionCode": 501,
-  "notes": "R\u00e9glages r\u00e9organis\u00e9s en rubriques. Page Intelligence artificielle plus claire : on voit si les demandes sont class\u00e9es par le mod\u00e8le du t\u00e9l\u00e9phone ou par un serveur JEV. Titre des notes (minuteurs compris) modifiable directement dans l'en-t\u00eate.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.1/AlphaNote-0.5.1.apk",
+  "version": "0.5.2",
+  "versionCode": 502,
+  "notes": "Correction : \u00ab Ajouter une image \u00bb fermait l'application. Les images s'affichent d\u00e9sormais en grand sous le texte (en grille quand il y en a plusieurs) et la ligne de r\u00e9f\u00e9rence n'appara\u00eet plus dans la note. L'ajout se fait depuis le menu \u22ef de la note.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.2/AlphaNote-0.5.2.apk",
   "minimumSdk": 26
 }
