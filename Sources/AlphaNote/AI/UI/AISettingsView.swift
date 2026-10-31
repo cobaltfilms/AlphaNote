@@ -149,7 +149,9 @@ struct AISettingsView: View {
             return
         }
 
-        let config = JEVConfig(url: url, delaiMs: jevDelaiMs > 0 ? jevDelaiMs : AISettingsKeys.jevDelaiMsDefault)
+        // Même jeton d'accès que les vraies demandes (JEVClient.config()).
+        let config = JEVConfig(url: url, delaiMs: jevDelaiMs > 0 ? jevDelaiMs : AISettingsKeys.jevDelaiMsDefault,
+                               access: JEVAccessToken.load())
         switch await JEVClient.decider(
             config: config,
             instructions: ModeRoutingFeature.instructions,
