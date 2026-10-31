@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import be.cobaltfilms.alphanote.vault.VaultKeyring
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -219,6 +220,38 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                     OutlinedButton(modifier = Modifier.weight(1f), onClick = viewModel::createNextcloudBackup) { Text("Backup") }
                     TextButton(modifier = Modifier.weight(1f), onClick = { confirmRestore = true }) { Text("Restaurer") }
                 }
+            }
+
+            SettingsCard("Coffre — notes sécurisées") {
+                val configured by VaultKeyring.isConfigured.collectAsState()
+                val unlocked by VaultKeyring.isUnlocked.collectAsState()
+                var autoLock by remember { mutableStateOf(VaultKeyring.autoLockMinutes) }
+                var confirmForget by remember { mutableStateOf(false) }
+                Text(
+                    when { !configured -> "Pas de mot de passe maître sur ce téléphone."; unlocked -> "Coffre ouvert."; else -> "Coffre fermé." },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text("Refermer après", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(1 to "1 min", 5 to "5 min", 15 to "15 min", 60 to "1 h").forEach { (minutes, label) ->
+                        FilterChip(selected = autoLock == minutes, onClick = { autoLock = minutes; VaultKeyring.setAutoLock(minutes) }, label = { Text(label) })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    if (unlocked) OutlinedButton(modifier = Modifier.weight(1f), onClick = { VaultKeyring.lockNow() }) { Text("Verrouiller") }
+                    if (configured) OutlinedButton(modifier = Modifier.weight(1f), onClick = { confirmForget = true }) { Text("Oublier le mot de passe", color = palette.timer) }
+                }
+                Text(
+                    "Une note dont la première ligne est « vault » (ou « vault: Titre ») est chiffrée sur le téléphone avant d'être enregistrée ou synchronisée ; seul le titre reste lisible. L'IA n'y a jamais accès. Le mot de passe maître est le même sur tous tes appareils et ne peut pas être récupéré.",
+                    style = MaterialTheme.typography.bodySmall, color = palette.secondary
+                )
+                if (confirmForget) AlertDialog(
+                    onDismissRequest = { confirmForget = false },
+                    title = { Text("Oublier le mot de passe maître ?") },
+                    text = { Text("Les notes sécurisées restent chiffrées. Il faudra ressaisir le mot de passe maître pour les lire sur ce téléphone.") },
+                    confirmButton = { TextButton(onClick = { confirmForget = false; VaultKeyring.forget() }) { Text("Oublier", color = palette.timer) } },
+                    dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Annuler") } }
+                )
             }
 
             SettingsCard("IA — routage de mode (JEV)") {

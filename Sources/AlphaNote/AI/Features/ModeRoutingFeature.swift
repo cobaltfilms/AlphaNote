@@ -6,6 +6,8 @@ enum NoteMode: String, CaseIterable, Sendable {
     case timer
     case code
     case plain
+    /// Note sécurisée : corps chiffré. Jamais proposé au serveur JEV.
+    case vault
 
     var label: String {
         switch self {
@@ -14,8 +16,12 @@ enum NoteMode: String, CaseIterable, Sendable {
         case .timer: return "TIMER"
         case .code: return "CODE"
         case .plain: return "TEXTE"
+        case .vault: return "COFFRE"
         }
     }
+
+    /// Modes que JEV peut choisir : une demande ne crée jamais de note sécurisée.
+    static var routable: [NoteMode] { allCases.filter { $0 != .vault } }
 }
 
 enum RouteSource: Sendable {
@@ -47,7 +53,7 @@ struct ModeRoutingFeature {
     """
 
     static let modeField: JEVField = .string(
-        choices: NoteMode.allCases.map(\.rawValue),
+        choices: NoteMode.routable.map(\.rawValue),
         description: """
         Le mode que la demande appelle.
         - math : la demande cherche un résultat chiffré — calcul, pourcentage, \

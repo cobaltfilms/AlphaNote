@@ -22,6 +22,16 @@ final class NoteStore: ObservableObject {
 
     @Published var toast: Toast?
 
+    /// Une note sécurisée attend le coffre (fermé ou sans mot de passe) : elle
+    /// reste en mémoire, jamais écrite en clair. L'interface propose d'ouvrir.
+    @Published var vaultNeedsUnlock = false
+    var vaultKeyring = VaultKeyring.shared
+    /// Notes retenues en mémoire en attendant le coffre, par id.
+    private var heldVaultNotes: [Int64: Note] = [:]
+    /// Notes qui viennent d'entrer au coffre : après écriture de la version
+    /// chiffrée, le journal SQLite est purgé de l'ancienne version en clair.
+    private var journalPurgeAfterSave: Set<Int64> = []
+
     @AppStorage("archivedNoteIDs") private var legacyArchivedNoteIDsStorage: String = "[]"
     @AppStorage("archivedIDsMigratedToDatabase") private var archivedIDsMigratedToDatabase: Bool = false
     @AppStorage(AISettingsKeys.enabled) private var aiEnabled = false
@@ -60,7 +70,13 @@ final class NoteStore: ObservableObject {
 
     @discardableResult
     func addNote(content: String = "") -> Note? {
-        let created = Note.create(Note(content: content, position: nextPosition()))
+        // Une note sécurisée naît vide puis passe par updateNote (chiffrement).
+        let protect = Note(content: content).isVault && !VaultEnvelope.isSealed(content)
+        var created = Note.create(Note(content: protect ? "" : content, position: nextPosition()))
+        if protect, created.id != nil {
+            created.content = content
+            updateNote(created)
+        }
         guard let createdID = created.id else {
             reloadNotes()
             return nil
@@ -71,9 +87,14 @@ final class NoteStore: ObservableObject {
     }
 
     func createNote(keyword: String, content: String) -> Bool {
-        var note = Note(content: content, keyword: keyword, position: nextPosition())
+        let protect = Note(content: content).isVault && !VaultEnvelope.isSealed(content)
+        var note = Note(content: protect ? "" : content, keyword: keyword, position: nextPosition())
         note = Note.create(note)
         guard let createdID = note.id else { return false }
+        if protect {
+            note.content = content
+            updateNote(note)
+        }
         SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: createdID)
         return true
@@ -119,6 +140,11 @@ final class NoteStore: ObservableObject {
         updated.detectKeyword()
         updated.updatedAt = Date()
         updated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
+        guard let storable = storableVersion(of: updated, unseal: false) else {
+            holdUntilVaultOpens(updated)
+            return
+        }
+        updated = storable
         replaceInMemory(updated)
 
         guard let id = updated.id else { return }
@@ -132,20 +158,87 @@ final class NoteStore: ObservableObject {
     }
 
     /// Mise à jour immédiate (actions explicites : renommer, archiver, épingler…).
-    func updateNote(_ note: Note) {
+    /// `unseal` : sortie volontaire du coffre (changement de mode), le texte
+    /// peut alors redevenir clair.
+    func updateNote(_ note: Note, unseal: Bool = false) {
         var updated = note
         updated.detectKeyword()
         updated.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
+        guard let storable = storableVersion(of: updated, unseal: unseal) else {
+            holdUntilVaultOpens(updated)
+            return
+        }
+        updated = storable
         if let id = updated.id {
             pendingSaveTasks[id]?.cancel()
             pendingSaveTasks[id] = nil
             pendingNotes[id] = nil
         }
         Note.update(updated)
+        purgeJournalIfNeeded(updated.id)
         updated.updatedAt = Date()
         replaceInMemory(updated)
         SyncEngine.shared.notifyLocalChange()
         Task.detached(priority: .utility) { await SemanticSearchFeature().index(note: updated) }
+    }
+
+    // MARK: - Notes sécurisées
+
+    /// Version écrivable sur disque et synchronisable : le corps d'une note
+    /// sécurisée y est toujours chiffré. Nil quand il faudrait chiffrer mais
+    /// que le coffre est fermé.
+    private func storableVersion(of note: Note, unseal: Bool) -> Note? {
+        // Une note déjà au coffre y reste pendant la frappe, même si son
+        // en-tête « vault » est momentanément effacé.
+        let previous = note.id.flatMap { id in (notes + archivedNotes).first { $0.id == id } }
+        let wasVault = previous?.isVault ?? false
+        let wantsVault = note.keyword == VaultEnvelope.keyword || (wasVault && !unseal)
+        guard wantsVault, !VaultEnvelope.isSealed(note.content) else { return note }
+        guard let sealed = vaultKeyring.seal(note.content) else { return nil }
+        // Première version chiffrée sur disque : l'ancienne était en clair.
+        let wasSealedOnDisk = previous.map { VaultEnvelope.isSealed($0.content) } ?? false
+        if !wasSealedOnDisk, let id = note.id { journalPurgeAfterSave.insert(id) }
+        var protected = note
+        protected.content = sealed
+        return protected
+    }
+
+    private func purgeJournalIfNeeded(_ id: Int64?) {
+        guard let id, journalPurgeAfterSave.remove(id) != nil else { return }
+        DatabaseManager.shared.purgeJournal()
+    }
+
+    private func holdUntilVaultOpens(_ note: Note) {
+        if let id = note.id {
+            pendingSaveTasks[id]?.cancel()
+            pendingSaveTasks[id] = nil
+            pendingNotes[id] = nil
+            heldVaultNotes[id] = note
+        }
+        replaceInMemory(note)
+        vaultNeedsUnlock = true
+    }
+
+    /// Texte à montrer dans l'éditeur. Nil : note sécurisée et coffre fermé.
+    func plaintext(of note: Note) -> String? {
+        guard VaultEnvelope.isSealed(note.content) else { return note.content }
+        return vaultKeyring.open(note.content)
+    }
+
+    /// Coffre ouvert : les notes retenues en mémoire sont chiffrées et écrites.
+    func sealHeldVaultNotes() {
+        vaultNeedsUnlock = false
+        let held = heldVaultNotes
+        heldVaultNotes.removeAll()
+        for note in held.values {
+            updateNote(note)
+        }
+    }
+
+    /// Contenus scellés connus (pour vérifier un mot de passe maître saisi
+    /// sur un nouvel appareil).
+    var sealedVaultContents: [String] {
+        (notes + archivedNotes).map(\.content).filter(VaultEnvelope.isSealed)
     }
 
     func flushPendingSaves() {
@@ -159,6 +252,7 @@ final class NoteStore: ObservableObject {
         pendingSaveTasks[id] = nil
         guard let note = pendingNotes.removeValue(forKey: id) else { return }
         Note.update(note)
+        purgeJournalIfNeeded(id)
         SyncEngine.shared.notifyLocalChange()
         Task.detached(priority: .utility) { await SemanticSearchFeature().index(note: note) }
     }
@@ -260,6 +354,14 @@ final class NoteStore: ObservableObject {
     /// Change le mode de la note courante en réécrivant sa première ligne.
     func setMode(_ mode: NoteMode, for note: Note) {
         var updated = note
+        if VaultEnvelope.isSealed(note.content) {
+            guard let plain = vaultKeyring.open(note.content) else {
+                vaultNeedsUnlock = true
+                showToast("Ouvre le coffre pour changer le mode de cette note.", symbol: "lock.fill")
+                return
+            }
+            updated.content = plain
+        }
         var lines = updated.content.components(separatedBy: .newlines)
         let firstTrimmed = lines.first?.trimmingCharacters(in: .whitespaces) ?? ""
         let hasHeader = Note.knownKeywords.contains(firstTrimmed.lowercased())
@@ -274,7 +376,7 @@ final class NoteStore: ObservableObject {
         switch mode {
         case .plain:
             break
-        case .math, .list, .timer, .code:
+        case .math, .list, .timer, .code, .vault:
             let header = suffix.isEmpty ? mode.rawValue : "\(mode.rawValue): \(suffix)"
             lines.insert(header, at: 0)
         }
@@ -286,7 +388,7 @@ final class NoteStore: ObservableObject {
         if mode == .timer, lines.count == 1 {
             updated.content += "\ncountdown 10:00"
         }
-        updateNote(updated)
+        updateNote(updated, unseal: mode != .vault)
     }
 
     func convertCurrentNoteToList() {
@@ -373,7 +475,9 @@ final class NoteStore: ObservableObject {
     // MARK: - Privé
 
     private func reloadNotes(selecting selectedID: Int64? = nil) {
-        let allNotes = Note.fetchAll()
+        // Une note qui attend le coffre n'est pas sur disque : on garde la
+        // version en mémoire.
+        let allNotes = Note.fetchAll().map { note in note.id.flatMap { heldVaultNotes[$0] } ?? note }
         notes = allNotes.filter { !$0.archived }
         archivedNotes = allNotes.filter { $0.archived }
 

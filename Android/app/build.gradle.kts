@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // versionCode = major*10000 + minor*100 + patch (lisible, monotone).
-        versionCode = 301
-        versionName = "0.3.1"
+        versionCode = 400
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -124,6 +124,8 @@ dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+    // Ouverture du coffre (notes sécurisées) par empreinte ou code de l'appareil.
+    implementation("androidx.biometric:biometric:1.1.0")
 
     // Tests unitaires
     testImplementation("junit:junit:4.13.2")

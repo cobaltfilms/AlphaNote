@@ -66,7 +66,7 @@ fun NoteEditor(
 ) {
     val palette = LocalAlphaPalette.current
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val isMono = mode == NoteMode.MATH || mode == NoteMode.CODE
+    val isMono = mode == NoteMode.MATH || mode == NoteMode.CODE || mode == NoteMode.VAULT
     val lineHeight = fontSize * if (mode == NoteMode.CODE) 1.35f else 1.55f
     val gutterWidth = 40.dp
     val topPadding = 14.dp
@@ -262,7 +262,7 @@ object EditorDecorations {
                 return@forEachIndexed
             }
             when (mode) {
-                NoteMode.PLAIN, NoteMode.CODE, NoteMode.TIMER -> Unit
+                NoteMode.PLAIN, NoteMode.CODE, NoteMode.TIMER, NoteMode.VAULT -> Unit
                 NoteMode.LIST -> {
                     if (trimmed.isEmpty()) return@forEachIndexed
                     when {

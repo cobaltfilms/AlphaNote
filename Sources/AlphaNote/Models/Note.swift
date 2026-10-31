@@ -19,7 +19,10 @@ struct Note: Codable, Identifiable, Equatable {
     var createdAt: Date
     var updatedAt: Date
 
-    static let knownKeywords: Set<String> = ["math", "list", "code", "timer"]
+    static let knownKeywords: Set<String> = ["math", "list", "code", "timer", VaultEnvelope.keyword]
+
+    /// Note sécurisée (« vault » en première ligne) : corps chiffré au repos.
+    var isVault: Bool { keyword == VaultEnvelope.keyword || VaultEnvelope.isSealed(content) }
 
     init(
         id: Int64? = nil,

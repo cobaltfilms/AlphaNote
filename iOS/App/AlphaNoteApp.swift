@@ -42,6 +42,10 @@ struct AlphaNoteApp: App {
         AppSettings.registerDefaults()
         DatabaseManager.shared.setup()
         TimerNotifier.shared.install()
+        // Tests d'interface : coffre vierge (le trousseau du simulateur persiste).
+        if ProcessInfo.processInfo.arguments.contains("-resetVault") {
+            VaultKeyring.shared.forget()
+        }
     }
 
     var body: some Scene {
@@ -74,8 +78,10 @@ struct AlphaNoteApp: App {
                 SharedInbox.importPending(into: store)
                 SyncEngine.shared.runManualSync()
             case .background:
-                // Rien ne doit rester en attente quand iOS suspend l'app.
+                // Rien ne doit rester en attente quand iOS suspend l'app, et
+                // le coffre se referme.
                 store.flushPendingSaves()
+                VaultKeyring.shared.lock()
             default:
                 break
             }

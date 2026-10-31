@@ -205,8 +205,10 @@ struct NoteListView: View {
     private var searchResults: some View {
         let query = search.trimmingCharacters(in: .whitespaces)
         let all = store.notes + store.archivedNotes
+        // Note sécurisée : seul son titre est cherchable.
         let exact = all.filter {
-            $0.content.localizedCaseInsensitiveContains(query) || $0.title.localizedCaseInsensitiveContains(query)
+            ($0.isVault ? $0.effectiveTitle : $0.content).localizedCaseInsensitiveContains(query)
+                || $0.title.localizedCaseInsensitiveContains(query)
         }
         let exactIDs = Set(exact.map(\.uuid))
         let liveByUUID = Dictionary(all.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })

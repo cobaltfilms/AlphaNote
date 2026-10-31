@@ -2,7 +2,7 @@ package be.cobaltfilms.alphanote
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
@@ -17,7 +17,7 @@ import be.cobaltfilms.alphanote.ui.screens.SharedTextEvent
 import be.cobaltfilms.alphanote.ui.theme.AlphaNoteTheme
 
 /** Activité unique. Le thème suit le réglage (Système / Clair / Sombre). */
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private var sharedTextEvent: SharedTextEvent? by mutableStateOf(null)
     private var sharedEventId = 0L

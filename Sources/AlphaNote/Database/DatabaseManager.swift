@@ -77,6 +77,9 @@ final class DatabaseManager {
             var config = Configuration()
             config.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA journal_mode=WAL")
+                // Contenu effacé ou remplacé mis à zéro : une note passée au
+                // coffre ne laisse pas son ancien texte en clair dans le fichier.
+                try db.execute(sql: "PRAGMA secure_delete=ON")
                 try db.execute(sql: "PRAGMA foreign_keys=ON")
             }
             let queue = try DatabaseQueue(path: url.path, configuration: config)
@@ -86,6 +89,21 @@ final class DatabaseManager {
             print("[DatabaseManager] Ouverture impossible (\(url.path)) : \(error)")
             return nil
         }
+    }
+
+    /// Vide le journal WAL dans la base : les anciennes versions des pages (le
+    /// texte en clair d'une note qui vient d'être chiffrée) ne traînent plus.
+    func purgeJournal() {
+        _ = try? dbQueue?.writeWithoutTransaction { db in
+            try db.checkpoint(.truncate)
+        }
+    }
+
+    /// Tests : base vierge en mémoire, jamais le fichier de l'utilisateur.
+    func useInMemoryDatabaseForTesting() throws {
+        let queue = try DatabaseQueue()
+        try migrate(queue)
+        dbQueue = queue
     }
 
     func getDBQueue() -> DatabaseQueue {

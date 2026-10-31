@@ -8,6 +8,7 @@ import AppKit
 struct NoteListView: View {
     @StateObject fileprivate var store = NoteStore()
     @StateObject private var speechRecognizer = SpeechRecognizer()
+    @ObservedObject private var vault = VaultKeyring.shared
 
     @AppStorage("fontSize") private var fontSize: Double = 14
     @AppStorage("listCheckTrigger") private var listCheckTrigger: String = "/x"
@@ -252,6 +253,9 @@ struct NoteListView: View {
             Button { beginRename(note) } label: { Label("Renommer…", systemImage: "pencil") }
             Button { store.duplicateNote(note) } label: { Label("Dupliquer", systemImage: "plus.square.on.square") }
             Button { copyNote(note) } label: { Label("Copier le contenu", systemImage: "doc.on.doc") }
+            if note.isVault, vault.isUnlocked {
+                Button { vault.lockNow() } label: { Label("Verrouiller le coffre", systemImage: "lock") }
+            }
             Divider()
             Button { store.archiveNote(note); store.showToast("Note archivée", symbol: "archivebox") } label: {
                 Label("Archiver", systemImage: "archivebox")
@@ -277,6 +281,12 @@ struct NoteListView: View {
                     timerView(for: note)
                         .id(note.uuid)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if note.isVault, !vault.isUnlocked {
+                    // Note sécurisée, coffre fermé (ou pas encore de mot de
+                    // passe : la note attend en mémoire d'être chiffrée).
+                    VaultLockView(title: note.effectiveTitle)
+                        .environmentObject(store)
+                        .id(note.uuid)
                 } else {
                     NoteEditorView(
                         text: contentBinding(for: note),
@@ -311,12 +321,15 @@ struct NoteListView: View {
     private func contentBinding(for note: Note) -> Binding<String> {
         Binding(
             get: {
-                guard let id = note.id, let current = store.notes.first(where: { $0.id == id }) else { return note.content }
-                return current.content
+                guard let id = note.id, let current = store.notes.first(where: { $0.id == id }) else {
+                    return store.plaintext(of: note) ?? ""
+                }
+                // Note sécurisée : déchiffrée pour l'affichage seulement.
+                return store.plaintext(of: current) ?? ""
             },
             set: { newValue in
                 guard let id = note.id, var current = store.notes.first(where: { $0.id == id }),
-                      current.content != newValue else { return }
+                      store.plaintext(of: current) != newValue else { return }
                 current.content = newValue
                 store.edit(current)
             }
@@ -640,8 +653,9 @@ struct NoteListView: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return store.notes }
         let lower = query.lowercased()
+        // Note sécurisée : seul son titre est cherchable.
         let textMatches = store.notes.filter {
-            $0.content.lowercased().contains(lower) || $0.title.lowercased().contains(lower)
+            ($0.isVault ? $0.effectiveTitle : $0.content).lowercased().contains(lower) || $0.title.lowercased().contains(lower)
         }
         let semanticIDs = Set(store.semanticSearchResults.map(\.note.uuid))
         let textIDs = Set(textMatches.map(\.uuid))
@@ -756,7 +770,11 @@ struct NoteListView: View {
 
     private func copyNote(_ note: Note) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(note.content, forType: .string)
+        guard let text = store.plaintext(of: note) else {
+            store.showToast("Ouvre le coffre pour copier cette note.", symbol: "lock.fill")
+            return
+        }
+        NSPasteboard.general.setString(text, forType: .string)
         store.showToast("Contenu copié", symbol: "doc.on.doc")
     }
 

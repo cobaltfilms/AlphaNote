@@ -12,8 +12,8 @@ options:
     iOS: "17.0"
 settings:
   base:
-    MARKETING_VERSION: "0.3.2"
-    CURRENT_PROJECT_VERSION: "302"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "400"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
@@ -52,6 +52,7 @@ targets:
           - Database/DatabaseManager.swift
           - Evaluation/*.swift
           - Models/*.swift
+          - Vault/*.swift
           - Services/DeviceIdentity.swift
           - Services/KeychainService.swift
           - Services/NextcloudWebDAVClient.swift
@@ -104,6 +105,7 @@ targets:
         UIBackgroundModes:
           - audio
         NSMicrophoneUsageDescription: "AlphaNote écoute le micro pour la dictée de la barre de commande."
+        NSFaceIDUsageDescription: "Face ID ouvre le coffre des notes sécurisées."
         NSSpeechRecognitionUsageDescription: "AlphaNote transcrit ta voix en texte pour la barre de commande."
         NSPhotoLibraryUsageDescription: "AlphaNote ajoute à une note les images que tu choisis."
         NSLocalNetworkUsageDescription: "AlphaNote joint le serveur JEV et Nextcloud sur ton réseau local."
@@ -156,6 +158,8 @@ targets:
           - RecipeAndFormulaTests.swift
           - SharedCoreTests.swift
           - TimerLineTests.swift
+          - TimerRequestTests.swift
+          - VaultTests.swift
     dependencies:
       - target: AlphaNote
     settings:

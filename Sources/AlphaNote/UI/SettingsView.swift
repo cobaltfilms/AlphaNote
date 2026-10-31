@@ -12,6 +12,9 @@ struct SettingsView: View {
                 .tabItem { Label("Synchronisation", systemImage: "arrow.triangle.2.circlepath.icloud") }
             AISettingsView()
                 .tabItem { Label("IA", systemImage: "sparkles") }
+            Form { VaultSettingsSection() }
+                .formStyle(.grouped)
+                .tabItem { Label("Coffre", systemImage: "lock") }
             UpdatesSettingsView()
                 .tabItem { Label("Mises à jour", systemImage: "arrow.down.circle") }
             AdvancedSettingsView()

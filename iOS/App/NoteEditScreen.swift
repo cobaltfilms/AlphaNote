@@ -7,6 +7,7 @@ import PhotosUI
 /// l'affiche aussitôt, comme sur macOS et Android.
 struct NoteEditScreen: View {
     @EnvironmentObject private var store: NoteStore
+    @ObservedObject private var vault = VaultKeyring.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppSettings.fontSizeKey) private var fontSize = 17.0
     @AppStorage(AppSettings.listCheckTriggerKey) private var checkTrigger = "/x"
@@ -76,6 +77,16 @@ struct NoteEditScreen: View {
     @ViewBuilder
     private func content(for note: Note) -> some View {
         let mode = NoteMode(rawValue: note.keyword) ?? .plain
+        if note.isVault, !vault.isUnlocked {
+            // Coffre fermé (ou pas encore de mot de passe maître).
+            VaultLockView(title: note.effectiveTitle)
+        } else {
+            editor(for: note, mode: mode)
+        }
+    }
+
+    @ViewBuilder
+    private func editor(for note: Note, mode: NoteMode) -> some View {
         VStack(spacing: 0) {
             if mode == .timer {
                 timerView(for: note)
@@ -83,16 +94,19 @@ struct NoteEditScreen: View {
                 Divider()
             }
             NoteTextView(text: contentBinding, fontSize: fontSize, checkTrigger: checkTrigger, isFocused: $editorFocused)
-            let images = NoteAttachments.names(in: note.content)
+            let images = note.isVault ? [] : NoteAttachments.names(in: note.content)
             if !images.isEmpty {
                 ImageStrip(noteUUID: note.uuid, names: images) { name in
                     viewing = AttachmentRef(noteUUID: note.uuid, name: name)
                 }
             }
-            CommandBar()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Palette.windowColor)
+            // Une note sécurisée ne passe jamais par l'IA : pas de barre.
+            if !note.isVault {
+                CommandBar()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Palette.windowColor)
+            }
         }
     }
 
@@ -107,9 +121,11 @@ struct NoteEditScreen: View {
 
     private var contentBinding: Binding<String> {
         Binding(
-            get: { store.currentNote?.content ?? "" },
+            // Note sécurisée : déchiffrée pour l'affichage seulement ; le store
+            // la rechiffre à l'écriture.
+            get: { store.currentNote.flatMap(store.plaintext(of:)) ?? "" },
             set: { newValue in
-                guard var note = store.currentNote, note.content != newValue else { return }
+                guard var note = store.currentNote, store.plaintext(of: note) != newValue else { return }
                 note.content = newValue
                 store.edit(note)
             }
@@ -170,12 +186,21 @@ struct NoteEditScreen: View {
 
     @ViewBuilder
     private func noteMenu(for note: Note) -> some View {
-        Button { showPhotoPicker = true } label: { Label("Ajouter une image", systemImage: "photo.badge.plus") }
+        if note.isVault {
+            if vault.isUnlocked {
+                Button { vault.lockNow() } label: { Label("Verrouiller le coffre", systemImage: "lock") }
+            }
+        } else {
+            // Les images restent en clair sur l'appareil : pas dans le coffre.
+            Button { showPhotoPicker = true } label: { Label("Ajouter une image", systemImage: "photo.badge.plus") }
+        }
         Button { share(note) } label: { Label("Partager", systemImage: "square.and.arrow.up") }
+            .disabled(store.plaintext(of: note) == nil)
         Button {
-            UIPasteboard.general.string = note.content
+            UIPasteboard.general.string = store.plaintext(of: note)
             store.showToast("Contenu copié", symbol: "doc.on.doc")
         } label: { Label("Copier le contenu", systemImage: "doc.on.doc") }
+            .disabled(store.plaintext(of: note) == nil)
         Divider()
         Button {
             renameDraft = note.title.isEmpty ? NoteFormatting.displayTitle(note) : note.title
@@ -238,7 +263,8 @@ struct NoteEditScreen: View {
     /// (comme le partage Android).
     private func share(_ note: Note) {
         store.flushPendingSaves()
-        let body = NoteAttachments.textWithoutImages(note.content)
+        guard let plain = store.plaintext(of: note) else { return }
+        let body = NoteAttachments.textWithoutImages(plain)
         let title = NoteFormatting.displayTitle(note)
         let text = body.hasPrefix(title) ? body : "\(title)\n\n\(body)"
         var items: [Any] = [text]

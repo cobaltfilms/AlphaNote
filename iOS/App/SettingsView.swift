@@ -33,6 +33,7 @@ struct SettingsView: View {
                 notesSection
                 timerSection
                 syncSection
+                VaultSettingsSection()
                 Section("Intelligence artificielle") {
                     NavigationLink("IA et serveur JEV") {
                         AISettingsView().navigationTitle("IA")

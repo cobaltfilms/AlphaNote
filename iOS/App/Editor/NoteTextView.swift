@@ -158,7 +158,7 @@ struct NoteTextView: UIViewRepresentable {
             let fullRange = NSRange(location: 0, length: nsText.length)
             let mode = EditorTextRules.detectMode(in: text)
             let size = CGFloat(parent.fontSize)
-            let isMono = mode == .math || mode == .code
+            let isMono = mode == .math || mode == .code || mode == .vault
             let baseFont: UIFont = isMono
                 ? .monospacedSystemFont(ofSize: size, weight: .regular)
                 : .systemFont(ofSize: size)
@@ -200,7 +200,7 @@ struct NoteTextView: UIViewRepresentable {
                 }
 
                 switch mode {
-                case .plain, .code, .timer:
+                case .plain, .code, .timer, .vault:
                     break
                 case .list:
                     if trimmed.isEmpty { continue }

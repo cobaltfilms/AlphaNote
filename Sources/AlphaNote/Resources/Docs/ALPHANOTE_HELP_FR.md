@@ -121,8 +121,30 @@ Activez avec `timer` ou `timer: focus`, ou via `⌘K` (« minuteur 25 min »).
 - À la fin : sonnerie en boucle jusqu'à « Arrêter la sonnerie », icône du Dock
   qui rebondit.
 - Espace démarre / met en pause.
+- « minuteur 25 min » depuis une note vide la transforme en minuteur ; depuis
+  une note qui a du texte, un nouveau minuteur est créé et ouvert.
 
-### 5.6 Demande en langage naturel (⌘K)
+### 5.6 `vault` — notes sécurisées
+
+Pour les jetons, mots de passe et autres secrets. Activez avec `vault` ou
+`vault: Banque`, ou le mode « Coffre » (⌘⌥6).
+
+- Le corps de la note est chiffré sur l'appareil (AES-256-GCM, clé dérivée du
+  mot de passe maître) avant d'être enregistré ou synchronisé : Nextcloud et la
+  synchro Wi-Fi ne voient que des données illisibles. Seul le titre (la
+  première ligne) reste lisible, dans la liste et la recherche.
+- Mot de passe maître : choisi une fois, le même sur le Mac, l'iPhone et
+  Android. Il n'est envoyé nulle part et ne peut pas être récupéré.
+- Ouverture par Touch ID / Face ID / empreinte, ou le mot de passe maître. Le
+  coffre se referme après 5 minutes sans usage (réglable), quand l'app passe en
+  arrière-plan sur téléphone, ou avec « Verrouiller le coffre ».
+- L'IA et la barre de commande n'ont jamais accès à une note sécurisée ; elle
+  n'entre pas dans la recherche sémantique. Pas d'images dans le coffre.
+- Une note qui avait déjà du texte avant de passer au coffre a pu être
+  synchronisée en clair auparavant : pour un vrai secret, créez la note en
+  mode coffre d'abord.
+
+### 5.7 Demande en langage naturel (⌘K)
 
 Une phrase est **classée** dans un mode, puis une action locale est appliquée.
 L'IA ne rédige qu'une chose : une formule, en mode math.

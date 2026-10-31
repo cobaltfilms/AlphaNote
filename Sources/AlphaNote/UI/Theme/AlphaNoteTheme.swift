@@ -162,6 +162,7 @@ enum Palette {
     static let list  = adaptive((0.184, 0.435, 0.400), (0.498, 0.655, 0.627)) // paon/sage
     static let timer = adaptive((0.706, 0.314, 0.180), (0.812, 0.420, 0.341)) // terre cuite
     static let code  = adaptive((0.227, 0.373, 0.659), (0.616, 0.706, 0.839)) // bleu
+    static let vault = adaptive((0.478, 0.247, 0.471), (0.765, 0.580, 0.757)) // prune
     static var plain: PlatformColor { secondary }                                    // neutre
 
     static func mode(_ mode: NoteMode) -> PlatformColor {
@@ -171,6 +172,7 @@ enum Palette {
         case .timer: return timer
         case .code:  return code
         case .plain: return plain
+        case .vault: return vault
         }
     }
 

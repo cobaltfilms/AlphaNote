@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Lock
+import be.cobaltfilms.alphanote.ui.components.VaultLockScreen
+import be.cobaltfilms.alphanote.vault.VaultKeyring
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -76,9 +79,10 @@ import be.cobaltfilms.alphanote.ui.theme.LocalAlphaPalette
 
 /** Écran d'une note : barre fine (titre, pastille de mode, menu) + éditeur unique. */
 @Composable
-fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
+fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, onOpenNote: (Long) -> Unit = {}) {
     val palette = LocalAlphaPalette.current
     val currentNote by viewModel.currentNote.collectAsState()
+    val vaultUnlocked by VaultKeyring.isUnlocked.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val isRouting by viewModel.isRouting.collectAsState()
     val clipboard = LocalClipboardManager.current
@@ -102,6 +106,7 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
         if (awaitingRoute && !isRouting) { awaitingRoute = false; showCommand = false }
     }
     LaunchedEffect(noteId) { loadedNoteId = -1L; viewModel.open(noteId) }
+    LaunchedEffect(Unit) { viewModel.openNote.collect { id -> if (id != noteId) onOpenNote(id) } }
 
     val note = currentNote
     val mode = NoteMode.fromKeyword(note?.keyword)
@@ -195,18 +200,21 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
                     color = palette.secondary, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                 )
+                // Note sécurisée fermée : ni IA, ni partage, ni copie.
+                val locked = note != null && note.isVault && !vaultUnlocked
                 if (note != null) {
-                    IconButton(onClick = { showCommand = true }) { Icon(Icons.Default.AutoAwesome, contentDescription = "Demande à l'IA", tint = palette.accent) }
-                    IconButton(onClick = { shareNote(context, note, editorValue.text) }) { Icon(Icons.Default.Share, contentDescription = "Partager la note", tint = palette.accent) }
+                    if (!note.isVault) IconButton(onClick = { showCommand = true }) { Icon(Icons.Default.AutoAwesome, contentDescription = "Demande à l'IA", tint = palette.accent) }
+                    if (note.isVault && vaultUnlocked) IconButton(onClick = { VaultKeyring.lockNow() }) { Icon(Icons.Default.Lock, contentDescription = "Verrouiller le coffre", tint = palette.mode(NoteMode.VAULT)) }
+                    if (!locked) IconButton(onClick = { shareNote(context, note, editorValue.text) }) { Icon(Icons.Default.Share, contentDescription = "Partager la note", tint = palette.accent) }
                     ModeChip(mode = mode, onSelect = { viewModel.setMode(it) })
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "Actions", tint = palette.secondary) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Demande en langage naturel…") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = palette.accent) }, onClick = { menu = false; showCommand = true })
+                            if (!note.isVault) DropdownMenuItem(text = { Text("Demande en langage naturel…") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = palette.accent) }, onClick = { menu = false; showCommand = true })
                             DropdownMenuItem(text = { Text(if (note.isPinned) "Désépingler" else "Épingler") }, onClick = { menu = false; viewModel.togglePin(note) })
                             DropdownMenuItem(text = { Text("Renommer…") }, onClick = { menu = false; renaming = true })
                             DropdownMenuItem(text = { Text("Dupliquer") }, onClick = { menu = false; viewModel.duplicate(note) })
-                            DropdownMenuItem(text = { Text("Copier le contenu") }, onClick = { menu = false; clipboard.setText(AnnotatedString(editorValue.text)); viewModel.showToast("Contenu copié") })
+                            if (!locked) DropdownMenuItem(text = { Text("Copier le contenu") }, onClick = { menu = false; clipboard.setText(AnnotatedString(editorValue.text)); viewModel.showToast("Contenu copié") })
                             DropdownMenuItem(text = { Text(if (note.archived) "Désarchiver" else "Archiver") }, onClick = { menu = false; if (note.archived) viewModel.unarchive(note) else { viewModel.archive(note); leave() } })
                             DropdownMenuItem(text = { Text("Supprimer", color = palette.timer) }, onClick = { menu = false; if (editorValue.text.isBlank() || !settings.confirmDelete) { viewModel.delete(note); leave() } else confirmDelete = true })
                         }
@@ -216,7 +224,9 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
 
             if (note == null) return@Column
 
-            if (mode == NoteMode.TIMER) {
+            if (note.isVault && !vaultUnlocked) {
+                VaultLockScreen(title = note.effectiveTitle, sealedContents = viewModel::sealedVaultContents)
+            } else if (mode == NoteMode.TIMER) {
                 val (defaultMode, seconds) = TimerRegistry.parameters(note.content)
                 val session = remember(note.uuid) { TimerRegistry.shared.session(note.uuid, defaultMode, seconds) }
                 TimerNoteView(
@@ -233,7 +243,8 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit) {
                         mode = mode, fontSize = settings.fontSize, checkTrigger = settings.listCheckTrigger,
                         focusRequester = focusRequester
                     )
-                    NoteImageStrip(
+                    // Les images restent en clair sur l'appareil : pas dans le coffre.
+                    if (!note.isVault) NoteImageStrip(
                         noteUuid = note.uuid,
                         names = NoteAttachments.names(editorValue.text),
                         onAdd = { pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },

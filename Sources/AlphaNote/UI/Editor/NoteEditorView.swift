@@ -150,7 +150,7 @@ struct NoteEditorView: NSViewRepresentable {
             appliedFontSize = parent.fontSize
             appliedTrigger = parent.checkTrigger
 
-            let isMono = parent.mode == .math || parent.mode == .code
+            let isMono = parent.mode == .math || parent.mode == .code || parent.mode == .vault
             textView.font = isMono
                 ? .monospacedSystemFont(ofSize: parent.fontSize, weight: .regular)
                 : .systemFont(ofSize: parent.fontSize)
@@ -177,7 +177,7 @@ struct NoteEditorView: NSViewRepresentable {
             let fullRange = NSRange(location: 0, length: nsText.length)
             let mode = Self.detectMode(in: text)
             let size = parent.fontSize
-            let baseFont: NSFont = (mode == .math || mode == .code)
+            let baseFont: NSFont = (mode == .math || mode == .code || mode == .vault)
                 ? .monospacedSystemFont(ofSize: size, weight: .regular)
                 : .systemFont(ofSize: size)
             let paragraph = NSMutableParagraphStyle()
@@ -219,7 +219,7 @@ struct NoteEditorView: NSViewRepresentable {
                     break
                 case .code:
                     break
-                case .timer:
+                case .timer, .vault:
                     break
                 case .list:
                     if trimmed.isEmpty { continue }

@@ -19,6 +19,8 @@ import be.cobaltfilms.alphanote.data.AppSettingsRepository
 import be.cobaltfilms.alphanote.data.NoteRepository
 import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.services.LauncherIcons
+import be.cobaltfilms.alphanote.vault.VaultEnvelope
+import be.cobaltfilms.alphanote.vault.VaultKeyring
 import be.cobaltfilms.alphanote.timer.AlarmPlayer
 import be.cobaltfilms.alphanote.timer.AlarmSound
 import be.cobaltfilms.alphanote.ui.theme.ColorTheme
@@ -109,6 +111,11 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastRoute = MutableStateFlow<ModeDecision?>(null)
     val lastRoute: StateFlow<ModeDecision?> = _lastRoute.asStateFlow()
 
+    /** Une demande a créé une autre note : l'écran d'édition l'ouvre (sa route
+     *  change), sinon une recomposition rouvrirait l'ancienne note. */
+    private val _openNote = MutableSharedFlow<Long>(extraBufferCapacity = 1)
+    val openNote: SharedFlow<Long> = _openNote.asSharedFlow()
+
     private val _semanticResults = MutableStateFlow<List<Note>>(emptyList())
     val semanticResults: StateFlow<List<Note>> = _semanticResults.asStateFlow()
 
@@ -119,6 +126,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private var dirtyNote: Note? = null
 
     init {
+        VaultKeyring.init(application)
+        viewModelScope.launch {
+            VaultKeyring.isUnlocked.collectLatest { unlocked -> if (unlocked) onVaultOpened() else onVaultClosed() }
+        }
         syncEngine.start(viewModelScope)
         lanSync.attach(viewModelScope)
         lanSync.requestSync(0)
@@ -152,7 +163,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun open(noteId: Long) {
         viewModelScope.launch {
             flush()
-            _currentNote.value = repository.getNoteById(noteId)
+            _currentNote.value = repository.getNoteById(noteId)?.let(::displayable)
         }
     }
 
@@ -203,21 +214,28 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun persistDirty() {
         val dirty = dirtyNote ?: return
+        // Note sécurisée et coffre fermé : elle attend en mémoire, jamais écrite en clair.
+        val toStore = storable(dirty) ?: return
         dirtyNote = null
         // L'écriture ne doit jamais être interrompue à mi-chemin : une frappe
         // ou un retour arrière qui annule la coroutine ne perd pas la note.
-        val saved = withContext(NonCancellable) { repository.updateNote(dirty) }
+        val saved = withContext(NonCancellable) { repository.updateNote(toStore) }
+        purgeJournalIfNeeded()
         if (_currentNote.value?.id == saved.id) {
             _currentNote.value = _currentNote.value?.copy(updatedAt = saved.updatedAt, keyword = saved.keyword)
         }
         noteChanged()
     }
 
-    private fun persistNow(note: Note) {
+    private fun persistNow(note: Note, unseal: Boolean = false) {
         viewModelScope.launch {
-            dirtyNote = null; pendingSave?.cancel()
-            val saved = repository.updateNote(note)
-            if (_currentNote.value?.id == saved.id) _currentNote.value = saved
+            pendingSave?.cancel()
+            val toStore = storable(note, unseal) ?: run { dirtyNote = note; return@launch }
+            dirtyNote = null
+            val saved = repository.updateNote(toStore)
+            purgeJournalIfNeeded()
+            // À l'écran, le texte en clair (pas l'enveloppe stockée).
+            if (_currentNote.value?.id == saved.id) _currentNote.value = saved.copy(content = note.content)
             noteChanged()
         }
     }
@@ -225,7 +243,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun togglePin(note: Note) {
         viewModelScope.launch {
             repository.setPinned(note, !note.isPinned)
-            if (_currentNote.value?.id == note.id) _currentNote.value = repository.getNoteById(note.id)
+            if (_currentNote.value?.id == note.id) _currentNote.value = repository.getNoteById(note.id)?.let(::displayable)
             showToast(if (note.isPinned) "Note désépinglée" else "Note épinglée")
         }
     }
@@ -272,11 +290,70 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { flush(); repository.deleteEmpty() }
     }
 
+    // ---- Notes sécurisées ----
+
+    private var purgeJournal = false
+
+    /** Version écrivable sur disque et synchronisable : le corps d'une note
+     *  sécurisée y est toujours chiffré. Null quand il faudrait chiffrer mais
+     *  que le coffre est fermé. */
+    private suspend fun storable(note: Note, unseal: Boolean = false): Note? {
+        val previous = repository.getNoteById(note.id)
+        // Une note déjà au coffre y reste pendant la frappe, même si son
+        // en-tête « vault » est momentanément effacé.
+        val wasVault = previous?.isVault == true
+        val wantsVault = note.keyword == VaultEnvelope.KEYWORD || (wasVault && !unseal)
+        if (!wantsVault || VaultEnvelope.isSealed(note.content)) return note
+        val sealed = VaultKeyring.seal(note.content) ?: return null
+        // Première version chiffrée sur disque : l'ancienne était en clair.
+        if (previous != null && !VaultEnvelope.isSealed(previous.content)) purgeJournal = true
+        return note.copy(content = sealed, keyword = note.copy(content = sealed).detectKeyword())
+    }
+
+    private suspend fun purgeJournalIfNeeded() {
+        if (!purgeJournal) return
+        purgeJournal = false
+        repository.purgeJournal()
+    }
+
+    /** Note telle qu'on l'affiche : déchiffrée si le coffre est ouvert. */
+    private fun displayable(note: Note): Note {
+        if (!VaultEnvelope.isSealed(note.content)) return note
+        return VaultKeyring.open(note.content)?.let { note.copy(content = it) } ?: note
+    }
+
+    /** Contenus scellés connus (vérifier le mot de passe saisi sur un nouvel appareil). */
+    fun sealedVaultContents(): List<String> =
+        (_activeNotes.value + _archivedNotes.value).map { it.content }.filter(VaultEnvelope::isSealed)
+
+    private fun onVaultOpened() {
+        _currentNote.value?.let { _currentNote.value = displayable(it) }
+        // Une note retenue (coffre fermé) est chiffrée et écrite maintenant.
+        if (dirtyNote != null) viewModelScope.launch { flush() }
+    }
+
+    /** Coffre refermé : le texte en clair quitte la mémoire de l'écran. */
+    private suspend fun onVaultClosed() {
+        val current = _currentNote.value ?: return
+        if (current.isVault && dirtyNote == null) {
+            _currentNote.value = repository.getNoteById(current.id) ?: current
+        }
+    }
+
+    /** Arrière-plan : on écrit ce qui attend, puis le coffre se referme. */
+    fun onAppBackground() {
+        viewModelScope.launch {
+            flush()
+            VaultKeyring.lock()
+        }
+    }
+
     // ---- Modes ----
 
     /** Change le mode de la note courante en réécrivant sa première ligne (port de NoteStore.setMode). */
     fun setMode(mode: NoteMode) {
         val note = _currentNote.value ?: return
+        if (VaultEnvelope.isSealed(note.content)) { showToast("Ouvre le coffre pour changer le mode de cette note."); return }
         val lines = note.content.split("\n").toMutableList()
         val firstTrimmed = lines.firstOrNull()?.trim().orEmpty()
         val headKeyword = firstTrimmed.substringBefore(":").trim().lowercase()
@@ -293,7 +370,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         if (mode == NoteMode.TIMER && lines.size == 1) content += "\ncountdown 10:00"
         val updated = note.copy(content = content, keyword = note.copy(content = content).detectKeyword())
         _currentNote.value = updated
-        persistNow(updated)
+        persistNow(updated, unseal = mode != NoteMode.VAULT)
     }
 
     // ---- Demande en langage naturel (⌘K) ----
@@ -302,6 +379,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = question.trim()
         if (trimmed.isEmpty()) return
         val note = _currentNote.value
+        // Une note sécurisée ne sort jamais de l'appareil, même la demande.
+        if (note?.isVault == true) { showToast("Note sécurisée : la barre de commande et l'IA n'y ont pas accès."); return }
         // Levé tout de suite (pas dans la coroutine) : l'écran garde la barre
         // de demande ouverte, avec son indicateur, jusqu'à la réponse.
         _isRouting.value = true
@@ -325,7 +404,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         NoteMode.LIST -> applyList(question, note)
         NoteMode.TIMER -> applyTimer(question)
         NoteMode.CODE -> applyCode(note)
-        NoteMode.PLAIN -> "Aucun mode appliqué."
+        NoteMode.PLAIN, NoteMode.VAULT -> "Aucun mode appliqué."
     }
 
     /**
@@ -435,8 +514,17 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 content = "timer\npomodoro $min:00"; label = "Pomodoro $min min"
             }
         }
+        // Note vide (on vient de l'ouvrir pour la demande) : elle devient le minuteur.
+        val current = _currentNote.value
+        if (current != null && current.content.isBlank()) {
+            dirtyNote = null; pendingSave?.cancel()
+            replaceCurrent(current, content)
+            return "$label créé."
+        }
+        flush()
         val created = repository.createNote(content, "timer")
         _currentNote.value = created
+        _openNote.tryEmit(created.id)
         return "$label créé."
     }
 
@@ -499,7 +587,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) { _semanticResults.value = emptyList(); return }
         viewModelScope.launch {
-            val hits = semanticSearchEngine.search(trimmed, _activeNotes.value + _archivedNotes.value)
+            val hits = semanticSearchEngine.search(trimmed, (_activeNotes.value + _archivedNotes.value).filter { !it.isVault })
             _semanticResults.value = hits.map { it.note }
         }
     }
@@ -597,7 +685,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             flush()
             runCatching { syncEngine.runManualSync() }
-                .onSuccess { _syncMessage.value = "Synchronisation terminée."; _currentNote.value?.let { _currentNote.value = repository.getNoteById(it.id) } }
+                .onSuccess { _syncMessage.value = "Synchronisation terminée."; _currentNote.value?.let { _currentNote.value = repository.getNoteById(it.id)?.let(::displayable) } }
                 .onFailure { _syncMessage.value = it.message ?: "Synchronisation impossible." }
         }
     }

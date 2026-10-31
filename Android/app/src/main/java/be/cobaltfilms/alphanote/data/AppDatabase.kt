@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import be.cobaltfilms.alphanote.model.Note
 
 /**
@@ -40,6 +41,13 @@ abstract class AppDatabase : RoomDatabase() {
                 "alphanote.db"
             )
                 .fallbackToDestructiveMigration()
+                .addCallback(object : RoomDatabase.Callback() {
+                    // Contenu effacé ou remplacé mis à zéro : une note passée au
+                    // coffre ne laisse pas son ancien texte en clair.
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        db.query("PRAGMA secure_delete=ON").use { it.moveToFirst() }
+                    }
+                })
                 .build()
         }
 

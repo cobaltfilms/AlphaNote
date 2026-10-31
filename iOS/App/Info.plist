@@ -27,6 +27,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Face ID ouvre le coffre des notes sécurisées.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AlphaNote joint le serveur JEV et Nextcloud sur ton réseau local.</string>
 	<key>NSMicrophoneUsageDescription</key>

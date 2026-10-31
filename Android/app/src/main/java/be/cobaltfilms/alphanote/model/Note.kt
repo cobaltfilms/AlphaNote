@@ -1,6 +1,7 @@
 package be.cobaltfilms.alphanote.model
 
 import androidx.room.Entity
+import be.cobaltfilms.alphanote.vault.VaultEnvelope
 import androidx.room.PrimaryKey
 import java.util.UUID
 
@@ -34,8 +35,12 @@ data class Note(
 
     companion object {
         /** Mots-clés connus — correspondent aux modes d'affichage */
-        val knownKeywords: Set<String> = setOf("math", "list", "code", "timer")
+        val knownKeywords: Set<String> = setOf("math", "list", "code", "timer", VaultEnvelope.KEYWORD)
     }
+
+    /** Note sécurisée (« vault » en première ligne, ou corps déjà chiffré). */
+    val isVault: Boolean
+        get() = keyword == VaultEnvelope.KEYWORD || VaultEnvelope.isSealed(content)
 
     /**
      * Détecte le mot-clé à partir du contenu.

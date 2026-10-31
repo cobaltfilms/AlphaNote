@@ -3,7 +3,9 @@ package be.cobaltfilms.alphanote.data
 import android.content.Context
 import be.cobaltfilms.alphanote.model.Note
 import be.cobaltfilms.alphanote.services.DeviceIdentity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
@@ -25,6 +27,13 @@ class NoteRepository(context: Context) {
     suspend fun getAllNotDeleted(): List<Note> = dao.getAllNotDeleted()
     suspend fun getAllIncludingDeleted(): List<Note> = dao.getAllIncludingDeleted()
     suspend fun getNoteById(id: Long): Note? = dao.getById(id)
+
+    /** Vide le journal WAL : l'ancienne version en clair d'une note qui vient
+     *  d'entrer au coffre ne reste pas dans les fichiers. */
+    suspend fun purgeJournal() = withContext(Dispatchers.IO) {
+        AppDatabase.getInstance(appContext).openHelper.writableDatabase
+            .query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+    }
     suspend fun getNoteByUuid(uuid: String): Note? = dao.getByUuid(uuid)
 
     suspend fun createNote(content: String = "", keyword: String = "", title: String = ""): Note {

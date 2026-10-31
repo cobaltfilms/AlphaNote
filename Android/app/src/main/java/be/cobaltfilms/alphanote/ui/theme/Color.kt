@@ -35,6 +35,8 @@ data class AlphaPalette(
         NoteMode.TIMER -> timer
         NoteMode.CODE -> code
         NoteMode.PLAIN -> plain
+        // Prune, comme Palette.vault sur macOS/iOS.
+        NoteMode.VAULT -> if (isDark) Color(0xFFC394C1) else Color(0xFF7A3F78)
     }
 
     fun modeBackground(mode: NoteMode): Color = mode(mode).copy(alpha = if (mode == NoteMode.PLAIN) 0.14f else 0.20f)

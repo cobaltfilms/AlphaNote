@@ -9,7 +9,9 @@ enum class NoteMode(val keyword: String, val label: String, val title: String) {
     LIST("list", "LISTE", "Liste"),
     TIMER("timer", "TIMER", "Minuteur"),
     CODE("code", "CODE", "Code"),
-    PLAIN("", "TEXTE", "Texte");
+    PLAIN("", "TEXTE", "Texte"),
+    /** Note sécurisée : jamais proposée au serveur JEV (absente de `raws`). */
+    VAULT("vault", "COFFRE", "Coffre");
 
     companion object {
         fun fromKeyword(keyword: String?): NoteMode =

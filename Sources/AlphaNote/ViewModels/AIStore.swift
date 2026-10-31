@@ -39,6 +39,11 @@ final class AIStore {
             noteStore.aiStatusMessage = "Aucune note courante sélectionnée."
             return
         }
+        // Une note sécurisée ne sort jamais de l'appareil, même la demande.
+        guard !note.isVault else {
+            noteStore.aiStatusMessage = "Note sécurisée : la barre de commande et l'IA n'y ont pas accès."
+            return
+        }
 
         noteStore.isAIProcessing = true
         defer { noteStore.isAIProcessing = false }
@@ -60,7 +65,7 @@ final class AIStore {
             detail = applyTimer(question: question)
         case .code:
             detail = applyCode(to: note)
-        case .plain:
+        case .plain, .vault:
             detail = "Aucun mode appliqué."
         }
 
@@ -204,6 +209,14 @@ final class AIStore {
             label = "Pomodoro \(min) min"
         }
 
+        // Note vide (ouverte pour la demande) : elle devient le minuteur, au
+        // lieu d'en créer une autre et de laisser une note vide derrière.
+        if let current = currentNote, current.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            var updated = current
+            updated.content = content
+            noteStore.updateNote(updated)
+            return "\(label) créé."
+        }
         guard noteStore.createNote(keyword: "timer", content: content) else {
             return "Création impossible."
         }

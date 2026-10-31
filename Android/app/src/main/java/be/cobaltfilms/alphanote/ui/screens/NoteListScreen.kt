@@ -97,7 +97,10 @@ fun NoteListScreen(
         val trimmed = query.trim()
         if (trimmed.isEmpty()) activeNotes else {
             val lower = trimmed.lowercase()
-            val textMatches = activeNotes.filter { it.content.lowercase().contains(lower) || it.title.lowercase().contains(lower) }
+            val textMatches = activeNotes.filter {
+                // Note sécurisée : seul son titre est cherchable.
+                (if (it.isVault) it.effectiveTitle else it.content).lowercase().contains(lower) || it.title.lowercase().contains(lower)
+            }
             val textIDs = textMatches.map { it.uuid }.toSet()
             textMatches + semanticResults.filter { !it.archived && it.uuid !in textIDs }
         }
@@ -272,6 +275,7 @@ private fun Modifier.combinedClickableNoRipple(onClick: () -> Unit): Modifier = 
 fun displayTitle(note: Note): String = note.effectiveTitle.ifEmpty { "Note sans titre" }
 
 fun preview(note: Note): String {
+    if (note.isVault) return "Note sécurisée"
     var lines = note.content.split("\n")
     if (lines.isNotEmpty() && EditorDecorations.isModeHeader(lines.first().trim())) lines = lines.drop(1)
     if (note.title.isEmpty() && lines.isNotEmpty() && lines.first().trim() == note.effectiveTitle) lines = lines.drop(1)

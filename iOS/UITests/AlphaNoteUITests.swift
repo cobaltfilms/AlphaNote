@@ -177,4 +177,52 @@ final class AlphaNoteUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+
+    /// Coffre : la note passe en mode Coffre, mot de passe maître, verrouillage,
+    /// réouverture. Sur disque, le secret n'apparaît jamais en clair.
+    func testVaultNoteIsEncryptedAndLocks() throws {
+        let dbDir = NSTemporaryDirectory() + "alphanote-vault-" + UUID().uuidString
+        app.terminate()
+        app.launchArguments = ["-databaseLocation", dbDir, "-syncEnabled", "0", "-resetVault"]
+        app.launch()
+
+        let editor = newNote()
+        editor.typeText("Banque\ncode 4321")
+        app.buttons["OK"].tap()
+        app.buttons["Mode de la note : TEXTE"].tap()
+        app.buttons["Coffre"].tap()
+
+        // Première fois : choix du mot de passe maître.
+        let password = app.secureTextFields["vaultPassword"]
+        XCTAssertTrue(password.waitForExistence(timeout: 5))
+        password.tap()
+        password.typeText("correct horse")
+        let confirmation = app.secureTextFields["vaultConfirmation"]
+        confirmation.tap()
+        confirmation.typeText("correct horse\n")
+
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String ?? "").contains("code 4321"))
+        snapshot("coffre ouvert")
+
+        // Sur disque (et donc pour la synchro) : chiffré.
+        sleep(1)
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dbDir)) ?? []
+        XCTAssertFalse(files.isEmpty, "base introuvable dans \(dbDir)")
+        for file in files {
+            let data = FileManager.default.contents(atPath: dbDir + "/" + file) ?? Data()
+            XCTAssertNil(data.range(of: Data("code 4321".utf8)), "\(file) contient le secret en clair")
+        }
+
+        // Verrouiller, puis rouvrir avec le mot de passe maître.
+        app.buttons["More"].tap()
+        app.buttons["Verrouiller le coffre"].tap()
+        XCTAssertTrue(password.waitForExistence(timeout: 5))
+        XCTAssertFalse(editor.exists)
+        snapshot("coffre fermé")
+        password.tap()
+        password.typeText("correct horse\n")
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String ?? "").contains("code 4321"))
+    }
 }

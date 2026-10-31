@@ -11,6 +11,7 @@ enum NoteFormatting {
     /// Aperçu sur une ligne : sans l'en-tête de mode, sans la ligne de titre,
     /// sans les lignes d'images.
     static func preview(for note: Note) -> String {
+        if note.isVault { return "Note sécurisée" }
         var lines = note.content.components(separatedBy: .newlines)
         if let first = lines.first, EditorTextRules.isModeHeader(first.trimmingCharacters(in: .whitespaces)) {
             lines.removeFirst()

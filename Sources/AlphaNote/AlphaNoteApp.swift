@@ -89,6 +89,7 @@ extension NoteMode {
         case .list: return "Liste"
         case .code: return "Code"
         case .timer: return "Minuteur"
+        case .vault: return "Coffre"
         }
     }
 
@@ -99,6 +100,7 @@ extension NoteMode {
         case .list: return "checklist"
         case .code: return "chevron.left.forwardslash.chevron.right"
         case .timer: return "timer"
+        case .vault: return "lock.fill"
         }
     }
 
@@ -109,6 +111,7 @@ extension NoteMode {
         case .list: return "3"
         case .code: return "4"
         case .timer: return "5"
+        case .vault: return "6"
         }
     }
 }

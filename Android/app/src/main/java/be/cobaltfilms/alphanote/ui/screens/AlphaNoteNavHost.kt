@@ -32,6 +32,7 @@ fun AlphaNoteNavHost(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START) noteViewModel.onAppForeground()
+            if (event == Lifecycle.Event.ON_STOP) noteViewModel.onAppBackground()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -55,7 +56,11 @@ fun AlphaNoteNavHost(
         }
         composable("note/{noteId}", arguments = listOf(navArgument("noteId") { type = NavType.LongType })) { backStackEntry ->
             val noteId = backStackEntry.arguments?.getLong("noteId") ?: return@composable
-            NoteEditScreen(noteId = noteId, viewModel = noteViewModel, onBack = { navController.popBackStack() })
+            NoteEditScreen(
+                noteId = noteId, viewModel = noteViewModel, onBack = { navController.popBackStack() },
+                // Note créée par une demande (minuteur) : elle remplace l'écran courant.
+                onOpenNote = { id -> navController.navigate("note/$id") { popUpTo("note/{noteId}") { inclusive = true } } }
+            )
         }
         composable("settings") {
             SettingsScreen(viewModel = noteViewModel, onBack = { navController.popBackStack() })

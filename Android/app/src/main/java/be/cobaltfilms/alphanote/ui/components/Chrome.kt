@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Timer
 import be.cobaltfilms.alphanote.ai.KeywordIntentRouter
@@ -67,6 +68,7 @@ fun NoteMode.icon(): ImageVector = when (this) {
     NoteMode.TIMER -> Icons.Default.Timer
     NoteMode.CODE -> Icons.Default.Code
     NoteMode.PLAIN -> Icons.Default.Notes
+    NoteMode.VAULT -> Icons.Default.Lock
 }
 
 /** Pastille de mode (menu déroulant pour changer de mode), comme sur macOS. */
