@@ -1,6 +1,6 @@
 {
-  "version": "0.5.0",
-  "notes": "Plus besoin de serveur : un petit mod\u00e8le embarqu\u00e9 classe vos demandes (calcul, liste, minuteur, code, texte) sur le Mac, hors ligne. Les formules math sont r\u00e9dig\u00e9es par Apple Intelligence sur le Mac quand il est disponible. Le serveur JEV reste utilisable s'il est configur\u00e9.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.0/AlphaNote-0.5.0.zip",
+  "version": "0.5.1",
+  "notes": "R\u00e9glages IA plus clairs : on voit si les demandes sont class\u00e9es par le mod\u00e8le du Mac ou par un serveur JEV, et qui r\u00e9dige les formules. \u00ab Rechercher des mises \u00e0 jour\u2026 \u00bb du menu affiche enfin son r\u00e9sultat. Titre des notes (minuteurs compris) modifiable directement dans la barre du haut.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.1/AlphaNote-0.5.1.zip",
   "minimumSystemVersion": "14.0"
 }
