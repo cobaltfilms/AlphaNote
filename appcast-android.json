@@ -1,7 +1,7 @@
 {
-  "version": "0.4.0",
-  "versionCode": 400,
-  "notes": "Notes s\u00e9curis\u00e9es : une note \u00ab vault \u00bb (ou mode Coffre) est chiffr\u00e9e sur le t\u00e9l\u00e9phone avant d'\u00eatre enregistr\u00e9e ou synchronis\u00e9e, ouverture par empreinte ou mot de passe ma\u00eetre (le m\u00eame sur le Mac). Minuteur : il ne dispara\u00eet plus quand le t\u00e9l\u00e9phone se met en veille.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.4.0/AlphaNote-0.4.0.apk",
+  "version": "0.5.0",
+  "versionCode": 500,
+  "notes": "Plus besoin de serveur : un petit mod\u00e8le embarqu\u00e9 classe vos demandes (calcul, liste, minuteur, code, texte) directement sur le t\u00e9l\u00e9phone, hors ligne. Le serveur JEV reste utilisable s'il est configur\u00e9.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.0/AlphaNote-0.5.0.apk",
   "minimumSdk": 26
 }
