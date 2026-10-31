@@ -75,4 +75,17 @@ final class SharedCoreTests: XCTestCase {
     func testNormalizedJPEGRejectsNonImages() {
         XCTAssertNil(NoteAttachments.normalizedJPEG(from: Data("pas une image".utf8)))
     }
+
+    // MARK: - Images cachées dans l'éditeur (même règle qu'Android)
+
+    func testEditorTextHidesImageReferencesAndRoundTrips() {
+        let refs = "x\n" + NoteAttachments.markdown("a1.jpg") + "\n" + NoteAttachments.markdown("b2.jpg")
+        XCTAssertEqual(NoteAttachments.visibleText("A\n" + NoteAttachments.markdown("a1.jpg") + "\nB"), "A\nB")
+        for typed in ["", "A", "A\n", "A\n\n", "list: Courses\n- pain\n"] {
+            let stored = NoteAttachments.withImages(typed, content: refs)
+            XCTAssertEqual(NoteAttachments.visibleText(stored), typed)
+            XCTAssertEqual(NoteAttachments.names(in: stored), ["a1.jpg", "b2.jpg"])
+        }
+        XCTAssertEqual(NoteAttachments.withImages("A\n", content: "A\n"), "A\n")
+    }
 }

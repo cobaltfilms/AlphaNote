@@ -130,7 +130,8 @@ final class AlphaNoteUITests: XCTestCase {
         XCTAssertTrue(photo.exists)
         photo.tap()
         XCTAssertTrue(app.buttons["Image jointe"].waitForExistence(timeout: 10))
-        XCTAssertTrue((editor.value as? String ?? "").contains("![image](att:"))
+        // La référence est stockée mais jamais montrée dans le texte.
+        XCTAssertFalse((editor.value as? String ?? "").contains("att:"))
         snapshot("image")
     }
 

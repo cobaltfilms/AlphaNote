@@ -1,5 +1,7 @@
 package be.cobaltfilms.alphanote.ui.components
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -55,23 +57,24 @@ import kotlinx.coroutines.withContext
 fun NoteImageStrip(
     noteUuid: String,
     names: List<String>,
-    onAdd: () -> Unit,
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalAlphaPalette.current
     var opened by remember { mutableStateOf<String?>(null) }
-    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (names.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(names, key = { it }) { name ->
-                    NoteImageThumb(noteUuid, name) { opened = name }
+    // Une image : en grand, à ses proportions. Plusieurs : grille de deux.
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (names.size == 1) {
+            NoteImageTile(noteUuid, names[0], single = true) { opened = names[0] }
+        } else {
+            names.chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { name ->
+                        Box(modifier = Modifier.weight(1f)) { NoteImageTile(noteUuid, name, single = false) { opened = name } }
+                    }
+                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
                 }
             }
-        }
-        TextButton(onClick = onAdd) {
-            Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
-            Text("  Ajouter une image", color = palette.accent)
         }
     }
 
@@ -86,18 +89,21 @@ fun NoteImageStrip(
 }
 
 @Composable
-private fun NoteImageThumb(noteUuid: String, name: String, onClick: () -> Unit) {
+private fun NoteImageTile(noteUuid: String, name: String, single: Boolean, onClick: () -> Unit) {
     val palette = LocalAlphaPalette.current
     val bitmap by loadNoteImage(noteUuid, name)
+    val loaded = bitmap
+    // Seule : proportions de la photo (bornées) ; en grille : carrée, recadrée.
+    val ratio = if (single && loaded != null) (loaded.width.toFloat() / loaded.height).coerceIn(0.75f, 2f) else 1f
     Box(
         modifier = Modifier
-            .size(112.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .fillMaxWidth()
+            .aspectRatio(ratio)
+            .clip(RoundedCornerShape(14.dp))
             .background(palette.field)
-            .clickable(onClick = onClick),
+            .clickable(onClickLabel = "Agrandir l'image", onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        val loaded = bitmap
         if (loaded != null) {
             Image(bitmap = loaded, contentDescription = "Image de la note", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {

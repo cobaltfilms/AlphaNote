@@ -129,9 +129,12 @@ struct NoteEditScreen: View {
         Binding(
             // Note sécurisée : déchiffrée pour l'affichage seulement ; le store
             // la rechiffre à l'écriture.
-            get: { store.currentNote.flatMap(store.plaintext(of:)) ?? "" },
-            set: { newValue in
-                guard var note = store.currentNote, store.plaintext(of: note) != newValue else { return }
+            // Les lignes d'images ne s'affichent pas dans le texte (galerie à part).
+            get: { store.currentNote.flatMap(store.plaintext(of:)).map(NoteAttachments.visibleText) ?? "" },
+            set: { typed in
+                guard var note = store.currentNote, let current = store.plaintext(of: note) else { return }
+                let newValue = NoteAttachments.withImages(typed, content: current)
+                guard current != newValue else { return }
                 note.content = newValue
                 store.edit(note)
             }
@@ -248,8 +251,9 @@ struct NoteEditScreen: View {
             return
         }
         guard var current = store.currentNote, current.uuid == note.uuid else { return }
-        let trimmed = current.content.replacingOccurrences(of: #"\n+$"#, with: "", options: .regularExpression)
-        current.content = (trimmed.isEmpty ? "" : trimmed + "\n") + NoteAttachments.markdown(name) + "\n"
+        // Références groupées en fin de note (l'éditeur les cache).
+        current.content = NoteAttachments.withImages(NoteAttachments.visibleText(current.content),
+                                                     content: current.content + "\n" + NoteAttachments.markdown(name))
         store.updateNote(current)
     }
 

@@ -180,9 +180,9 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val name = withContext(Dispatchers.IO) { NoteAttachments.import(getApplication(), current.uuid, source) }
             if (name == null) { showToast("Cette image ne peut pas être lue."); return@launch }
+            // Les références d'images restent groupées en fin de note (l'éditeur les cache).
             val text = _currentNote.value?.content ?: current.content
-            val separator = if (text.isEmpty() || text.endsWith("\n")) "" else "\n"
-            edit(text + separator + NoteAttachments.markdown(name) + "\n")
+            edit(NoteAttachments.withImages(NoteAttachments.visibleText(text), text + "\n" + NoteAttachments.markdown(name)))
         }
     }
 

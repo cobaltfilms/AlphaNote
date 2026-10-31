@@ -17,24 +17,38 @@ struct ImageStrip: View {
     let names: [String]
     let onOpen: (String) -> Void
 
+    // Une image : en grand, sur toute la largeur. Plusieurs : vignettes
+    // plus grandes qu'avant, qu'on fait défiler.
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(names, id: \.self) { name in
-                    Button { onOpen(name) } label: {
-                        thumbnail(AttachmentRef(noteUUID: noteUUID, name: name))
+        Group {
+            if names.count == 1, let name = names.first {
+                Button { onOpen(name) } label: {
+                    tile(AttachmentRef(noteUUID: noteUUID, name: name))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 210)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(names, id: \.self) { name in
+                            Button { onOpen(name) } label: {
+                                tile(AttachmentRef(noteUUID: noteUUID, name: name))
+                                    .frame(width: 150, height: 150)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
         }
+        .padding(.vertical, 10)
         .background(Palette.windowColor)
     }
 
-    @ViewBuilder
-    private func thumbnail(_ ref: AttachmentRef) -> some View {
+    private func tile(_ ref: AttachmentRef) -> some View {
         Group {
             if let image = UIImage(contentsOfFile: ref.url.path) {
                 Image(uiImage: image).resizable().scaledToFill()
@@ -44,9 +58,8 @@ struct ImageStrip: View {
                     .background(Palette.fieldColor)
             }
         }
-        .frame(width: 64, height: 64)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Palette.lineColor))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityLabel("Image jointe")
     }
 }

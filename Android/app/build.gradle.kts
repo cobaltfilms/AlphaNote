@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // versionCode = major*10000 + minor*100 + patch (lisible, monotone).
-        versionCode = 501
-        versionName = "0.5.1"
+        versionCode = 502
+        versionName = "0.5.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -129,6 +129,9 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     // Ouverture du coffre (notes sécurisées) par empreinte ou code de l'appareil.
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric tire fragment 1.2.5, dont startActivityForResult refuse les
+    // codes du sélecteur de photos (« lower 16 bits ») : l'app se fermait.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     // Classifieur de mode embarqué (ml/train_tflite.py) : JEV devient facultatif.
     // LiteRT (ex-TensorFlow Lite) : bibliothèques alignées 16 Ko (Android 15+).
     implementation("com.google.ai.edge.litert:litert:1.4.0")

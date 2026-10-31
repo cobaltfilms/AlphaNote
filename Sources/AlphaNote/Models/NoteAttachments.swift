@@ -30,6 +30,20 @@ enum NoteAttachments {
     }
 
     /// Texte sans les lignes d'images (pour le partage et l'aperçu).
+    /// Texte montré dans l'éditeur : la note sans ses lignes d'images (elles
+    /// s'affichent à part). Inverse exact de `withImages` tant que les images
+    /// sont en fin de note, ce que `withImages` garantit. Même règle qu'Android.
+    static func visibleText(_ content: String) -> String {
+        content.components(separatedBy: "\n").filter { !isImageLine($0) }.joined(separator: "\n")
+    }
+
+    /// Contenu stocké : le texte de l'éditeur, puis les références des images de `content`.
+    static func withImages(_ visible: String, content: String) -> String {
+        let refs = names(in: content)
+        guard !refs.isEmpty else { return visible }
+        return visible + "\n" + refs.map(markdown).joined(separator: "\n")
+    }
+
     static func textWithoutImages(_ content: String) -> String {
         content.components(separatedBy: "\n")
             .filter { !isImageLine($0) }

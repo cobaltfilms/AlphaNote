@@ -1,5 +1,6 @@
 package be.cobaltfilms.alphanote.ui.screens
 
+import androidx.compose.foundation.layout.height
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Lock
 import be.cobaltfilms.alphanote.ui.components.VaultLockScreen
 import be.cobaltfilms.alphanote.vault.VaultKeyring
@@ -114,32 +116,37 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
     val mode = NoteMode.fromKeyword(note?.keyword)
 
     // Chargement, et changements externes (mode, synchro, demande ⌘K).
+    // L'éditeur montre le texte sans les lignes d'images (galerie en dessous).
     LaunchedEffect(note?.id, note?.content) {
         val n = note ?: return@LaunchedEffect
+        val visible = NoteAttachments.visibleText(n.content)
         if (loadedNoteId != n.id) {
-            var text = n.content
+            var text = visible
             if (NoteMode.fromKeyword(n.keyword) == NoteMode.MATH) text = MathInlineApplier.apply(text, text.length, evaluator, respectCaret = false).text
             editorValue = TextFieldValue(text, TextRange(text.length))
             loadedNoteId = n.id
             lastEdited = text
-            if (text != n.content) viewModel.edit(text)
-        } else if (n.content != editorValue.text && n.content != lastEdited) {
+            if (text != visible) viewModel.edit(NoteAttachments.withImages(text, n.content))
+        } else if (visible != editorValue.text && visible != lastEdited) {
             // Une formule écrite par une demande ⌘K ou la synchro arrive sans
             // ses résultats : on les calcule comme au chargement.
-            var text = n.content
+            var text = visible
             if (NoteMode.fromKeyword(n.keyword) == NoteMode.MATH) text = MathInlineApplier.apply(text, text.length, evaluator, respectCaret = false).text
             editorValue = TextFieldValue(text, TextRange(text.length.coerceAtMost(editorValue.selection.end).coerceAtLeast(0)))
             lastEdited = text
-            if (text != n.content) viewModel.edit(text)
+            if (text != visible) viewModel.edit(NoteAttachments.withImages(text, n.content))
         }
     }
+
+    /** Texte de l'éditeur → contenu stocké (références d'images remises en fin de note). */
+    fun store(text: String) = viewModel.edit(NoteAttachments.withImages(text, viewModel.currentNote.value?.content.orEmpty()))
 
     // Taux de change arrivés : on réévalue la note math.
     LaunchedEffect(mode) {
         if (mode != NoteMode.MATH) return@LaunchedEffect
         CurrencyRateService.shared.ratesUpdated.collect {
             val outcome = MathInlineApplier.apply(editorValue.text, editorValue.selection.end, evaluator, respectCaret = false)
-            if (outcome.changed) { editorValue = editorValue.copy(text = outcome.text, selection = TextRange(outcome.cursor)); lastEdited = outcome.text; viewModel.edit(outcome.text) }
+            if (outcome.changed) { editorValue = editorValue.copy(text = outcome.text, selection = TextRange(outcome.cursor)); lastEdited = outcome.text; store(outcome.text) }
         }
     }
 
@@ -157,7 +164,7 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
             }
         }
         editorValue = processed
-        if (processed.text != previous) { lastEdited = processed.text; viewModel.edit(processed.text) }
+        if (processed.text != previous) { lastEdited = processed.text; store(processed.text) }
     }
 
     // Passage en arrière-plan (bouton accueil, appli tuée ensuite) : on écrit tout de suite.
@@ -205,12 +212,17 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                 if (note != null) {
                     if (!note.isVault) IconButton(onClick = { showCommand = true }) { Icon(Icons.Default.AutoAwesome, contentDescription = "Demande à l'IA", tint = palette.accent) }
                     if (note.isVault && vaultUnlocked) IconButton(onClick = { VaultKeyring.lockNow() }) { Icon(Icons.Default.Lock, contentDescription = "Verrouiller le coffre", tint = palette.mode(NoteMode.VAULT)) }
-                    if (!locked) IconButton(onClick = { shareNote(context, note, editorValue.text) }) { Icon(Icons.Default.Share, contentDescription = "Partager la note", tint = palette.accent) }
+                    if (!locked) IconButton(onClick = { shareNote(context, note, note.content) }) { Icon(Icons.Default.Share, contentDescription = "Partager la note", tint = palette.accent) }
                     ModeChip(mode = mode, onSelect = { viewModel.setMode(it) })
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "Actions", tint = palette.secondary) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             if (!note.isVault) DropdownMenuItem(text = { Text("Demande en langage naturel…") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = palette.accent) }, onClick = { menu = false; showCommand = true })
+                            if (!note.isVault && mode != NoteMode.TIMER) DropdownMenuItem(
+                                text = { Text("Ajouter une image") },
+                                leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, null, tint = palette.accent) },
+                                onClick = { menu = false; pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }
+                            )
                             DropdownMenuItem(text = { Text(if (note.isPinned) "Désépingler" else "Épingler") }, onClick = { menu = false; viewModel.togglePin(note) })
                             DropdownMenuItem(text = { Text("Renommer…") }, onClick = { menu = false; renaming = true })
                             DropdownMenuItem(text = { Text("Dupliquer") }, onClick = { menu = false; viewModel.duplicate(note) })
@@ -238,18 +250,18 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                 )
             } else {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    // Les images restent en clair sur l'appareil : pas dans le coffre.
+                    val images = if (note.isVault) emptyList() else NoteAttachments.names(note.content)
                     NoteEditor(
                         value = editorValue, onValueChange = ::processInput,
                         mode = mode, fontSize = settings.fontSize, checkTrigger = settings.listCheckTrigger,
-                        focusRequester = focusRequester
+                        focusRequester = focusRequester,
+                        bottomPadding = if (images.isEmpty()) 120.dp else 8.dp
                     )
-                    // Les images restent en clair sur l'appareil : pas dans le coffre.
-                    if (!note.isVault) NoteImageStrip(
-                        noteUuid = note.uuid,
-                        names = NoteAttachments.names(editorValue.text),
-                        onAdd = { pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
-                        onRemove = viewModel::removeImage
-                    )
+                    if (images.isNotEmpty()) {
+                        NoteImageStrip(noteUuid = note.uuid, names = images, onRemove = viewModel::removeImage)
+                        Spacer(Modifier.height(120.dp))
+                    }
                 }
                 LaunchedEffect(note.id) { if (note.content.isBlank()) runCatching { focusRequester.requestFocus() } }
             }

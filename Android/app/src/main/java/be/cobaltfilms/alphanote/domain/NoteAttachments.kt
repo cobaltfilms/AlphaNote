@@ -27,6 +27,21 @@ object NoteAttachments {
 
     fun markdown(name: String): String = "![image](att:$name)"
 
+    /**
+     * Texte montré dans l'éditeur : la note sans ses lignes d'images (elles
+     * s'affichent en galerie). Inverse exact de [withImages] tant que les
+     * images sont en fin de note, ce que [withImages] garantit.
+     */
+    fun visibleText(content: String): String =
+        content.split("\n").filterNot { reference.matches(it.trim()) }.joinToString("\n")
+
+    /** Contenu stocké : le texte de l'éditeur, puis les références des images de [content]. */
+    fun withImages(visible: String, content: String): String {
+        val refs = names(content)
+        if (refs.isEmpty()) return visible
+        return visible + "\n" + refs.joinToString("\n") { markdown(it) }
+    }
+
     /** Texte sans les lignes d'images (pour le partage et l'aperçu). */
     fun textWithoutImages(content: String): String =
         content.lines().filterNot { reference.matches(it.trim()) }.joinToString("\n").trim()

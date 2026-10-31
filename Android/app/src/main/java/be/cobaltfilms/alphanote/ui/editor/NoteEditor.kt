@@ -62,7 +62,9 @@ fun NoteEditor(
     fontSize: Float,
     checkTrigger: String,
     focusRequester: FocusRequester,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Marge sous le texte (zone à toucher) ; réduite quand des images suivent. */
+    bottomPadding: androidx.compose.ui.unit.Dp = 120.dp
 ) {
     val palette = LocalAlphaPalette.current
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -90,7 +92,7 @@ fun NoteEditor(
             onValueChange = onValueChange,
             modifier = Modifier
                 .weight(1f)
-                .padding(start = if (mode == NoteMode.LIST) 0.dp else 18.dp, end = 18.dp, top = topPadding, bottom = 120.dp)
+                .padding(start = if (mode == NoteMode.LIST) 0.dp else 18.dp, end = 18.dp, top = topPadding, bottom = bottomPadding)
                 .focusRequester(focusRequester),
             textStyle = TextStyle(
                 fontSize = fontSize.sp,
