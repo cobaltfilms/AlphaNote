@@ -1,6 +1,6 @@
 {
-  "version": "0.3.2",
-  "notes": "R\u00e9glages IA : \u00ab Tester le serveur \u00bb envoie maintenant le jeton d'acc\u00e8s Cloudflare (il r\u00e9pondait \u00ab Acc\u00e8s refus\u00e9 \u00bb alors que les demandes passaient).",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.3.2/AlphaNote-0.3.2.zip",
+  "version": "0.4.0",
+  "notes": "Notes s\u00e9curis\u00e9es : une note \u00ab vault \u00bb (ou mode Coffre, \u2318\u23256) est chiffr\u00e9e sur le Mac avant d'\u00eatre enregistr\u00e9e ou synchronis\u00e9e, ouverture par Touch ID ou mot de passe ma\u00eetre (le m\u00eame sur le t\u00e9l\u00e9phone). \u00ab minuteur 5 min \u00bb depuis une note vide la transforme en minuteur.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.4.0/AlphaNote-0.4.0.zip",
   "minimumSystemVersion": "14.0"
 }
