@@ -476,24 +476,6 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         return expression
     }
 
-    private fun listItems(text: String): List<String> {
-        val raw = text
-            .replace(Regex("[;|]+"), ",")
-            .replace(Regex("\\s+et\\s+", RegexOption.IGNORE_CASE), ", ")
-            .replace(Regex("\\b(fais|cree|crée|donne|genere|génère|ajoute)\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\b(liste|checklist|todo|to-do|courses)\\b", RegexOption.IGNORE_CASE), "")
-            .replace(":", " ")
-            .trim()
-        return raw.split(",")
-            .map { it.trim().replace(Regex("\\s+"), " ") }
-            .filter { part ->
-                if (part.length < 2) return@filter false
-                val folded = KeywordIntentRouter.normalized(part)
-                !(folded.startsWith("je veux") || folded.startsWith("stp") || folded.startsWith("svp"))
-            }
-            .distinct()
-    }
-
     private fun listTitle(question: String): String {
         val lower = KeywordIntentRouter.normalized(question)
         return when {
@@ -667,6 +649,27 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun showToast(message: String) { _toast.tryEmit(message) }
 
     companion object {
+        /** Éléments d'une demande de liste, sans IA (même règle que macOS). */
+        internal fun listItems(text: String): List<String> {
+            val raw = text
+                // « … à mes courses », « … dans la liste » : la destination, pas un élément.
+                .replace(Regex("""\s+(à|a|dans|sur|pour)\s+(ma|mes|la|le|les|notre|nos|une?)\s+(liste|checklist|todo|to-do|courses)\b.*$""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[;|]+"), ",")
+                .replace(Regex("\\s+et\\s+", RegexOption.IGNORE_CASE), ", ")
+                .replace(Regex("\\b(fais|cree|crée|donne|genere|génère|ajoute)\\b", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\b(liste|checklist|todo|to-do|courses)\\b", RegexOption.IGNORE_CASE), "")
+                .replace(":", " ")
+                .trim()
+            return raw.split(",")
+                .map { it.trim().replace(Regex("\\s+"), " ") }
+                .filter { part ->
+                    if (part.length < 2) return@filter false
+                    val folded = KeywordIntentRouter.normalized(part)
+                    !(folded.startsWith("je veux") || folded.startsWith("stp") || folded.startsWith("svp"))
+                }
+                .distinct()
+        }
+
         private const val SAVE_DEBOUNCE_MS = 400L
         private const val LAN_CHANGE_DELAY_MS = 3_000L
         private val CURRENCY_LIKE = Regex("(?i)^\\s*[-+]?\\d+(?:[.,]\\d+)?\\s*[A-Za-z]{3}\\s+(to|in|en)\\s+[A-Za-z]{3}\\s*=?\\s*$")
