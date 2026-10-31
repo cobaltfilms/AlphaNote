@@ -1,7 +1,7 @@
 {
-  "version": "0.2.12",
-  "versionCode": 212,
-  "notes": "Images dans les notes (vignettes, aper\u00e7u, suppression), partage de la note, bouton IA et dict\u00e9e plus visibles.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.2.12/AlphaNote-0.2.12.apk",
+  "version": "0.3.0",
+  "versionCode": 300,
+  "notes": "Synchro directe avec le Mac sur le m\u00eame Wi-Fi (R\u00e9glages \u203a Mac sur le Wi-Fi, code \u00e0 6 chiffres). Demandes de liste : \u00ab \u2026 \u00e0 mes courses \u00bb est mieux compris. IA : jeton d'acc\u00e8s Cloudflare pour joindre le serveur JEV sans VPN.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.3.0/AlphaNote-0.3.0.apk",
   "minimumSdk": 26
 }
