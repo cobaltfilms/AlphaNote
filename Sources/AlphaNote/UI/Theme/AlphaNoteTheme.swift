@@ -1,4 +1,22 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+
+/// Couleur native : PlatformColor sur macOS, UIColor sur iOS. La palette est la même.
+typealias PlatformColor = NSColor
+
+extension Color {
+    init(platform color: NSColor) { self.init(nsColor: color) }
+}
+#else
+import UIKit
+
+typealias PlatformColor = UIColor
+
+extension Color {
+    init(platform color: UIColor) { self.init(uiColor: color) }
+}
+#endif
 
 // Design language shared with AlphaSUB / AlphaDCP, mirrored locally so AlphaNote
 // stays a dependency-free SPM build. The look those apps use is: forms built
@@ -97,17 +115,24 @@ struct HelpNote: View {
 
 enum Palette {
     private static func adaptive(_ day: (CGFloat, CGFloat, CGFloat),
-                                 _ night: (CGFloat, CGFloat, CGFloat)) -> NSColor {
+                                 _ night: (CGFloat, CGFloat, CGFloat)) -> PlatformColor {
+        #if os(macOS)
         NSColor(name: nil) { appearance in
             let isNight = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let c = isNight ? night : day
             return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1)
         }
+        #else
+        UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? night : day
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        }
+        #endif
     }
 
     /// Couleur du thème choisi (Réglages › Apparence › Couleurs). Calculée à
     /// chaque lecture : un changement de thème vaut pour les vues recréées.
-    private static func themed(_ role: KeyPath<ColorTheme.Swatch, UInt32>) -> NSColor {
+    private static func themed(_ role: KeyPath<ColorTheme.Swatch, UInt32>) -> PlatformColor {
         let theme = ColorTheme.current
         return adaptive(rgb(theme.day[keyPath: role]), rgb(theme.night[keyPath: role]))
     }
@@ -117,19 +142,19 @@ enum Palette {
     }
 
     // Surfaces en camaïeu (du plus sombre au plus clair, ou l'inverse la nuit).
-    static var window: NSColor    { themed(\.window) }
-    static var sidebar: NSColor   { themed(\.sidebar) }
-    static var content: NSColor   { themed(\.content) }
-    static var field: NSColor     { themed(\.field) }
-    static var selection: NSColor { themed(\.selection) }
-    static var line: NSColor      { themed(\.line) }
+    static var window: PlatformColor    { themed(\.window) }
+    static var sidebar: PlatformColor   { themed(\.sidebar) }
+    static var content: PlatformColor   { themed(\.content) }
+    static var field: PlatformColor     { themed(\.field) }
+    static var selection: PlatformColor { themed(\.selection) }
+    static var line: PlatformColor      { themed(\.line) }
 
     // Texte.
-    static var text: NSColor      { themed(\.text) }
-    static var secondary: NSColor { themed(\.secondary) }
+    static var text: PlatformColor      { themed(\.text) }
+    static var secondary: PlatformColor { themed(\.secondary) }
 
     // Accent du thème ; le secondaire (paon/sage) ne change pas.
-    static var accent: NSColor    { themed(\.accent) }
+    static var accent: PlatformColor    { themed(\.accent) }
     static let accent2   = adaptive((0.184, 0.435, 0.400), (0.498, 0.655, 0.627))
 
     // Couleur sémantique par mode.
@@ -137,9 +162,9 @@ enum Palette {
     static let list  = adaptive((0.184, 0.435, 0.400), (0.498, 0.655, 0.627)) // paon/sage
     static let timer = adaptive((0.706, 0.314, 0.180), (0.812, 0.420, 0.341)) // terre cuite
     static let code  = adaptive((0.227, 0.373, 0.659), (0.616, 0.706, 0.839)) // bleu
-    static var plain: NSColor { secondary }                                    // neutre
+    static var plain: PlatformColor { secondary }                                    // neutre
 
-    static func mode(_ mode: NoteMode) -> NSColor {
+    static func mode(_ mode: NoteMode) -> PlatformColor {
         switch mode {
         case .math:  return math
         case .list:  return list
@@ -150,17 +175,17 @@ enum Palette {
     }
 
     // Accès SwiftUI.
-    static var windowColor: Color { Color(nsColor: window) }
-    static var sidebarColor: Color { Color(nsColor: sidebar) }
-    static var contentColor: Color { Color(nsColor: content) }
-    static var fieldColor: Color { Color(nsColor: field) }
-    static var selectionColor: Color { Color(nsColor: selection) }
-    static var lineColor: Color { Color(nsColor: line) }
-    static var textColor: Color { Color(nsColor: text) }
-    static var secondaryColor: Color { Color(nsColor: secondary) }
-    static var accentColor: Color { Color(nsColor: accent) }
-    static var accent2Color: Color { Color(nsColor: accent2) }
-    static func modeColor(_ mode: NoteMode) -> Color { Color(nsColor: Palette.mode(mode)) }
+    static var windowColor: Color { Color(platform: window) }
+    static var sidebarColor: Color { Color(platform: sidebar) }
+    static var contentColor: Color { Color(platform: content) }
+    static var fieldColor: Color { Color(platform: field) }
+    static var selectionColor: Color { Color(platform: selection) }
+    static var lineColor: Color { Color(platform: line) }
+    static var textColor: Color { Color(platform: text) }
+    static var secondaryColor: Color { Color(platform: secondary) }
+    static var accentColor: Color { Color(platform: accent) }
+    static var accent2Color: Color { Color(platform: accent2) }
+    static func modeColor(_ mode: NoteMode) -> Color { Color(platform: Palette.mode(mode)) }
 }
 
 // MARK: - Thèmes de couleur

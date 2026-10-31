@@ -730,39 +730,15 @@ struct NoteListView: View {
     /// Date courte façon liste de notes : heure si aujourd'hui, « hier »,
     /// jour de la semaine dans les 7 jours, sinon « 23 oct. ».
     static func shortDate(_ date: Date, now: Date = Date()) -> String {
-        let calendar = Calendar.current
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "fr_FR")
-        if calendar.isDate(date, inSameDayAs: now) {
-            formatter.dateFormat = "HH:mm"
-        } else if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
-                  calendar.isDate(date, inSameDayAs: yesterday) {
-            return "hier"
-        } else if let weekAgo = calendar.date(byAdding: .day, value: -6, to: now), date > weekAgo {
-            formatter.dateFormat = "EEE"
-        } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            formatter.dateFormat = "d MMM"
-        } else {
-            formatter.dateFormat = "MMM yyyy"
-        }
-        return formatter.string(from: date)
+        NoteFormatting.shortDate(date, now: now)
     }
 
     private func displayTitle(_ note: Note) -> String {
-        let title = note.effectiveTitle
-        return title.isEmpty ? "Note sans titre" : title
+        NoteFormatting.displayTitle(note)
     }
 
     private func preview(for note: Note) -> String {
-        var lines = note.content.components(separatedBy: .newlines)
-        if let first = lines.first, NoteEditorView.Coordinator.isModeHeader(first.trimmingCharacters(in: .whitespaces)) {
-            lines.removeFirst()
-        }
-        if note.title.isEmpty, !lines.isEmpty, lines[0].trimmingCharacters(in: .whitespaces) == note.effectiveTitle {
-            lines.removeFirst()
-        }
-        let text = lines.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? "Vide" : text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        NoteFormatting.preview(for: note)
     }
 
     private func beginRename(_ note: Note) {
@@ -901,7 +877,6 @@ extension Notification.Name {
     static let alphaNoteArchiveCurrent = Notification.Name("alphaNoteArchiveCurrent")
     static let alphaNoteDeleteCurrent = Notification.Name("alphaNoteDeleteCurrent")
     static let alphaNoteSetMode = Notification.Name("alphaNoteSetMode")
-    static let alphaNoteDidSync = Notification.Name("alphaNoteDidSync")
     static let alphaNoteOpenHelpCenter = Notification.Name("alphaNoteOpenHelpCenter")
     static let alphaNoteCheckForUpdates = Notification.Name("alphaNoteCheckForUpdates")
     static let alphaNoteOpenSettings = Notification.Name("alphaNoteOpenSettings")

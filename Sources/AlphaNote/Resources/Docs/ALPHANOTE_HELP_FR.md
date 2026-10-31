@@ -172,6 +172,9 @@ locale (embeddings hash-64, aucun réseau).
 
 - Activation du routage de mode par serveur JEV (désactivé par défaut).
 - URL du serveur, délai, test.
+- Jeton d'accès (ID et secret) : pour un serveur publié derrière Cloudflare Access
+  (ex. `https://jev.cobaltfilms.be`), joignable sans VPN. Le secret reste dans le
+  trousseau. Vide pour un serveur du réseau local ou de Tailscale.
 - Transparence : le schéma exact envoyé est affiché (un champ `mode`, enum).
 - Sans serveur, AlphaNote reste sur les mots-clés et l'écran le dit.
 

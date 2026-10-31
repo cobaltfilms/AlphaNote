@@ -56,9 +56,9 @@ object FormulaDraftFeature {
         val url = config.url.trimEnd('/') + "/v1/chat/completions"
 
         val raw = try {
-            transport.post(url, body, maxOf(config.delaiMs, MINIMUM_DELAI_MS))
+            transport.post(url, body, maxOf(config.delaiMs, MINIMUM_DELAI_MS), config.headers)
         } catch (error: JEVHttpError) {
-            return JEVOutcome.Erreur("Le serveur IA a répondu ${error.status}.")
+            return JEVOutcome.Erreur(error.message("le serveur IA"))
         } catch (_: Exception) {
             return JEVOutcome.Erreur("Le serveur IA n'a pas répondu.")
         }

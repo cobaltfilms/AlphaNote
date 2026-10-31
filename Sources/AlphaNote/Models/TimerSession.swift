@@ -1,5 +1,9 @@
 import Foundation
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import AVFoundation
 import Combine
 
@@ -160,7 +164,11 @@ final class TimerSession: ObservableObject, Identifiable {
         state = .finished
         persist()
         playSound()
+        #if os(macOS)
         NSApp.requestUserAttention(.criticalRequest)
+        #else
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        #endif
     }
 
     private func playSound() {
@@ -210,8 +218,13 @@ final class TimerSession: ObservableObject, Identifiable {
         }
     }
 
+    /// Appelé à chaque changement d'état. iOS s'en sert pour programmer la
+    /// notification de fin, qui sonne quand l'app n'est plus au premier plan.
+    static var onStateChange: ((TimerSession) -> Void)?
+
     private func persist() {
         TimerRegistry.shared.persist(self)
+        Self.onStateChange?(self)
     }
 }
 

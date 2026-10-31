@@ -13,7 +13,11 @@ enum SpeechRecognizerError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAuthorized:
+            #if os(macOS)
             return "Reconnaissance vocale non autorisée. Veuillez activer l'accès dans les préférences système."
+            #else
+            return "Reconnaissance vocale non autorisée. Veuillez activer l'accès dans les Réglages."
+            #endif
         case .notAvailable:
             return "La reconnaissance vocale n'est pas disponible sur cet appareil."
         case .audioEngineFailedToStart:

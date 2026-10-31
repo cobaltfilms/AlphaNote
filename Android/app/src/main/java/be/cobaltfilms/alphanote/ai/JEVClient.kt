@@ -45,25 +45,33 @@ sealed class JEVOutcome<out T> {
     data class Erreur(val message: String) : JEVOutcome<Nothing>()
 }
 
-data class JEVConfig(val url: String, val delaiMs: Int)
+/** [headers] : jeton Cloudflare Access du serveur publié (jev.cobaltfilms.be). */
+data class JEVConfig(val url: String, val delaiMs: Int, val headers: Map<String, String> = emptyMap())
 
 fun interface JEVTransport {
     /** POST JSON ; lève en cas d'erreur réseau, retourne le corps sinon. */
-    suspend fun post(url: String, body: String, delaiMs: Int): String
+    suspend fun post(url: String, body: String, delaiMs: Int, headers: Map<String, String>): String
 }
 
-class JEVHttpError(val status: Int) : Exception("HTTP $status")
+class JEVHttpError(val status: Int) : Exception("HTTP $status") {
+    fun message(serveur: String): String =
+        if (status == 401 || status == 403) "Accès refusé par $serveur : vérifie le jeton d'accès dans les réglages IA."
+        else "${serveur.replaceFirstChar { it.uppercase() }} a répondu $status."
+}
 
 object OkHttpJEVTransport : JEVTransport {
     private val json = "application/json; charset=utf-8".toMediaType()
 
-    override suspend fun post(url: String, body: String, delaiMs: Int): String = withContext(Dispatchers.IO) {
+    override suspend fun post(url: String, body: String, delaiMs: Int, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
         val client = OkHttpClient.Builder()
             .connectTimeout(delaiMs.toLong(), TimeUnit.MILLISECONDS)
             .readTimeout(delaiMs.toLong(), TimeUnit.MILLISECONDS)
             .build()
-        val request = Request.Builder().url(url).post(body.toRequestBody(json)).build()
-        client.newCall(request).execute().use { response ->
+        val builder = Request.Builder().url(url).post(body.toRequestBody(json))
+        headers.forEach { (name, value) -> builder.header(name, value) }
+        client.newCall(builder.build()).execute().use { response ->
+            // Sans jeton valide, Cloudflare Access renvoie vers sa page de connexion.
+            if (response.request.url.host.endsWith("cloudflareaccess.com")) throw JEVHttpError(403)
             if (!response.isSuccessful) throw JEVHttpError(response.code)
             response.body?.string().orEmpty()
         }
@@ -107,7 +115,7 @@ object JEVClient {
 
         val url = config.url.trimEnd('/') + "/v1/decision"
         return try {
-            val raw = transport.post(url, body, config.delaiMs)
+            val raw = transport.post(url, body, config.delaiMs, config.headers)
             val brut = JSONObject(raw)
             val rendus = brut.optJSONArray("results")?.length() ?: 0
             if (rendus < fragments.size) {
@@ -116,7 +124,7 @@ object JEVClient {
                 JEVOutcome.Ok(lireReponse(brut, schema, fragments.size))
             }
         } catch (error: JEVHttpError) {
-            JEVOutcome.Erreur("Le serveur de décision a répondu ${error.status}.")
+            JEVOutcome.Erreur(error.message("le serveur de décision"))
         } catch (_: Exception) {
             JEVOutcome.Erreur("Le serveur de décision n'a pas répondu.")
         }

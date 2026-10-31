@@ -94,6 +94,8 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
     var intervalText by remember { mutableStateOf(syncSettings.syncIntervalMinutes.toString()) }
     var confirmRestore by remember { mutableStateOf(false) }
     var localJevUrl by remember(aiSettings.jevUrl) { mutableStateOf(aiSettings.jevUrl) }
+    var localAccessId by remember(aiSettings.accessClientId) { mutableStateOf(aiSettings.accessClientId) }
+    var localAccessSecret by remember(aiSettings.accessClientSecret) { mutableStateOf(aiSettings.accessClientSecret) }
     var localDelai by remember(aiSettings.jevDelaiMs) { mutableStateOf((aiSettings.jevDelaiMs / 1000).toString()) }
     var localTrigger by remember(settings.listCheckTrigger) { mutableStateOf(settings.listCheckTrigger) }
     var localAppcast by remember(settings.appcastUrl) { mutableStateOf(settings.appcastUrl) }
@@ -223,9 +225,13 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 SwitchSetting("Classer les demandes par le serveur JEV", "Le serveur choisit un mode (math, liste, minuteur, code, texte). Sans lui : mots-clés.", aiSettings.enabled, viewModel::setAiEnabled)
                 SwitchSetting("Laisser l'IA rédiger les formules", "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par l'IA (une dizaine de secondes), gardée seulement si la note sait la calculer, et marquée « à vérifier ».", aiSettings.formulaDraftEnabled, viewModel::setFormulaDraftEnabled)
                 OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localJevUrl, onValueChange = { localJevUrl = it }, singleLine = true, label = { Text("URL du serveur de décision") })
+                OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAccessId, onValueChange = { localAccessId = it }, singleLine = true,
+                    label = { Text("Jeton d'accès — Client ID") }, supportingText = { Text("Cloudflare Access ; vide pour un serveur local ou Tailscale.") })
+                OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAccessSecret, onValueChange = { localAccessSecret = it }, singleLine = true,
+                    label = { Text("Jeton d'accès — Client Secret") }, visualTransformation = PasswordVisualTransformation())
                 OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localDelai, onValueChange = { localDelai = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text("Délai (secondes)") })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(modifier = Modifier.weight(1f), onClick = { viewModel.setJevUrl(localJevUrl); localDelai.toIntOrNull()?.let { viewModel.setJevDelaiMs(it * 1000) } }) { Text("Enregistrer") }
+                    Button(modifier = Modifier.weight(1f), onClick = { viewModel.setJevUrl(localJevUrl); viewModel.setJevAccessToken(localAccessId, localAccessSecret); localDelai.toIntOrNull()?.let { viewModel.setJevDelaiMs(it * 1000) } }) { Text("Enregistrer") }
                     OutlinedButton(modifier = Modifier.weight(1f), onClick = viewModel::testJev) { Text("Tester") }
                 }
                 if (aiTestResult.isNotBlank()) Text(aiTestResult, style = MaterialTheme.typography.bodySmall, color = palette.accent)

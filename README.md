@@ -54,6 +54,16 @@ swift test
 swift run AlphaNote
 ```
 
+## iOS (simulateur)
+
+L'app iOS (`iOS/`, projet XcodeGen) compile directement le cœur macOS
+(`Sources/AlphaNote`) ; seule l'interface vit dans `iOS/App`.
+
+```bash
+scripts/ios.sh run    # compile, installe et lance dans le simulateur
+scripts/ios.sh test   # tests partagés + tests d'interface
+```
+
 ## Open in Xcode
 
 ```bash

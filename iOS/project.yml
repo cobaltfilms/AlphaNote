@@ -1,0 +1,188 @@
+# AlphaNote iOS — projet Xcode généré par XcodeGen (`scripts/ios.sh` le régénère).
+#
+# Le cœur (modèle, base, synchro, maths, IA JEV, recette, minuteur, thème) est
+# compilé directement depuis les sources macOS (../Sources/AlphaNote) : un seul
+# code pour les deux plateformes, macOS reste la référence. Seule l'interface
+# vit ici (App/). Le module s'appelle aussi « AlphaNote », donc les tests macOS
+# (`@testable import AlphaNote`) tournent tels quels dans le simulateur.
+name: AlphaNote
+options:
+  bundleIdPrefix: be.cobaltfilms
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    MARKETING_VERSION: "0.3.0"
+    CURRENT_PROJECT_VERSION: "300"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    from: "7.0.0"
+  Collections:
+    url: https://github.com/apple/swift-collections.git
+    from: "1.1.0"
+targets:
+  AlphaNote:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - Sounds
+      - path: Shared
+      # Sonneries de notification (.caf ~28 s) générées par scripts/ios.sh.
+      - path: App/Sounds
+        optional: true
+        buildPhase: resources
+      - path: ../Sources/AlphaNote
+        name: Core
+        includes:
+          - AI/AISettingsKeys.swift
+          - AI/UI/AISettingsView.swift
+          - AI/JEVClient.swift
+          - AI/JEVAccessToken.swift
+          - AI/KeywordIntentRouter.swift
+          - AI/Features/FormulaDraftFeature.swift
+          - AI/Features/ModeRoutingFeature.swift
+          - AI/Features/SemanticSearchFeature.swift
+          - AI/Storage/*.swift
+          - Database/DatabaseManager.swift
+          - Evaluation/*.swift
+          - Models/*.swift
+          - Services/DeviceIdentity.swift
+          - Services/KeychainService.swift
+          - Services/NextcloudWebDAVClient.swift
+          - Services/RecipeIngredientExtractor.swift
+          - Services/SpeechRecognizer.swift
+          - Services/URLDetector.swift
+          - Sync/SyncEngine.swift
+          - Sync/SyncModels.swift
+          - UI/NoteViews/TimerNoteView.swift
+          - UI/Theme/AlphaNoteTheme.swift
+          - ViewModels/*.swift
+          - Resources/Sounds/*.m4a
+    dependencies:
+      - package: GRDB
+      - package: Collections
+        product: OrderedCollections
+      - target: AlphaNoteShare
+    entitlements:
+      path: App/AlphaNote.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.be.cobaltfilms.alphanote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: be.cobaltfilms.alphanote
+        PRODUCT_NAME: AlphaNote
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: AlphaNote
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.productivity
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - audio
+        NSMicrophoneUsageDescription: "AlphaNote écoute le micro pour la dictée de la barre de commande."
+        NSSpeechRecognitionUsageDescription: "AlphaNote transcrit ta voix en texte pour la barre de commande."
+        NSPhotoLibraryUsageDescription: "AlphaNote ajoute à une note les images que tu choisis."
+        NSLocalNetworkUsageDescription: "AlphaNote joint le serveur JEV et Nextcloud sur ton réseau local."
+        NSAppTransportSecurity:
+          # JEV tourne en http:// sur le réseau local ou Tailscale (100.x, qui
+          # n'est pas « local » pour iOS). Ne pas ajouter NSAllowsLocalNetworking :
+          # sa présence fait ignorer NSAllowsArbitraryLoads.
+          NSAllowsArbitraryLoads: true
+
+  AlphaNoteShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Shared
+    entitlements:
+      path: ShareExtension/AlphaNoteShare.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.be.cobaltfilms.alphanote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: be.cobaltfilms.alphanote.share
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: AlphaNote
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+
+  AlphaNoteTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../Tests/AlphaNoteTests
+        includes:
+          - AlphaNoteTests.swift
+          - CoreLogicTests.swift
+          - EvaluationTests.swift
+          - JEVClientTests.swift
+          - ListRequestTests.swift
+          - RecipeAndFormulaTests.swift
+          - SharedCoreTests.swift
+          - TimerLineTests.swift
+    dependencies:
+      - target: AlphaNote
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: be.cobaltfilms.alphanote.tests
+
+  AlphaNoteUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: AlphaNote
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: be.cobaltfilms.alphanote.uitests
+        TEST_TARGET_NAME: AlphaNote
+
+schemes:
+  AlphaNote:
+    build:
+      targets:
+        AlphaNote: all
+        AlphaNoteTests: [test]
+    test:
+      targets:
+        - AlphaNoteTests
+        - AlphaNoteUITests

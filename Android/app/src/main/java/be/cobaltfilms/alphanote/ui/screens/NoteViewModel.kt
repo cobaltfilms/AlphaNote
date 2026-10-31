@@ -553,6 +553,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun setAiEnabled(enabled: Boolean) = viewModelScope.launch { aiSettingsRepository.setEnabled(enabled) }
     fun setFormulaDraftEnabled(enabled: Boolean) = viewModelScope.launch { aiSettingsRepository.setFormulaDraftEnabled(enabled) }
     fun setJevUrl(url: String) = viewModelScope.launch { aiSettingsRepository.setJevUrl(url) }
+    fun setJevAccessToken(clientId: String, secret: String) = viewModelScope.launch { aiSettingsRepository.setAccessToken(clientId, secret) }
     fun setJevDelaiMs(ms: Int) = viewModelScope.launch { aiSettingsRepository.setJevDelaiMs(ms) }
 
     fun testJev() {

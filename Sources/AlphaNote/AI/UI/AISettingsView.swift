@@ -10,6 +10,8 @@ struct AISettingsView: View {
     @AppStorage(AISettingsKeys.jevDelaiMs) private var jevDelaiMs = AISettingsKeys.jevDelaiMsDefault
     @AppStorage(AISettingsKeys.formulaDraftEnabled) private var formulaDraftEnabled = true
 
+    @AppStorage(JEVAccessToken.clientIDKey) private var accessClientID = ""
+    @State private var accessSecret = ""
     @State private var isTesting = false
     @State private var statusMessage: String?
     @State private var statusIsError = false
@@ -29,8 +31,19 @@ struct AISettingsView: View {
             }
 
             Section {
-                HelpTextField("URL du serveur", text: $jevURL, prompt: "http://192.168.3.169:8096",
+                HelpTextField("URL du serveur", text: $jevURL, prompt: AISettingsKeys.jevURLDefault,
                               help: "Serveur de décision JEV (POST /v1/decision).")
+
+                HelpTextField("Jeton d'accès (ID)", text: $accessClientID, prompt: "….access",
+                              help: "Client ID du jeton de service Cloudflare Access. Vide pour un serveur sur le réseau local ou Tailscale.")
+                    .onChange(of: accessClientID) { _, _ in saveAccessToken() }
+                LabeledContent {
+                    SecureField("Secret", text: $accessSecret)
+                        .onSubmit(saveAccessToken)
+                        .onChange(of: accessSecret) { _, _ in saveAccessToken() }
+                } label: {
+                    FieldLabel("Jeton d'accès (secret)", help: "Client Secret du jeton, gardé dans le trousseau.")
+                }
 
                 LabeledContent {
                     Stepper("\(jevDelaiMs) ms", value: $jevDelaiMs, in: 2_000...60_000, step: 1_000)
@@ -82,6 +95,7 @@ struct AISettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { accessSecret = JEVAccessToken.storedSecret(clientID: accessClientID) }
     }
 
     private var schemaCard: some View {
@@ -118,6 +132,10 @@ struct AISettingsView: View {
     }
 
     @MainActor
+    private func saveAccessToken() {
+        JEVAccessToken.save(clientID: accessClientID, secret: accessSecret)
+    }
+
     private func testServer() async {
         statusMessage = nil
         statusIsError = false

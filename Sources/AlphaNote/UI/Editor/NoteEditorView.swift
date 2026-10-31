@@ -165,9 +165,7 @@ struct NoteEditorView: NSViewRepresentable {
         }
 
         static func detectMode(in content: String) -> NoteMode {
-            var probe = Note(content: content)
-            probe.detectKeyword()
-            return NoteMode(rawValue: probe.keyword) ?? .plain
+            EditorTextRules.detectMode(in: content)
         }
 
         // MARK: Décoration
@@ -320,11 +318,10 @@ struct NoteEditorView: NSViewRepresentable {
                 }
             }
 
-            Self.highlight(Self.numberRegex, color: Palette.code, in: lineRange, storage: storage)
-            Self.highlight(Self.unitRegex, color: Palette.list, in: lineRange, storage: storage)
+            Self.highlight(EditorTextRules.numberRegex, color: Palette.code, in: lineRange, storage: storage)
+            Self.highlight(EditorTextRules.unitRegex, color: Palette.list, in: lineRange, storage: storage)
             for name in variableNames {
-                let escaped = NSRegularExpression.escapedPattern(for: name)
-                guard let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_])\(escaped)(?![\\p{L}\\p{N}_])", options: [.caseInsensitive]) else { continue }
+                guard let regex = EditorTextRules.variableRegex(name) else { continue }
                 Self.highlight(regex, color: Palette.math, in: lineRange, storage: storage)
             }
         }
@@ -335,69 +332,31 @@ struct NoteEditorView: NSViewRepresentable {
             }
         }
 
-        private static let numberRegex = try! NSRegularExpression(pattern: "(?<![\\p{L}_])[-+]?\\d+(?:[.,]\\d+)?")
-        private static let unitRegex = try! NSRegularExpression(pattern: "(?i)\\b(usd|eur|gbp|jpy|chf|cad|kg|g|mg|lb|oz|km|m|cm|mm|mi|yd|ft|in|sqm|sqft|ha|acre|l|ml|gal|qt|pt|cup|°c|°f|k|min|h|s)\\b")
-
         static func isModeHeader(_ trimmed: String) -> Bool {
-            let lower = trimmed.lowercased()
-            return Note.knownKeywords.contains(lower)
-                || Note.knownKeywords.contains(where: { lower.hasPrefix("\($0):") })
+            EditorTextRules.isModeHeader(trimmed)
         }
 
         static func isChecked(_ trimmed: String, trigger: String) -> Bool {
-            trimmed.range(of: trigger, options: [.caseInsensitive, .anchored, .backwards]) != nil
+            EditorTextRules.isChecked(trimmed, trigger: trigger)
         }
 
         // MARK: Résultats math (remplacement ciblé, jamais du texte entier)
 
         func applyMathResults(respectCaret: Bool = true) {
             guard let textView, let storage = textView.textStorage, !textView.hasMarkedText() else { return }
-            let content = textView.string
-            let outcomes = documentEvaluator.evaluate(content: content).filter(\.changed)
-            guard !outcomes.isEmpty else { return }
-
-            let nsContent = content as NSString
-            var lineStarts: [Int] = [0]
-            nsContent.enumerateSubstrings(in: NSRange(location: 0, length: nsContent.length), options: [.byLines, .substringNotRequired]) { _, _, enclosing, _ in
-                lineStarts.append(enclosing.location + enclosing.length)
-            }
-
             let selection = textView.selectedRange()
-            var newSelection = selection
-            var edits: [(range: NSRange, replacement: String)] = []
-
-            for outcome in outcomes.reversed() {
-                guard outcome.index < lineStarts.count - 1 || outcome.index == lineStarts.count - 1 else { continue }
-                let lineStart = lineStarts[outcome.index]
-                let original = outcome.original as NSString
-                let lineRange = NSRange(location: lineStart, length: original.length)
-                guard NSMaxRange(lineRange) <= nsContent.length else { continue }
-
-                // On ne touche qu'à la queue après le premier « = ».
-                let equalIndex = original.range(of: "=").location
-                guard equalIndex != NSNotFound else { continue }
-                let tailRange = NSRange(location: lineStart + equalIndex + 1, length: original.length - equalIndex - 1)
-
-                let transformed = outcome.transformed as NSString
-                let transformedEqual = transformed.range(of: "=").location
-                guard transformedEqual != NSNotFound else { continue }
-                let newTail = transformed.substring(from: transformedEqual + 1)
-
-                // Le curseur est à l'intérieur d'un résultat existant (l'utilisateur
-                // y écrit) : on attend qu'il en sorte. Juste après « = », on remplace.
-                if respectCaret, tailRange.length > 0,
-                   selection.location > tailRange.location, selection.location <= NSMaxRange(tailRange) {
-                    continue
-                }
-
-                edits.append((tailRange, newTail))
-            }
+            let edits = MathInlineApplier.edits(
+                for: textView.string,
+                caret: respectCaret ? selection.location : nil,
+                evaluator: documentEvaluator
+            ).map { (range: $0.range, replacement: $0.replacement) }
             guard !edits.isEmpty else { return }
 
             // Enregistrement undo avant toute modification (plages encore valides).
             let allowed = edits.filter { textView.shouldChangeText(in: $0.range, replacementString: $0.replacement) }
             guard !allowed.isEmpty else { return }
 
+            var newSelection = selection
             isProgrammaticChange = true
             storage.beginEditing()
             for edit in allowed { // déjà dans l'ordre inverse
@@ -420,16 +379,7 @@ struct NoteEditorView: NSViewRepresentable {
             let nsText = textView.string as NSString
             guard NSMaxRange(lineRange) <= nsText.length else { return }
             let line = nsText.substring(with: lineRange)
-            let trigger = parent.checkTrigger.isEmpty ? "/x" : parent.checkTrigger
-            let trimmedTrailing = line.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression)
-
-            let replacement: String
-            if Self.isChecked(trimmedTrailing.trimmingCharacters(in: .whitespaces), trigger: trigger),
-               let range = trimmedTrailing.range(of: trigger, options: [.caseInsensitive, .backwards]) {
-                replacement = String(trimmedTrailing[..<range.lowerBound]).replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression)
-            } else {
-                replacement = trimmedTrailing.isEmpty ? trigger : "\(trimmedTrailing) \(trigger)"
-            }
+            let replacement = EditorTextRules.toggledListLine(line, trigger: parent.checkTrigger)
 
             isProgrammaticChange = true
             if textView.shouldChangeText(in: lineRange, replacementString: replacement) {

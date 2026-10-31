@@ -47,14 +47,14 @@ class FormulaDraftFeatureTest {
 
     @Test
     fun draftHappyPathKeepsModelName() = runBlocking {
-        val transport = JEVTransport { _, _, _ -> chatCompletion("""{"lignes": ["pi * 3^2 ="]}""") }
+        val transport = JEVTransport { _, _, _, _ -> chatCompletion("""{"lignes": ["pi * 3^2 ="]}""") }
         val outcome = FormulaDraftFeature.draft("aire d'un cercle de rayon 3", config, transport)
         assertEquals(JEVOutcome.Ok(FormulaDraftFeature.Draft(listOf("pi * 3^2 ="), "Qwen3-8B-Q4_K_M.gguf")), outcome)
     }
 
     @Test
     fun draftWithUnknownWordIsAFrankError() = runBlocking {
-        val transport = JEVTransport { _, _, _ -> chatCompletion("""{"lignes": ["pi * rayon^2 ="]}""") }
+        val transport = JEVTransport { _, _, _, _ -> chatCompletion("""{"lignes": ["pi * rayon^2 ="]}""") }
         val outcome = FormulaDraftFeature.draft("aire d'un cercle de rayon 3", config, transport)
         assertTrue(outcome is JEVOutcome.Erreur && outcome.message.contains("rayon"))
     }

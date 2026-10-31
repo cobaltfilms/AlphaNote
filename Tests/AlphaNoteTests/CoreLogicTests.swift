@@ -112,12 +112,14 @@ final class CoreLogicTests: XCTestCase {
 
     // MARK: - Raccourci global
 
+    #if os(macOS)
     func testHotkeyDescription() {
         let aKey = HotkeySettings.keyCode(forCharacter: "a") ?? 0
         XCTAssertEqual(HotkeySettings.describe(keyCode: aKey, modifiers: [.option]), "⌥A")
         XCTAssertEqual(HotkeySettings.describe(keyCode: 49, modifiers: [.command, .shift]), "⇧⌘␣")
         XCTAssertEqual(HotkeySettings.describe(keyCode: 122, modifiers: []), "F1")
     }
+    #endif
 
     // MARK: - Sync : baseline ETag
 
@@ -138,10 +140,10 @@ final class CoreLogicTests: XCTestCase {
         var components = DateComponents(year: 2026, month: 10, day: 23, hour: 15, minute: 4)
         components.calendar = Calendar.current
         let now = components.date!
-        XCTAssertEqual(NoteListView.shortDate(now.addingTimeInterval(-3600), now: now), "14:04")
-        XCTAssertEqual(NoteListView.shortDate(now.addingTimeInterval(-86400), now: now), "hier")
-        XCTAssertEqual(NoteListView.shortDate(now.addingTimeInterval(-3 * 86400), now: now), "mar.")
-        XCTAssertEqual(NoteListView.shortDate(now.addingTimeInterval(-40 * 86400), now: now), "13 sept.")
-        XCTAssertEqual(NoteListView.shortDate(now.addingTimeInterval(-400 * 86400), now: now), "sept. 2025")
+        XCTAssertEqual(NoteFormatting.shortDate(now.addingTimeInterval(-3600), now: now), "14:04")
+        XCTAssertEqual(NoteFormatting.shortDate(now.addingTimeInterval(-86400), now: now), "hier")
+        XCTAssertEqual(NoteFormatting.shortDate(now.addingTimeInterval(-3 * 86400), now: now), "mar.")
+        XCTAssertEqual(NoteFormatting.shortDate(now.addingTimeInterval(-40 * 86400), now: now), "13 sept.")
+        XCTAssertEqual(NoteFormatting.shortDate(now.addingTimeInterval(-400 * 86400), now: now), "sept. 2025")
     }
 }

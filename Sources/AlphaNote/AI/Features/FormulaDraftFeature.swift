@@ -74,10 +74,11 @@ struct FormulaDraftFeature {
             data = try await transport.post(
                 url: url,
                 body: try JSONSerialization.data(withJSONObject: body),
-                delaiMs: max(config.delaiMs, Self.minimumDelaiMs)
+                delaiMs: max(config.delaiMs, Self.minimumDelaiMs),
+                headers: config.headers
             )
-        } catch let JEVTransportError.http(status) {
-            return .erreur("Le serveur IA a répondu \(status).")
+        } catch let error as JEVTransportError {
+            return .erreur(error.message(serveur: "le serveur IA"))
         } catch {
             return .erreur("Le serveur IA n'a pas répondu.")
         }

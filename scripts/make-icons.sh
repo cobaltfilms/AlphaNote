@@ -3,7 +3,10 @@
 # Génère les icônes depuis design/AlphaNoteIcon.svg (motif corail #ef7b5f) :
 #   · macOS : AppIcon.appiconset + AppIconDock.png (icône du bundle, corail) ;
 #   · Android : icône de l'app (corail) + une icône de lancement par thème
-#     de couleur (mipmap*/ic_launcher_<thème>*, alias dans le manifeste).
+#     de couleur (mipmap*/ic_launcher_<thème>*, alias dans le manifeste) ;
+#   · iOS : AppIcon (corail, plein cadre : iOS arrondit lui-même) + une icône
+#     alternative par thème (AppIcon-<thème>, choisie avec le thème).
+# `ONLY=ios scripts/make-icons.sh` ne régénère que les icônes iOS.
 # Requiert rsvg-convert (brew install librsvg).
 #
 set -euo pipefail
@@ -54,6 +57,29 @@ android_set() { # $1 = svg, $2 = suffixe ("" ou "_<thème>")
 XML
     done
 }
+
+ios_set() { # $1 = svg, $2 = nom du jeu d'icônes
+    local dir="$ROOT/iOS/App/Assets.xcassets/$2.appiconset"
+    mkdir -p "$dir"
+    sed 's/rx="220"/rx="0"/' "$1" > "$TMP/ios.svg"
+    rsvg-convert -w 1024 -h 1024 -b "#22272e" "$TMP/ios.svg" -o "$dir/icon.png"
+    cat > "$dir/Contents.json" <<JSON
+{
+  "images" : [ { "filename" : "icon.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" } ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+}
+
+echo "› iOS"
+ios_set "$SVG" AppIcon
+for t in "${THEMES[@]}"; do
+    name=${t%%:*}; accent=${t#*:}
+    [[ $name == corail ]] && continue
+    sed "s/#ef7b5f/#$accent/g" "$SVG" > "$TMP/$name.svg"
+    ios_set "$TMP/$name.svg" "AppIcon-$name"
+done
+[[ "${ONLY:-}" == ios ]] && { echo "✓ icônes iOS générées"; exit 0; }
 
 echo "› macOS"
 for f in 16 32 128 256 512; do

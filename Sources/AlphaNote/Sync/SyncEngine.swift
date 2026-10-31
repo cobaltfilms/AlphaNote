@@ -1,6 +1,11 @@
 import Foundation
 import SwiftUI
 
+extension Notification.Name {
+    /// Une synchro a modifié la base : les listes de notes se rechargent.
+    static let alphaNoteDidSync = Notification.Name("alphaNoteDidSync")
+}
+
 enum SyncRunTrigger {
     case startup
     case manual

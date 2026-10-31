@@ -3,12 +3,23 @@ import XCTest
 
 private struct FakeJEVTransport: JEVTransport {
     let data: Data
-    func post(url: URL, body: Data, delaiMs: Int) async throws -> Data { data }
+    func post(url: URL, body: Data, delaiMs: Int, headers: [String: String]) async throws -> Data { data }
 }
 
 private struct ThrowingJEVTransport: JEVTransport {
     let error: Error
-    func post(url: URL, body: Data, delaiMs: Int) async throws -> Data { throw error }
+    func post(url: URL, body: Data, delaiMs: Int, headers: [String: String]) async throws -> Data { throw error }
+}
+
+/// Garde les en-têtes reçus pour vérifier l'envoi du jeton d'accès.
+private final class RecordingJEVTransport: JEVTransport, @unchecked Sendable {
+    let data: Data
+    private(set) var headers: [String: String] = [:]
+    init(data: Data) { self.data = data }
+    func post(url: URL, body: Data, delaiMs: Int, headers: [String: String]) async throws -> Data {
+        self.headers = headers
+        return data
+    }
 }
 
 private func jevJSON(_ results: [[String: Any]]) -> Data {
@@ -136,5 +147,32 @@ final class JEVClientTests: XCTestCase {
         let decision = await ModeRoutingFeature().route(question: "12 * 8", noteKeyword: nil)
         XCTAssertEqual(decision.mode, .math)
         XCTAssertEqual(decision.source, .motsCles)
+    }
+
+    // MARK: - Jeton Cloudflare Access
+
+    func testAccessTokenIsSentAsCloudflareHeaders() async {
+        var protected = config
+        protected.access = JEVAccessToken(clientID: "abc.access", clientSecret: "s3cret")
+        let transport = RecordingJEVTransport(data: jevJSON([["decision": ["mode": "math"]]]))
+        _ = await JEVClient.decider(config: protected, instructions: ModeRoutingFeature.instructions,
+                                    schema: ModeRoutingFeature.schema, fragments: ["12 * 8"], transport: transport)
+        XCTAssertEqual(transport.headers["CF-Access-Client-Id"], "abc.access")
+        XCTAssertEqual(transport.headers["CF-Access-Client-Secret"], "s3cret")
+    }
+
+    func testNoTokenSendsNoHeaders() async {
+        let transport = RecordingJEVTransport(data: jevJSON([["decision": ["mode": "math"]]]))
+        _ = await JEVClient.decider(config: config, instructions: ModeRoutingFeature.instructions,
+                                    schema: ModeRoutingFeature.schema, fragments: ["12 * 8"], transport: transport)
+        XCTAssertTrue(transport.headers.isEmpty)
+    }
+
+    func testForbiddenPointsToAccessToken() async {
+        let outcome = await JEVClient.decider(config: config, instructions: ModeRoutingFeature.instructions,
+                                              schema: ModeRoutingFeature.schema, fragments: ["12 * 8"],
+                                              transport: ThrowingJEVTransport(error: JEVTransportError.http(status: 403)))
+        guard case let .erreur(message) = outcome else { return XCTFail("attendu : erreur") }
+        XCTAssertTrue(message.contains("jeton d'accès"), message)
     }
 }

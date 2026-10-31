@@ -127,15 +127,15 @@ final class AIStore {
             return await applyRecipe(url: url, to: note)
         }
 
-        let items = listItems(from: question)
+        let items = Self.listItems(from: question)
         var updated = note
 
         if !items.isEmpty {
             let body = items.map { "* \($0)" }.joined(separator: "\n")
-            if updated.keyword == "list", !existingListBody(note).isEmpty {
-                updated.content = ensureListHeader(note) + "\n" + body
+            if updated.keyword == "list", !Self.existingListBody(note).isEmpty {
+                updated.content = Self.ensureListHeader(note) + "\n" + body
             } else {
-                updated.content = "list: \(listTitle(from: question))\n\(body)"
+                updated.content = "list: \(Self.listTitle(from: question))\n\(body)"
             }
             updated.content = ListModeFormatter.normalizeForListMode(content: updated.content, forceListHeader: true)
             updated.detectKeyword()
@@ -239,8 +239,11 @@ final class AIStore {
 
     // MARK: - Helpers déterministes
 
-    private func listItems(from text: String) -> [String] {
+    nonisolated static func listItems(from text: String) -> [String] {
         let raw = text
+            // « … à mes courses », « … dans la liste » : la destination, pas un élément.
+            .replacingOccurrences(of: #"(?i)\s+(à|a|dans|sur|pour)\s+(ma|mes|la|le|les|notre|nos|une?)\s+(liste|checklist|todo|to-do|courses)\b.*$"#,
+                                  with: "", options: .regularExpression)
             .replacingOccurrences(of: #"[;|]+"#, with: ",", options: .regularExpression)
             .replacingOccurrences(of: #"\s+et\s+"#, with: ", ", options: [.regularExpression, .caseInsensitive])
             .replacingOccurrences(of: #"\b(fais|cree|crée|donne|genere|génère|ajoute)\b"#, with: "", options: [.regularExpression, .caseInsensitive])
@@ -266,32 +269,27 @@ final class AIStore {
         return Array(NSOrderedSet(array: parts)) as? [String] ?? parts
     }
 
-    private func listTitle(from question: String) -> String {
-        let cleaned = question
-            .replacingOccurrences(of: #"(?i)^(fais|cree|crée|donne|genere|génère|ajoute)\s+"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"(?i)^(une?\s+)?(liste|checklist|todo|to-do)\s*(de|des|du|d')?\s*"#, with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = cleaned.isEmpty ? question : cleaned
-        return String(title.prefix(60))
+    /// Titre générique, comme Android : la demande entière ferait un titre bavard.
+    nonisolated static func listTitle(from question: String) -> String {
+        let lower = question.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        if lower.contains("course") { return "Courses" }
+        if lower.contains("ingredient") { return "Ingrédients" }
+        if lower.contains("tache") || lower.contains("todo") { return "Tâches" }
+        return "Liste"
     }
 
-    private func existingListBody(_ note: Note) -> String {
-        let lines = note.content.components(separatedBy: .newlines)
-        guard let first = lines.first, ListModeFormatter.isListHeader(first) else {
-            return ""
-        }
-        return Array(lines.dropFirst())
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    nonisolated static func existingListBody(_ note: Note) -> String {
+        note.content.components(separatedBy: .newlines).dropFirst()
             .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func ensureListHeader(_ note: Note) -> String {
-        let lines = note.content.components(separatedBy: .newlines)
-        if let first = lines.first, ListModeFormatter.isListHeader(first) {
-            return first
-        }
-        return "list: \(note.effectiveTitle.isEmpty ? "Liste" : note.effectiveTitle)"
+    /// La note entière (en-tête compris) : les nouveaux éléments s'ajoutent à
+    /// la suite, ils ne remplacent pas la liste existante.
+    nonisolated static func ensureListHeader(_ note: Note) -> String {
+        let content = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let first = content.components(separatedBy: .newlines).first ?? ""
+        return ListModeFormatter.isListHeader(first) ? content : "list\n\(content)"
     }
 
     /// La demande, débarrassée des mots d'appel, est déjà une expression

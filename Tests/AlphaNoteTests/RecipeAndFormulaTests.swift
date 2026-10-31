@@ -3,7 +3,7 @@ import XCTest
 
 private struct CannedTransport: JEVTransport {
     let data: Data
-    func post(url: URL, body: Data, delaiMs: Int) async throws -> Data { data }
+    func post(url: URL, body: Data, delaiMs: Int, headers: [String: String]) async throws -> Data { data }
 }
 
 private func chatCompletion(_ content: String, model: String = "/models/Qwen3-8B-Q4_K_M.gguf") -> Data {

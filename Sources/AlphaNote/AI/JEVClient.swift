@@ -59,20 +59,31 @@ enum JEVOutcome<T>: Sendable where T: Sendable {
 struct JEVConfig: Sendable {
     let url: String
     let delaiMs: Int
+    var access: JEVAccessToken? = nil
+
+    /// En-têtes ajoutés à chaque requête (jeton Cloudflare Access).
+    var headers: [String: String] { access?.headers ?? [:] }
 }
 
 protocol JEVTransport: Sendable {
-    func post(url: URL, body: Data, delaiMs: Int) async throws -> Data
+    func post(url: URL, body: Data, delaiMs: Int, headers: [String: String]) async throws -> Data
 }
 
 struct URLSessionJEVTransport: JEVTransport {
-    func post(url: URL, body: Data, delaiMs: Int) async throws -> Data {
+    func post(url: URL, body: Data, delaiMs: Int, headers: [String: String]) async throws -> Data {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         request.httpBody = body
         request.timeoutInterval = TimeInterval(delaiMs) / 1000
         let (data, response) = try await URLSession.shared.data(for: request)
+        // Sans jeton valide, Cloudflare Access renvoie vers sa page de connexion.
+        if response.url?.host?.hasSuffix("cloudflareaccess.com") == true {
+            throw JEVTransportError.http(status: 403)
+        }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw JEVTransportError.http(status: http.statusCode)
         }
@@ -82,6 +93,15 @@ struct URLSessionJEVTransport: JEVTransport {
 
 enum JEVTransportError: Error {
     case http(status: Int)
+
+    func message(serveur: String) -> String {
+        switch self {
+        case .http(401), .http(403):
+            return "Accès refusé par \(serveur) : vérifie le jeton d'accès dans les réglages IA."
+        case let .http(status):
+            return "\(serveur.prefix(1).uppercased() + serveur.dropFirst()) a répondu \(status)."
+        }
+    }
 }
 
 enum JEVClient {
@@ -96,7 +116,8 @@ enum JEVClient {
         let delai = defaults.object(forKey: AISettingsKeys.jevDelaiMs) as? Int ?? AISettingsKeys.jevDelaiMsDefault
         return JEVConfig(
             url: raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "/+$", with: "", options: .regularExpression),
-            delaiMs: delai > 0 ? delai : AISettingsKeys.jevDelaiMsDefault
+            delaiMs: delai > 0 ? delai : AISettingsKeys.jevDelaiMsDefault,
+            access: JEVAccessToken.load(defaults: defaults)
         )
     }
 
@@ -173,7 +194,7 @@ enum JEVClient {
 
         do {
             let bodyData = try JSONSerialization.data(withJSONObject: body)
-            let data = try await transport.post(url: url, body: bodyData, delaiMs: config.delaiMs)
+            let data = try await transport.post(url: url, body: bodyData, delaiMs: config.delaiMs, headers: config.headers)
             let brut = try JSONSerialization.jsonObject(with: data)
             let rendus = (brut as? [String: Any])?["results"] as? [Any]
             let rendusCount = rendus?.count ?? 0
@@ -182,10 +203,7 @@ enum JEVClient {
             }
             return .ok(lireReponse(brut, schema: schema, attendus: fragments.count))
         } catch let error as JEVTransportError {
-            if case let .http(status) = error {
-                return .erreur("Le serveur de décision a répondu \(status).")
-            }
-            return .erreur("Le serveur de décision n'a pas répondu.")
+            return .erreur(error.message(serveur: "le serveur de décision"))
         } catch {
             return .erreur("Le serveur de décision n'a pas répondu.")
         }

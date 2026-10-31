@@ -35,7 +35,7 @@ struct TimerNoteView: View {
                     Circle()
                         .trim(from: 0, to: session.progress)
                         .stroke(
-                            session.mode == .pomodoro ? Color(nsColor: Palette.timer) : Palette.accentColor,
+                            session.mode == .pomodoro ? Color(platform: Palette.timer) : Palette.accentColor,
                             style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .frame(width: 220, height: 220)
@@ -47,7 +47,7 @@ struct TimerNoteView: View {
                     Text(session.displayTime)
                         .font(.system(size: 46, weight: .medium, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(session.state == .finished ? Color(nsColor: Palette.timer) : Palette.textColor)
+                        .foregroundStyle(session.state == .finished ? Color(platform: Palette.timer) : Palette.textColor)
                     Text(stateLabel)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Palette.secondaryColor)
@@ -88,7 +88,7 @@ struct TimerNoteView: View {
                     Label("Arrêter la sonnerie", systemImage: "speaker.slash.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color(nsColor: Palette.timer))
+                .tint(Color(platform: Palette.timer))
             }
 
             HStack(spacing: 16) {
@@ -102,6 +102,7 @@ struct TimerNoteView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Palette.accentColor)
                 .keyboardShortcut(.space, modifiers: [])
+                .accessibilityLabel(session.state == .running ? "Pause" : "Démarrer")
 
                 Button {
                     session.reset()
@@ -112,6 +113,7 @@ struct TimerNoteView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(session.state == .stopped)
+                .accessibilityLabel("Remettre à zéro")
             }
         }
         .padding(24)
