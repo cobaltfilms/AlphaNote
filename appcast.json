@@ -1,6 +1,6 @@
 {
-  "version": "0.3.1",
-  "notes": "Synchro directe Mac \u2194 Android sur le m\u00eame Wi-Fi, sans Nextcloud (R\u00e9glages \u203a Synchronisation \u203a R\u00e9seau local). Demandes de liste : \u00ab \u2026 \u00e0 mes courses \u00bb est mieux compris, titre \u00ab Courses \u00bb, et les \u00e9l\u00e9ments s'ajoutent \u00e0 une liste existante au lieu de la remplacer. IA : jeton d'acc\u00e8s Cloudflare pour joindre le serveur JEV sans VPN. Boutons du minuteur lisibles par VoiceOver.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.3.1/AlphaNote-0.3.1.zip",
+  "version": "0.3.2",
+  "notes": "R\u00e9glages IA : \u00ab Tester le serveur \u00bb envoie maintenant le jeton d'acc\u00e8s Cloudflare (il r\u00e9pondait \u00ab Acc\u00e8s refus\u00e9 \u00bb alors que les demandes passaient).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.3.2/AlphaNote-0.3.2.zip",
   "minimumSystemVersion": "14.0"
 }
