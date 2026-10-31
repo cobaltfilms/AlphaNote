@@ -5,8 +5,16 @@ import Foundation
 enum NoteFormatting {
     static func displayTitle(_ note: Note) -> String {
         let title = note.effectiveTitle
-        return title.isEmpty ? "Note sans titre" : title
+        if title.isEmpty { return "Note sans titre" }
+        // En-tête de mode nu (« timer », « math ») : un nom lisible plutôt
+        // que le mot-clé.
+        if note.title.isEmpty, let name = modeName[title.lowercased()] { return name }
+        return title
     }
+
+    private static let modeName = [
+        "math": "Calcul", "list": "Liste", "code": "Code", "timer": "Minuteur", "vault": "Note sécurisée",
+    ]
 
     /// Aperçu sur une ligne : sans l'en-tête de mode, sans la ligne de titre,
     /// sans les lignes d'images.

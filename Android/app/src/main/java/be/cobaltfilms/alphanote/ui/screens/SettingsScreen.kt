@@ -1,5 +1,14 @@
 package be.cobaltfilms.alphanote.ui.screens
 
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import be.cobaltfilms.alphanote.timer.AlarmSound
@@ -109,12 +118,16 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
     LaunchedEffect(syncSettings.nextcloudServerUrl) { localServerUrl = syncSettings.nextcloudServerUrl }
     LaunchedEffect(syncSettings.nextcloudUsername) { localUsername = syncSettings.nextcloudUsername }
 
+    // Une rubrique à la fois : la page d'accueil liste les rubriques.
+    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
+
     Scaffold(
         containerColor = palette.content,
         topBar = {
             TopAppBar(
-                title = { Text("Réglages") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") } },
+                title = { Text(SETTINGS_PAGES.firstOrNull { it.id == page }?.title ?: "Réglages") },
+                navigationIcon = { IconButton(onClick = { if (page != null) page = null else onBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = palette.window, titleContentColor = palette.text, navigationIconContentColor = palette.secondary)
             )
         }
@@ -123,7 +136,9 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SettingsCard("Général") {
+            if (page == null) SettingsHome { page = it }
+
+            if (page == "apparence") SettingsCard("Apparence") {
                 Text("Thème", style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ThemeMode.entries.forEach { mode ->
@@ -139,6 +154,9 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 Text("Accent et teinte des fonds assortie ; l'icône de l'app suit. Au changement, certains lanceurs retirent l'icône de l'écran d'accueil.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
                 Text("Taille du texte : ${settings.fontSize.toInt()}", style = MaterialTheme.typography.bodyMedium)
                 Slider(value = settings.fontSize, onValueChange = { viewModel.setFontSize(it) }, valueRange = 12f..26f, steps = 13)
+            }
+
+            if (page == "notes") SettingsCard("Notes") {
                 OutlinedTextField(
                     value = localTrigger, onValueChange = { localTrigger = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     label = { Text("Déclencheur « coché » (mode liste)") },
@@ -149,7 +167,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 SwitchSetting("Confirmer la suppression", "Demande confirmation avant de supprimer une note non vide.", settings.confirmDelete, viewModel::setConfirmDelete)
             }
 
-            SettingsCard("Minuteur") {
+            if (page == "minuteur") SettingsCard("Minuteur") {
                 Text("Sonnerie : ${settings.alarmSound.label}", style = MaterialTheme.typography.bodyMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AlarmSound.entries.forEach { sound ->
@@ -163,7 +181,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 Text("Jouée en boucle sur le canal alarme à la fin d'un minuteur. Toucher un choix le fait entendre.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
             }
 
-            SettingsCard("Mac sur le Wi-Fi") {
+            if (page == "synchro") SettingsCard("Mac sur le Wi-Fi") {
                 SwitchSetting("Synchroniser avec mon Mac", "Sur le même Wi-Fi, les notes passent directement, sans Nextcloud. Côté Mac : Réglages › Synchronisation › Réseau local.", lanEnabled, viewModel::setLanEnabled)
                 if (lanEnabled) {
                     val paired = lanPaired
@@ -185,7 +203,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 }
             }
 
-            SettingsCard("Synchronisation Nextcloud") {
+            if (page == "synchro") SettingsCard("Synchronisation Nextcloud") {
                 Text("Mêmes notes que sur le Mac : dossier AlphaNote/notes de ton Nextcloud, un JSON par note.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
                 OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localServerUrl, onValueChange = { localServerUrl = it }, singleLine = true,
                     label = { Text("Serveur") }, placeholder = { Text("https://cloud.example.com") })
@@ -222,7 +240,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 }
             }
 
-            SettingsCard("Coffre — notes sécurisées") {
+            if (page == "coffre") SettingsCard("Coffre — notes sécurisées") {
                 val configured by VaultKeyring.isConfigured.collectAsState()
                 val unlocked by VaultKeyring.isUnlocked.collectAsState()
                 var autoLock by remember { mutableStateOf(VaultKeyring.autoLockMinutes) }
@@ -254,29 +272,54 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 )
             }
 
-            SettingsCard("IA — routage de mode (JEV)") {
-                SwitchSetting("Classer les demandes par le serveur JEV", "Le serveur choisit un mode (math, liste, minuteur, code, texte). Sans lui : mots-clés.", aiSettings.enabled, viewModel::setAiEnabled)
-                SwitchSetting("Laisser l'IA rédiger les formules", "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par l'IA (une dizaine de secondes), gardée seulement si la note sait la calculer, et marquée « à vérifier ».", aiSettings.formulaDraftEnabled, viewModel::setFormulaDraftEnabled)
-                OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localJevUrl, onValueChange = { localJevUrl = it }, singleLine = true, label = { Text("URL du serveur de décision") })
-                OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAccessId, onValueChange = { localAccessId = it }, singleLine = true,
-                    label = { Text("Jeton d'accès — Client ID") }, supportingText = { Text("Cloudflare Access ; vide pour un serveur local ou Tailscale.") })
-                OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAccessSecret, onValueChange = { localAccessSecret = it }, singleLine = true,
-                    label = { Text("Jeton d'accès — Client Secret") }, visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localDelai, onValueChange = { localDelai = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text("Délai (secondes)") })
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(modifier = Modifier.weight(1f), onClick = { viewModel.setJevUrl(localJevUrl); viewModel.setJevAccessToken(localAccessId, localAccessSecret); localDelai.toIntOrNull()?.let { viewModel.setJevDelaiMs(it * 1000) } }) { Text("Enregistrer") }
-                    OutlinedButton(modifier = Modifier.weight(1f), onClick = viewModel::testJev) { Text("Tester") }
-                }
-                if (aiTestResult.isNotBlank()) Text(aiTestResult, style = MaterialTheme.typography.bodySmall, color = palette.accent)
-                Text("Transparence — schéma envoyé", style = MaterialTheme.typography.titleSmall)
-                Text("mode (enum : ${ModeRoutingFeature.modeField.choices.joinToString(", ")})", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
-                Text(ModeRoutingFeature.modeField.description, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
-                Text("Transparence — consigne des formules", style = MaterialTheme.typography.titleSmall)
-                Text(FormulaDraftFeature.systemPrompt, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
-                Text("Seule la phrase de la demande est envoyée, jamais le contenu des notes. Un lien de recette est lu directement sur le site, sans IA.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+            if (page == "ia") SettingsCard("Moteurs en service") {
+                EngineRow(
+                    "Classement des demandes", if (aiSettings.enabled) "Serveur JEV" else "Modèle local",
+                    if (aiSettings.enabled) "Le serveur classe la demande ; s'il ne répond pas, le modèle du téléphone prend le relais."
+                    else "Un petit modèle sur le téléphone classe la demande (calcul, liste, minuteur, code, texte), hors ligne."
+                )
+                EngineRow(
+                    "Rédaction des formules",
+                    when { !aiSettings.formulaDraftEnabled -> "Désactivée"; aiSettings.enabled -> "Serveur JEV"; else -> "Indisponible" },
+                    when {
+                        !aiSettings.formulaDraftEnabled -> "Les demandes en mots ne deviennent pas des formules."
+                        aiSettings.enabled -> "Une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule, gardée seulement si la note sait la calculer."
+                        else -> "Il faut un serveur JEV : le téléphone n'a pas de modèle capable de rédiger."
+                    }
+                )
+                Text("Seule la phrase de la demande quitte le téléphone, et seulement vers un serveur JEV si vous en utilisez un : jamais le contenu des notes.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
             }
 
-            SettingsCard("Mises à jour") {
+            if (page == "ia") SettingsCard("Rédaction des formules") {
+                SwitchSetting("Laisser l'IA rédiger les formules", "Formule marquée « à vérifier », gardée seulement si la note sait la calculer.", aiSettings.formulaDraftEnabled, viewModel::setFormulaDraftEnabled)
+            }
+
+            if (page == "ia") SettingsCard("Serveur JEV (facultatif)") {
+                SwitchSetting("Utiliser un serveur JEV", "Pour classer les demandes avec votre propre serveur et rédiger les formules.", aiSettings.enabled, viewModel::setAiEnabled)
+                if (aiSettings.enabled) {
+                    OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localJevUrl, onValueChange = { localJevUrl = it }, singleLine = true, label = { Text("URL du serveur") })
+                    OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAccessId, onValueChange = { localAccessId = it }, singleLine = true,
+                        label = { Text("Jeton d'accès — Client ID") }, supportingText = { Text("Cloudflare Access ; vide pour un serveur local ou Tailscale.") })
+                    OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAccessSecret, onValueChange = { localAccessSecret = it }, singleLine = true,
+                        label = { Text("Jeton d'accès — Client Secret") }, visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localDelai, onValueChange = { localDelai = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text("Délai (secondes)") })
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(modifier = Modifier.weight(1f), onClick = { viewModel.setJevUrl(localJevUrl); viewModel.setJevAccessToken(localAccessId, localAccessSecret); localDelai.toIntOrNull()?.let { viewModel.setJevDelaiMs(it * 1000) } }) { Text("Enregistrer") }
+                        OutlinedButton(modifier = Modifier.weight(1f), onClick = viewModel::testJev) { Text("Tester") }
+                    }
+                    if (aiTestResult.isNotBlank()) Text(aiTestResult, style = MaterialTheme.typography.bodySmall, color = palette.accent)
+                    var details by remember { mutableStateOf(false) }
+                    TextButton(onClick = { details = !details }) { Text(if (details) "Masquer ce que reçoit le serveur" else "Ce que reçoit le serveur…") }
+                    if (details) {
+                        Text("Classement : un champ « mode » (${ModeRoutingFeature.modeField.choices.joinToString(", ")}).", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                        Text(ModeRoutingFeature.modeField.description, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                        Text("Formules :", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                        Text(FormulaDraftFeature.systemPrompt, style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = palette.secondary)
+                    }
+                }
+            }
+
+            if (page == "maj") SettingsCard("Mises à jour") {
                 Text("Version installée : ${viewModel.currentVersion}", style = MaterialTheme.typography.bodyMedium)
                 OutlinedTextField(modifier = Modifier.fillMaxWidth(), value = localAppcast, onValueChange = { localAppcast = it }, singleLine = true, label = { Text("Appcast (JSON)") },
                     trailingIcon = { TextButton(onClick = { viewModel.setAppcastUrl(localAppcast) }) { Text("OK") } })
@@ -295,7 +338,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onBack: () -> Unit) {
                 OutlinedButton(onClick = viewModel::checkForUpdates) { Text("Vérifier maintenant") }
             }
 
-            SettingsCard("Avancé") {
+            if (page == "avance") SettingsCard("Avancé") {
                 Text("Export : partage un fichier avec toutes les notes actives.", style = MaterialTheme.typography.bodySmall, color = palette.secondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(modifier = Modifier.weight(1f), onClick = { scope.launch { share(context, "alphanote-export.json", "application/json", viewModel.exportJson()) } }) { Text("JSON") }
@@ -386,4 +429,52 @@ private fun lanStatusText(state: LanSyncCoordinator.State, dateFormat: SimpleDat
     LanSyncCoordinator.State.NotFound -> "Mac introuvable sur ce Wi-Fi : est-il allumé, sur le même réseau ?"
     is LanSyncCoordinator.State.Done -> "Dernière synchro : ${dateFormat.format(Date(state.at))} — ${state.applied} reçue(s), ${state.pushed} envoyée(s)."
     is LanSyncCoordinator.State.Failed -> state.message
+}
+
+private data class SettingsPage(val id: String, val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+private val SETTINGS_PAGES = listOf(
+    SettingsPage("apparence", "Apparence", "Thème, couleurs, taille du texte", Icons.Default.Palette),
+    SettingsPage("notes", "Notes", "Listes, notes vides, suppression", Icons.Default.Description),
+    SettingsPage("minuteur", "Minuteur", "Sonnerie", Icons.Default.Timer),
+    SettingsPage("synchro", "Synchronisation", "Mac sur le Wi-Fi, Nextcloud", Icons.Default.Sync),
+    SettingsPage("coffre", "Coffre", "Notes sécurisées", Icons.Default.Lock),
+    SettingsPage("ia", "Intelligence artificielle", "Modèle local, serveur JEV", Icons.Default.AutoAwesome),
+    SettingsPage("maj", "Mises à jour", "Version installée, vérification", Icons.Default.SystemUpdate),
+    SettingsPage("avance", "Avancé", "Export, sauvegarde", Icons.Default.Tune),
+)
+
+@Composable
+private fun SettingsHome(onOpen: (String) -> Unit) {
+    val palette = LocalAlphaPalette.current
+    Card(colors = CardDefaults.cardColors(containerColor = palette.sidebar)) {
+        Column {
+            SETTINGS_PAGES.forEachIndexed { index, item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { onOpen(item.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Icon(item.icon, contentDescription = null, tint = palette.accent)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(item.title, style = MaterialTheme.typography.bodyLarge, color = palette.text)
+                        Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = palette.secondary)
+                }
+                if (index < SETTINGS_PAGES.lastIndex) androidx.compose.material3.HorizontalDivider(color = palette.line)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EngineRow(title: String, value: String, detail: String) {
+    val palette = LocalAlphaPalette.current
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = palette.accent)
+        }
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = palette.secondary)
+    }
 }

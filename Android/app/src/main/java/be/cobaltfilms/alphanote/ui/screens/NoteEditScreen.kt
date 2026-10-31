@@ -53,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
@@ -195,11 +197,9 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
             ) {
                 IconButton(onClick = leave) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour", tint = palette.secondary) }
                 if (note?.isPinned == true) Icon(Icons.Default.PushPin, contentDescription = null, tint = palette.accent, modifier = Modifier.size(11.dp))
-                Text(
-                    note?.let { displayTitle(it) } ?: "",
-                    color = palette.secondary, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                )
+                // Titre modifiable sur place ; vide = titre automatique (première ligne).
+                if (note != null) NoteTitleField(note, onRename = { viewModel.rename(note, it) }, modifier = Modifier.weight(1f))
+                else Spacer(Modifier.weight(1f))
                 // Note sécurisée fermée : ni IA, ni partage, ni copie.
                 val locked = note != null && note.isVault && !vaultUnlocked
                 if (note != null) {
@@ -293,4 +293,25 @@ private fun shareNote(context: android.content.Context, note: Note, content: Str
         }
     }
     context.startActivity(Intent.createChooser(intent, "Partager la note"))
+}
+
+@Composable
+private fun NoteTitleField(note: Note, onRename: (String) -> Unit, modifier: Modifier = Modifier) {
+    val palette = LocalAlphaPalette.current
+    var draft by remember(note.id) { mutableStateOf(note.title) }
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(note.title) { if (!focused) draft = note.title }
+    val commit = { if (draft.trim() != note.title) onRename(draft.trim()) }
+    val style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = palette.text)
+    androidx.compose.foundation.text.BasicTextField(
+        value = draft, onValueChange = { draft = it }, singleLine = true, textStyle = style,
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { commit() }),
+        modifier = modifier.onFocusChanged { state -> if (focused && !state.isFocused) commit(); focused = state.isFocused },
+        decorationBox = { inner ->
+            if (draft.isEmpty()) Text(displayTitle(note), style = style.copy(color = palette.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            inner()
+        }
+    )
 }

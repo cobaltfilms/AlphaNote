@@ -64,11 +64,18 @@ final class AlphaNoteUITests: XCTestCase {
         snapshot("commande")
     }
 
+    /// Accueil des Réglages : une rubrique par écran.
     func testSettingsOpen() {
         app.buttons["Réglages"].tap()
+        snapshot("réglages")
+        app.buttons["Synchronisation"].tap()
         XCTAssertTrue(app.staticTexts["Nextcloud"].waitForExistence(timeout: 5)
                       || app.staticTexts["NEXTCLOUD"].exists)
-        snapshot("réglages")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["Intelligence artificielle"].tap()
+        let engine = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Modèle local")).firstMatch
+        XCTAssertTrue(engine.waitForExistence(timeout: 5))
+        snapshot("réglages IA")
     }
 
     func testCountdownRingsInDarkTheme() {
@@ -131,6 +138,7 @@ final class AlphaNoteUITests: XCTestCase {
     /// que le picker écrit.
     func testThemePickerSwitchesTheme() {
         app.buttons["Réglages"].tap()
+        app.buttons["Apparence"].tap()
         let picker = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Thème")).firstMatch
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         let target = (picker.label.contains("Sombre")) ? "Clair" : "Sombre"
@@ -151,7 +159,7 @@ final class AlphaNoteUITests: XCTestCase {
             springboard.alerts.buttons.firstMatch.tap()
         }
         XCTAssertTrue(app.buttons["Couleurs, \(swatch)"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Réglages"].exists)
+        XCTAssertTrue(app.staticTexts["Apparence"].exists)
     }
 
     /// App en arrière-plan : la fin du compte à rebours arrive en notification.
@@ -224,5 +232,22 @@ final class AlphaNoteUITests: XCTestCase {
         password.typeText("correct horse\n")
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue((editor.value as? String ?? "").contains("code 4321"))
+    }
+
+    /// Titre modifiable en tête de note, y compris pour un minuteur.
+    func testTimerNoteCanBeTitled() {
+        let editor = newNote()
+        editor.typeText("countdown 0:30")
+        app.buttons["OK"].tap()
+        app.buttons["Mode de la note : TEXTE"].tap()
+        app.buttons["Timer"].tap()
+        let title = app.textFields["noteTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.placeholderValue, "Minuteur")
+        title.tap()
+        title.typeText("Pâtes\n")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["Pâtes"].waitForExistence(timeout: 5))
+        snapshot("minuteur titré")
     }
 }

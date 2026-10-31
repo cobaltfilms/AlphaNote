@@ -3,7 +3,14 @@ import AppKit
 
 struct UpdateSheet: View {
     @ObservedObject var updater: UpdateManager
-    @Environment(\.dismiss) private var dismiss
+    /// Fenêtre autonome (menu « Rechercher des mises à jour… ») : la fermer.
+    /// Sinon la feuille des Réglages se referme d'elle-même.
+    var onClose: (() -> Void)? = nil
+    @Environment(\.dismiss) private var environmentDismiss
+
+    private func dismiss() {
+        if let onClose { onClose() } else { environmentDismiss() }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

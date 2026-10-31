@@ -88,6 +88,12 @@ struct NoteEditScreen: View {
     @ViewBuilder
     private func editor(for note: Note, mode: NoteMode) -> some View {
         VStack(spacing: 0) {
+            NoteTitleField(note: note, font: .title3.weight(.semibold)) { title in
+                store.renameNote(note, to: title)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
             if mode == .timer {
                 timerView(for: note)
                     .padding(.vertical, 12)

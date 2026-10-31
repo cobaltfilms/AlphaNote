@@ -272,7 +272,14 @@ private fun NoteRow(
 @OptIn(ExperimentalFoundationApi::class)
 private fun Modifier.combinedClickableNoRipple(onClick: () -> Unit): Modifier = this.combinedClickable(onClick = onClick)
 
-fun displayTitle(note: Note): String = note.effectiveTitle.ifEmpty { "Note sans titre" }
+fun displayTitle(note: Note): String {
+    val title = note.effectiveTitle.ifEmpty { return "Note sans titre" }
+    // En-tête de mode nu (« timer », « math ») : un nom lisible plutôt que le mot-clé.
+    if (note.title.isEmpty()) MODE_NAMES[title.lowercase()]?.let { return it }
+    return title
+}
+
+private val MODE_NAMES = mapOf("math" to "Calcul", "list" to "Liste", "code" to "Code", "timer" to "Minuteur", "vault" to "Note sécurisée")
 
 fun preview(note: Note): String {
     if (note.isVault) return "Note sécurisée"

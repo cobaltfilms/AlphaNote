@@ -184,13 +184,12 @@ struct NoteListView: View {
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(Palette.accentColor)
                     }
-                    Text(displayTitle(note))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Palette.secondaryColor)
-                        .lineLimit(1)
+                    NoteTitleField(note: note, font: .system(size: 12, weight: .medium)) { title in
+                        store.renameNote(note, to: title)
+                    }
+                    .foregroundStyle(Palette.secondaryColor)
+                    .frame(maxWidth: 260, alignment: .leading)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { beginRename(note) }
             }
 
             Spacer(minLength: 8)

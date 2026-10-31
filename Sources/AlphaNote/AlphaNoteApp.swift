@@ -127,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager = HotkeyManager()
     private var windowController: NoteWindowController?
     private var helpWindowController: NSWindowController?
+    private var updateWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private var appliedHotkey: (UInt32, UInt)?
     private var observers: [NSObjectProtocol] = []
@@ -340,13 +341,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Menu « Rechercher des mises à jour… » : la vérification s'affiche dans
+    /// sa propre fenêtre. (Elle passait par les Réglages, dont la feuille de
+    /// résultat n'existe que sur l'onglet Mises à jour : rien ne s'affichait.)
     @objc private func checkForUpdates() {
-        openSettings()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            Task { @MainActor in
-                UpdateManager.shared.check(userInitiated: true)
-            }
+        NSApp.activate(ignoringOtherApps: true)
+        Task { @MainActor in
+            UpdateManager.shared.check(userInitiated: true)
+            UpdateManager.shared.showingSheet = false
+            showUpdateWindow()
         }
+    }
+
+    @MainActor private func showUpdateWindow() {
+        if let window = updateWindow {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 200),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Mises à jour"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: UpdateSheet(updater: .shared) { [weak self] in
+            self?.updateWindow?.close()
+            self?.updateWindow = nil
+        })
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        updateWindow = window
     }
 
     @objc private func openHelpCenter() {

@@ -28,18 +28,26 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
+            // Une rubrique par écran, comme les Réglages d'iOS : la page
+            // d'accueil reste courte et lisible.
             Form {
-                appearanceSection
-                notesSection
-                timerSection
-                syncSection
-                VaultSettingsSection()
-                Section("Intelligence artificielle") {
-                    NavigationLink("IA et serveur JEV") {
-                        AISettingsView().navigationTitle("IA")
+                Section {
+                    page("Apparence", systemImage: "paintbrush", color: .indigo) { appearanceSection }
+                    page("Notes", systemImage: "note.text", color: .orange) { notesSection }
+                    page("Minuteur", systemImage: "timer", color: .red) { timerSection }
+                }
+                Section {
+                    page("Synchronisation", systemImage: "arrow.triangle.2.circlepath", color: .blue) { syncSection }
+                    page("Coffre", systemImage: "lock.fill", color: .purple) { VaultSettingsSection() }
+                    NavigationLink {
+                        AISettingsView().navigationTitle("Intelligence artificielle")
+                    } label: {
+                        SettingsIcon(title: "Intelligence artificielle", systemImage: "sparkles", color: .teal)
                     }
                 }
-                exportSection
+                Section {
+                    page("Exporter les notes", systemImage: "square.and.arrow.up", color: .gray) { exportSection }
+                }
                 Section {
                     LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
                 }
@@ -56,6 +64,17 @@ struct SettingsView: View {
             .sheet(item: $exportFile) { file in
                 ActivityView(items: [file.url])
             }
+        }
+    }
+
+    private func page<Content: View>(_ title: String, systemImage: String, color: Color,
+                                     @ViewBuilder content: @escaping () -> Content) -> some View {
+        NavigationLink {
+            Form { content() }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        } label: {
+            SettingsIcon(title: title, systemImage: systemImage, color: color)
         }
     }
 
@@ -252,5 +271,24 @@ private struct ExportFile: Identifiable {
 extension Color {
     init(hex: UInt32) {
         self.init(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+}
+
+/// Ligne de rubrique avec pastille colorée, comme dans les Réglages d'iOS.
+private struct SettingsIcon: View {
+    let title: String
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(color, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
     }
 }

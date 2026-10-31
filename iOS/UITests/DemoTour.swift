@@ -135,6 +135,8 @@ final class DemoTour: XCTestCase {
         }
         app.buttons["Réglages"].tap()
         pause()
+        app.buttons["Apparence"].tap()
+        pause()
         choose("Thème", "Sombre")
         choose("Couleurs", "Sauge")
         // iOS confirme le changement d'icône (assortie au thème).
