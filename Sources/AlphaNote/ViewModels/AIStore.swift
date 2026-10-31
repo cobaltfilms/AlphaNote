@@ -91,7 +91,7 @@ final class AIStore {
         }
 
         var draftFailure: String?
-        if AIFeatureGate.isEnabled, FormulaDraftFeature.isEnabled, JEVClient.config() != nil {
+        if FormulaDraftFeature.isEnabled, FormulaDraftFeature.hasDrafter {
             switch await FormulaDraftFeature().draft(question: question) {
             case let .ok(draft):
                 let origin = draft.model.map { "IA (\($0))" } ?? "IA"

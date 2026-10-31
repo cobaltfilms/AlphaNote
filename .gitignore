@@ -36,3 +36,8 @@ design/sounds/
 # iOS : projet régénéré par XcodeGen (iOS/project.yml)
 iOS/AlphaNote.xcodeproj/
 iOS/build/
+
+# ML : environnement Python et sorties d'entraînement (les modèles livrés sont
+# copiés dans Sources/AlphaNote/Resources/ML et Android/app/src/main/assets).
+ml/.venv/
+ml/build/

@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // versionCode = major*10000 + minor*100 + patch (lisible, monotone).
-        versionCode = 400
-        versionName = "0.4.0"
+        versionCode = 500
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -77,6 +77,9 @@ android {
         kotlinCompilerExtensionVersion = "1.5.5"
     }
 
+    // Le modèle TFLite est lu en mémoire projetée : pas de compression.
+    androidResources { noCompress += "tflite" }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -126,6 +129,9 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     // Ouverture du coffre (notes sécurisées) par empreinte ou code de l'appareil.
     implementation("androidx.biometric:biometric:1.1.0")
+    // Classifieur de mode embarqué (ml/train_tflite.py) : JEV devient facultatif.
+    // LiteRT (ex-TensorFlow Lite) : bibliothèques alignées 16 Ko (Android 15+).
+    implementation("com.google.ai.edge.litert:litert:1.4.0")
 
     // Tests unitaires
     testImplementation("junit:junit:4.13.2")

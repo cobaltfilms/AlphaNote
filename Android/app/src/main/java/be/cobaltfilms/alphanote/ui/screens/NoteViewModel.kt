@@ -11,6 +11,7 @@ import be.cobaltfilms.alphanote.ai.JEVClient
 import be.cobaltfilms.alphanote.ai.JEVOutcome
 import be.cobaltfilms.alphanote.ai.KeywordIntentRouter
 import be.cobaltfilms.alphanote.ai.ModeDecision
+import be.cobaltfilms.alphanote.ai.LocalModeClassifier
 import be.cobaltfilms.alphanote.ai.ModeRoutingFeature
 import be.cobaltfilms.alphanote.ai.NoteMode
 import be.cobaltfilms.alphanote.ai.RouteSource
@@ -72,6 +73,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     val lanSync = LanSyncCoordinator(application, repository)
     private val updateManager = UpdateManager(application)
     private val semanticSearchEngine = SemanticSearch()
+    private val localClassifier by lazy { LocalModeClassifier(application) }
     private val converter = Converter()
     private val mathEvaluator = MathEvaluator()
 
@@ -387,7 +389,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 flush()
-                val decision = ModeRoutingFeature.route(trimmed, note?.keyword, _aiSettings.value.config)
+                val decision = ModeRoutingFeature.route(trimmed, note?.keyword, _aiSettings.value.config,
+                    local = { text -> localClassifier.classify(text) })
                 _lastRoute.value = decision
                 val detail = apply(decision, trimmed, note)
                 var message = "Mode ${decision.mode.label} via ${decision.source.label} — $detail"

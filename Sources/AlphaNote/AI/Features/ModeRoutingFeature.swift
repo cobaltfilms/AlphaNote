@@ -26,11 +26,13 @@ enum NoteMode: String, CaseIterable, Sendable {
 
 enum RouteSource: Sendable {
     case jev
+    case local
     case motsCles
 
     var label: String {
         switch self {
         case .jev: return "JEV"
+        case .local: return "modèle local"
         case .motsCles: return "mots-clés"
         }
     }
@@ -100,6 +102,12 @@ struct ModeRoutingFeature {
             case let .erreur(message):
                 echec = message
             }
+        }
+
+        // Sans serveur (ou s'il a échoué) : le modèle local de l'appareil.
+        if let local = LocalModeClassifier.shared.classify(trimmed),
+           local.confidence >= LocalModeClassifier.minimumConfidence {
+            return ModeDecision(mode: local.mode, source: .local, echec: echec)
         }
 
         return ModeDecision(

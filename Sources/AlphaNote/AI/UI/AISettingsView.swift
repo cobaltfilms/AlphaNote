@@ -22,8 +22,10 @@ struct AISettingsView: View {
                 HelpToggle("Activer le routage de mode IA", isOn: $aiEnabled,
                            help: "Le serveur classe la demande dans un mode.")
                 HelpToggle("Laisser l'IA rédiger les formules", isOn: $formulaDraftEnabled,
-                           help: "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par l'IA, puis calculée par la note.")
-                    .disabled(!aiEnabled)
+                           help: AppleFormulaDrafter.isAvailable
+                               ? "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par Apple Intelligence, sur cet appareil, puis calculée par la note."
+                               : "En mode math, une demande en mots (« aire d'un cercle de rayon 3 ») devient une formule écrite par l'IA, puis calculée par la note.")
+                    .disabled(!aiEnabled && !AppleFormulaDrafter.isAvailable)
             } header: {
                 Text("Routage de mode")
             } footer: {

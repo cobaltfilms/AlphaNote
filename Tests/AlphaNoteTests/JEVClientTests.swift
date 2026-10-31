@@ -141,12 +141,13 @@ final class JEVClientTests: XCTestCase {
 
     // MARK: - Routage de mode
 
-    func testModeRoutingFallsBackToKeywordsWhenJEVUnconfigured() async {
+    /// Sans serveur configuré : le modèle embarqué décide (plus les mots-clés).
+    func testModeRoutingFallsBackToLocalModelWhenJEVUnconfigured() async {
         UserDefaults.standard.set(true, forKey: AISettingsKeys.enabled)
         UserDefaults.standard.removeObject(forKey: AISettingsKeys.jevURL)
         let decision = await ModeRoutingFeature().route(question: "12 * 8", noteKeyword: nil)
         XCTAssertEqual(decision.mode, .math)
-        XCTAssertEqual(decision.source, .motsCles)
+        XCTAssertEqual(decision.source, .local)
     }
 
     // MARK: - Jeton Cloudflare Access

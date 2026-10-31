@@ -1,0 +1,831 @@
+split,text,label,jev,p
+train,note : revoir la fin du  scénario,plain,plain,1.0
+train,reference de la banque : 20964,plain,plain,1.0
+train,penser à la lumière du matin pour la scène 3,plain,plain,1.0
+train,on a raté le film ce week-end,plain,plain,1.0
+train,réunion avec le client demain à 18h,plain,plain,1.0
+train,le rendez-vous est annulé la semaine prochaine,plain,plain,1.0
+train,notre livraison arrive mardi,plain,plain,1.0
+train,idee : proposer un atelier etalonnage,plain,plain,1.0
+train,à quoi sert un étalonneur,plain,plain,1.0
+train,citation : la simplicité est la sophistication suprême,plain,plain,1.0
+train,note : revoir la fin du scénario,plain,plain,1.0
+train,référence de la banque : 20964,plain,plain,1.0
+train,Adresse de la banque : rue du midi 8,plain,plain,1.0
+train,mon colis arrive a 9h,plain,plain,1.0
+train,le plombier passe entre 8h et 12h,plain,plain,1.0
+train,référence de Marie : 57118,plain,plain,1.0
+train,idée : proposer un atelier étalonnage,plain,plain,1.0
+train,à reteir : tourner au lever du soleil,plain,plain,1.0
+train,le colis est reporté demain,plain,plain,1.0
+train,j ai vu le concert ce week-end,plain,plain,1.0
+train,réunion avec la banque la semaine prochaine à 11h,plain,plain,1.0
+train,J'ai bien aimé le film d'hier soir,plain,plain,1.0
+train,nous avons adoré la série hier,plain,plain,1.0
+train,j ai adoré la série hiier,plain,plain,1.0
+train,"adresse : 12 rue des Lilas, Bruxelles",plain,plain,1.0
+train,reunion avec Paul lundi,plain,plain,1.0
+train,la colis est reporté demain,plain,plain,1.0
+train,brouillon du mail pour le client,plain,plain,1.0
+train,bonjour,plain,plain,1.0
+train,réunion avec Paul lundi,plain,plain,1.0
+train,code wifi de Marie : voir carnet,plain,code,0.681
+train,le rendez-vous est annule la semaine prochaine,plain,plain,1.0
+train,remarque : revoir la fin du scenario,plain,plain,1.0
+train,déjeuner avec la banque lundi,plain,plain,1.0
+train,Marie préfère le bleu,plain,plain,1.0
+train,le rendez-vous commence mardi,plain,plain,1.0
+train,réplique : « rien ne se perd »,plain,plain,1.0
+train,réunion avec Paul jeudi à 14h,plain,plain,1.0
+train,code wifi de la banque : rue du Midi 8,plain,plain,0.998
+train,on a fini le film,plain,plain,1.0
+train,qui a la mer est salée,plain,plain,1.0
+train,est-ce que les oiseaux migrent,plain,plain,1.0
+train,réunion avec le client lundi,plain,plain,1.0
+train,pourquoi le ciel est bleu,plain,plain,1.0
+train,numéro de commande 4471-AB,plain,plain,0.97
+train,j ai adoré le livre ce matin,plain,plain,1.0
+train,remarque : tourner au lever du soleil,plain,plain,1.0
+train,resume du livre : un homme seul sur Mars,plain,plain,1.0
+train,qu'est-ce qu'on mange ce soir,plain,plain,0.996
+train,référence de la banque : rue du Midi 8,plain,plain,1.0
+train,pensée : tourner au lever du soleil,plain,plain,1.0
+train,le rendez-vous est reporté à mardi,plain,plain,1.0
+train,est-ce que la mer est salée,plain,plain,1.0
+train,le colis est reporte mardi,plain,plain,1.0
+train,le code wifi du bureau est sur le frigo,plain,plain,1.0
+train,téléphone du bureau : rue du Midi 8,plain,plain,1.0
+train,réplique : « le temps file »,plain,plain,1.0
+train,déjeuner avec Paul la semaine prochaine,plain,plain,1.0
+train,ok pour samedi,plain,plain,1.0
+train,pourquoi le film a gagné,plain,plain,1.0
+train,Nous avons commencé le film hier,plain,plain,1.0
+train,réplique  « tout est possible »,plain,plain,1.0
+train,qui a les chats ronronnent,plain,plain,1.0
+train,à retenir : un podcast sur le cinéma belge,plain,plain,1.0
+train,réunion avec le client mardi à 13h,plain,plain,1.0
+train,notre livraison est reporté,plain,plain,1.0
+train,on a fini le film ce week-end,plain,plain,1.0
+train,code wifi du fournisseur : sur le frigo,plain,plain,1.0
+train,j ai adoré la série hier,plain,plain,1.0
+train,mot du jour : sérendipité,plain,plain,1.0
+train,souvenir : la plage de Knokke en 2019,plain,plain,1.0
+train,phrase : « la lumiere fait le film »,plain,plain,1.0
+train,appel avec Marie la semaine prochaine,plain,plain,1.0
+train,le rendez-vous est reporte a mardi,plain,plain,1.0
+train,nous avons vu le projet ce matin,plain,plain,1.0
+train,appel avec Léo la semaine prochaine,plain,plain,1.0
+train,le colis est reporté mardi,plain,plain,1.0
+train,notes de la conférence sur l'étalonnage,plain,plain,1.0
+train,réunion avec Marie mardi à 12h,plain,plain,1.0
+train,nous avons commencé le film hier,plain,plain,1.0
+train,écrire à grand-mère,plain,plain,1.0
+train,numéro client du fournisseur : voir carnet,plain,plain,1.0
+train,Notre livraison est reporté,plain,plain,1.0
+train,comment les oiseaux migrent,plain,plain,1.0
+train,test,plain,plain,1.0
+train,réplique : « tout est possible »,plain,plain,1.0
+train,il pleut depuis trois jours,plain,plain,1.0
+train,numéro client de la banque : voir carnet,plain,plain,1.0
+train,j'ai bien aimé le film d'hier soir,plain,plain,1.0
+train,projet : refaire le site de Cobalt Films,plain,plain,0.992
+train,le tournage est reporté mardi,plain,plain,1.0
+train,comment on dit bonjour,plain,plain,1.0
+train,commenton dit bonjour,plain,plain,1.0
+train,titre possible : Les Heures Claires,plain,plain,1.0
+train,On a raté le film ce week-end,plain,plain,1.0
+train,anniversaire de Léo le 12 avril,plain,plain,1.0
+train,phrase : « rien ne se perd »,plain,plain,1.0
+train,adresse de la banque : voir carnet,plain,plain,1.0
+train,notre rendez-vous se passe bien,plain,plain,1.0
+train,qui a il fait si chaud,plain,plain,1.0
+train,réunion avec Marie lundi,plain,plain,1.0
+train,on a vu la série hier,plain,plain,1.0
+train,adresse du bureau : rue du Midi 8,plain,plain,1.0
+train,déjeuner avec Léo mardi à 11h,plain,plain,1.0
+train,est-ce que il fait si chaud,plain,plain,1.0
+train,note : proposer un atelier étalonnage,plain,plain,1.0
+train,note : tourner au lever du soleil,plain,plain,1.0
+train,réunion avec Marie lundi à 16h,plain,plain,1.0
+train,numéro client du bureau : sur le frigo,plain,plain,1.0
+train,Brouillon du mail pour le client,plain,plain,1.0
+train,mon mixage est reporté,plain,plain,1.0
+train,référence du fournisseur : rue du Midi 8,plain,plain,1.0
+train,le film fait 90 minutes,plain,plain,1.0
+train,Nous avons commencé la série hier,plain,plain,1.0
+train,version 3 du montage validée,plain,plain,1.0
+train,remarque : tester une autre police pour le générique,plain,plain,1.0
+train,à méditer,plain,plain,1.0
+train,citation : « la lumière fait le film »,plain,plain,1.0
+train,citation : « rien ne se perd »,plain,plain,1.0
+train,dejeuner avec la banque lundi,plain,plain,1.0
+train,à retenir : tourner au lever du soleil,plain,plain,1.0
+train,le colis se passe bien à 9h,plain,plain,1.0
+train,la rendez-vous arrive mardi,plain,plain,1.0
+train,nous avons vu la série,plain,plain,1.0
+train,notre rendez-vous se passe bien la semaine prochaine,plain,plain,1.0
+train,mon mixage est reporté mardi,plain,plain,1.0
+train,comment la mer est salée,plain,plain,1.0
+train,on était 12 au dîner,plain,plain,1.0
+train,la réunion a duré 2 heures,plain,plain,1.0
+train,mon colis arrive à 9h,plain,plain,1.0
+train,on a fini le projet,plain,plain,1.0
+train,adresse de la banque : rue du Midi 8,plain,plain,1.0
+train,phrase : « la lumière fait le film »,plain,plain,1.0
+train,focus,timer,timer,0.95
+train,timer 75 mn,timer,timer,1.0
+train,sesion pomodoro,timer,timer,1.0
+train,préviens-moi dans 57 minutes,timer,timer,1.0
+train,programme un chrono,timer,timer,1.0
+train,session de travail de 25 min,timer,timer,1.0
+train,décompte 61 h,timer,timer,1.0
+train,temps de pose 31 minutes,timer,timer,1.0
+train,Rappelle-moi dans 50 minutes,timer,timer,1.0
+train,Temps de pose 23 min,timer,timer,1.0
+train,compte à rebours de 80 mn,timer,timer,1.0
+train,lance un timer de 4 minutes,timer,timer,1.0
+train,démarre un chrono,timer,timer,1.0
+train,compte a rebours 45 secondes,timer,timer,1.0
+train,sonne dans 5 secondees,timer,timer,1.0
+train,crée un timer,timer,timer,1.0
+train,cuisson des œufs 6 minuutes,timer,timer,1.0
+train,mets uun pomodoro,timer,timer,1.0
+train,minuterie 87 secondes,timer,timer,1.0
+train,session pomodoro 32 min,timer,timer,1.0
+train,timer 3 min,timer,timer,1.0
+train,crée un pomodoro de 38 minutes,timer,timer,1.0
+train,compt à rebours 50 secondes,timer,timer,1.0
+train,timer de 43 min,timer,timer,1.0
+train,chrono pour la course,timer,timer,1.0
+train,mets un minuteur pour les pâtes,timer,timer,1.0
+train,préviens-moi dans 37 secondes,timer,timer,1.0
+train,alarme dans 10 minutes,timer,timer,1.0
+train,rapelle-moi dans 16 heures,timer,timer,1.0
+train,crée un pomodoro,timer,timer,1.0
+train,chronommètre,timer,timer,1.0
+train,pomodoro 60 min,timer,timer,1.0
+train,sieste de 34 minutes,timer,timer,1.0
+train,temps de pose de 31 min,timer,timer,1.0
+train,"timer pour le thé, 4 min",timer,timer,1.0
+train,compte à rebours de 9 h,timer,timer,1.0
+train,démarre un timer,timer,timer,1.0
+train,rappelle-moi dans 55 minutes,timer,timer,1.0
+train,compte à rebours 45 secondes,timer,timer,1.0
+train,Minuteur 24 heures,timer,timer,1.0
+train,chrono,timer,timer,1.0
+train,programme un timer,timer,timer,1.0
+train,Minuteur de 8 heures,timer,timer,1.0
+train,mets un compte à rebours de 53 minutes,timer,timer,1.0
+train,lance un chrono,timer,timer,1.0
+train,pause de 11 minutes,timer,timer,1.0
+train,stopwatch pour le footing,timer,timer,1.0
+train,pomodoro 58 min,timer,timer,1.0
+train,temps dee pose de 31 min,timer,timer,1.0
+train,minuteur 3 min,timer,timer,1.0
+train,compte à rebours 50 secondes,timer,timer,1.0
+train,infusion de 42 min,timer,timer,1.0
+train,prviens-moi dans 19 minutes,timer,timer,1.0
+train,timer 53 minutes,timer,timer,1.0
+train,miinuteur 3 min,timer,timer,1.0
+train,rappelle-moi dans 35 secondes,timer,timer,1.0
+train,minuteur 25 minutes,timer,timer,1.0
+train,compte à rebours de 10 minutes,timer,timer,1.0
+train,lance un pomodoro de 50 minutes,timer,timer,1.0
+train,Timer de 43 min,timer,timer,1.0
+train,repos de la pate de 11 minutes,timer,timer,1.0
+train,minuteur 24 heures,timer,timer,1.0
+train,chrono pour le footng,timer,timer,1.0
+train,rappelle-moi dans 2 heures,timer,timer,1.0
+train,minuterie de 27 heures,timer,timer,1.0
+train,sieste de 35 minutes,timer,timer,1.0
+train,chronomètre pour la course,timer,timer,1.0
+train,sonne dans 38 secondes,timer,timer,1.0
+train,rappelle-moi dans 5 minutes,timer,timer,1.0
+train,rappelle-moi dans 50 minutes,timer,timer,1.0
+train,minuteur de 55 heures,timer,timer,1.0
+train,stopwatch pour la course,timer,timer,1.0
+train,lance un pomodoro,timer,timer,1.0
+train,démarre un timer de 56 minutes,timer,timer,1.0
+train,infusion 11 minutes,timer,timer,1.0
+train,pause de 15 min,timer,timer,1.0
+train,crée un minuteur,timer,timer,1.0
+train,crée un chrono de 33 minutes,timer,timer,1.0
+train,mets un compte à rebours,timer,timer,1.0
+train,session pommodoro,timer,timer,1.0
+train,cree un pomodoro de 38 minutes,timer,timer,1.0
+train,session pomodoro 25 min,timer,timer,1.0
+train,programme un pomodoro de 39 minutes,timer,timer,1.0
+train,préviens-oi dans 57 minutes,timer,timer,1.0
+train,session pomodoro 40 min,timer,timer,1.0
+train,minuteur de 9 secondes,timer,timer,1.0
+train,préviens-moi dans 48 heures,timer,timer,1.0
+train,préviens-moi dans 58 heures,timer,timer,1.0
+train,compte à rebours de 77 min,timer,timer,1.0
+train,chronomètre pour la réunion,timer,timer,1.0
+train,previens-moi dans 58 heures,timer,timer,1.0
+train,"compte à rebours jusqu'à la fin de la réunion, 40 minutes",timer,timer,1.0
+train,compte à rebours de 12 mn,timer,timer,1.0
+train,sieste de 42 minutes,timer,timer,1.0
+train,stopwatch,timer,timer,1.0
+train,préviens-moi dans 6 minutes,timer,timer,1.0
+train,chronomètre,timer,timer,1.0
+train,pomodoro,timer,timer,1.0
+train,rappelle-moi dans 17 minutes,timer,timer,1.0
+train,cuisson des œufs 6 minutes,timer,timer,1.0
+train,session pomodoro 52 min,timer,timer,1.0
+train,timer3 min,timer,timer,1.0
+train,chronomètre pour le footing,timer,timer,1.0
+train,mets un pomodoro,timer,timer,1.0
+train,minuteur 1 h 30,timer,timer,1.0
+train,programme un pomodoro,timer,timer,1.0
+train,repos de la pâte de 42 minutes,timer,timer,1.0
+train,infusion 2 min,timer,timer,0.999
+train,compte à rebours 64 heures,timer,timer,1.0
+train,sonne dans 59 minutes,timer,timer,1.0
+train,logement: 126 + 6,math,math,1.0
+train,combien font 218 plus 325,math,math,1.0
+train,2658 dollars to euros,math,math,1.0
+train,aire d'un cercle de rayon 3,math,math,1.0
+train,loyer: 176 + 9,math,math,1.0
+train,combien de heures dans 9 mois,math,math,1.0
+train,pi fois 2,math,math,1.0
+train,périmètre d'un cercle de 7 cm,math,math,1.0
+train,81 % de 589,math,math,1.0
+train,logement: 437 + 2,math,math,1.0
+train,calcule 97 fois 224,math,math,1.0
+train,nombre de minutes dans 15 mois,math,math,1.0
+train,quel est le taux de 382 sur 301,math,math,1.0
+train,repas: 193 * 6,math,math,1.0
+train,hypoténuse d'un triangle de côtés 3 et 4,math,math,1.0
+train,volume d'une sphère de 10 cm de diamètre,math,math,1.0
+train,budget vacances 640 + 170 + 315,math,math,1.0
+train,combien font 389 pieds en mètres,math,math,1.0
+train,297 lb to kg,math,math,1.0
+train,"promo de 56 % sur 30,36 €",math,math,1.0
+train,2 puissance 10,math,math,1.0
+train,combien de secondes dans 60 jours,math,math,1.0
+train,mensualité pour 70000 € sur 25 ans,math,math,1.0
+train,combien fait 492 fois 87,math,math,1.0
+train,convertis 248 mph en km/h,math,math,1.0
+train,"remise de 19 % sur 20,40 €",math,math,1.0
+train,4715 EUR to GBP,math,math,1.0
+train,convertis 76 cm en pouces,math,math,1.0
+train,combien de jours entre le 3 mars et le 20 juin,math,math,1.0
+train,total de 8 jours de location à 59.5 €,math,math,1.0
+train,ajoute 28 % de pourboire à27.3,math,math,1.0
+train,ajoute 25 % de frais à 93,math,math,1.0
+train,"consommation pour 450 km à 6,5 l aux 100",math,math,1.0
+train,"promo de 38 % sur 80,28 €",math,math,1.0
+train,loyer: 176  9,math,plain,0.995
+train,32 % de 3059,math,math,1.0
+train,Quel est le taux de 139 sur 451,math,math,1.0
+train,128 - 115,math,math,1.0
+train,convertis 282 cm en pouces,math,math,1.0
+train,quel est le taux de 139 sur 451,math,math,1.0
+train,mensualité pour 358000 € sur 20 ans,math,math,1.0
+train,quel est le ratio de 159 sur 137,math,math,1.0
+train,ça fait combien 252 moins 234,math,math,1.0
+train,424 EUR en USD,math,math,1.0
+train,rendement de 12 sur 150 en pourcentage,math,math,1.0
+train,25 % de 1807,math,math,1.0
+train,ajoute 20 % de frais à 63,math,math,1.0
+train,taille d'un fichier de 90 min à 50 Mb/s,math,math,1.0
+train,combien fait 67 fois 284,math,math,1.0
+train,combien de secondes dans 55 mois,math,math,1.0
+train,quel est le taux de 462 sur 352,math,math,1.0
+train,30 / 18,math,math,1.0
+train,1903 euros to dollars,math,math,1.0
+train,2 puissannce 10,math,math,1.0
+train,calcule le pourcentage de 294 sur 279,math,math,1.0
+train,débit pour 4 Go en 10 minutes,math,math,1.0
+train,325 x 57,math,math,1.0
+train,600 kmm to mi,math,math,1.0
+train,promo de 52 % sur 13.6 €,math,math,1.0
+train,remboursement mensuel pour 153000 € sur 23 ans,math,math,1.0
+train,2146 dollars to euros,math,math,1.0
+train,Nombre de minutes dans 82 mois,math,math,1.0
+train,ajoute 23 % de pourboire à 33.6,math,math,1.0
+train,mensualité pour 66000 € sur 22 ans,math,math,1.0
+train,"combien de litres dans une piscine de 8 m sur 4 m et 1,5 m de profondeur",math,math,1.0
+train,combien de heures dans 18 heures,math,math,0.985
+train,aire d'un rectangle de 1 cm,math,math,1.0
+train,combien d'images pour 12 secondes à 25 images par seconde,math,math,1.0
+train,4990 USD to EUUR,math,math,1.0
+train,calcule le taux de 422 sur 404,math,math,1.0
+train,600 km to mi,math,math,1.0
+train,calcule le pourcentage de 294 suur 279,math,math,1.0
+train,surface d'un carre de 28 m,math,math,1.0
+train,compte 26 % de TVA à 66,math,math,1.0
+train,convertis 282 ccm en pouces,math,math,1.0
+train,"remise de 28 % sur 8,64 €",math,math,1.0
+train,loyer: 173 + 2,math,math,1.0
+train,prix de 4 places à 94 €,math,math,1.0
+train,prix de 7 menus à 57 €,math,math,1.0
+train,loyer: 445 * 8,math,math,1.0
+train,Quel est le taux de 462 sur 352,math,math,1.0
+train,surface d'un cercle de 24 cm,math,math,1.0
+train,racine carrée de 144,math,math,1.0
+train,"moyenne de 12, 15 et 18",math,math,1.0
+train,nombre de secondes dans 58 heures,math,math,1.0
+train,augmentation de 5 % sur un salaire de 2800,math,math,1.0
+train,combien de secondes dans une journée,math,math,1.0
+train,119 // 245,math,math,1.0
+train,"Compte 23 % de tva à 34,36",math,math,1.0
+train,total de 8 jours de location a 59.5 €,math,math,1.0
+train,73 % de 4441,math,math,1.0
+train,TVA à 21 % sur 1500,math,math,1.0
+train,prix de 12 licences a 37 €,math,math,1.0
+train,convertir 269 km en mi,math,math,1.0
+train,368 oz in g,math,math,1.0
+train,52 % de 4350,math,math,1.0
+train,Périmètre d'un cercle de 7 cm,math,math,1.0
+train,aire d'un cercle de 22 m,math,math,1.0
+train,comien fait 492 fois 87,math,math,1.0
+train,746 oz en g,math,math,1.0
+train,réduction de 42 % sur 8 €,math,math,1.0
+train,convertis 1 To en Go,math,math,1.0
+train,nombre de minutes dans 82 mois,math,math,1.0
+train,1343 yens en euros,math,math,1.0
+train,prmo de 52 % sur 13.6 €,math,math,1.0
+train,95 - 449,math,math,1.0
+train,"reduction de 7 % sur 32,17 €",math,math,1.0
+train,prix TTC de 250 € HT,math,math,1.0
+train,factorielle de 6,math,math,1.0
+train,"compte 23 % de TVA à 34,36",math,math,1.0
+train,compte 15 % de frais à 85,math,math,1.0
+train,TVA a 21 % sur 1500,math,math,1.0
+train,combien de minutes dans 28 jours,math,math,1.0
+train,2 % de 1807,math,math,1.0
+train,diviser 1250 par 7,math,math,1.0
+train,coût de 3 places à 14.5 €,math,math,1.0
+train,total de 5 jours de location a 58.7 €,math,math,1.0
+train,calcule le pourcentage de 295 sur 408,math,math,1.0
+train,291 lb to kg,math,math,1.0
+train,15 % de 80,math,math,1.0
+train,mensualité pour 233000 € sur 6 ans,math,math,1.0
+train,prix de 10 places à 74.5 €,math,math,1.0
+train,4990 USD to EUR,math,math,1.0
+train,prix de 7 jours de location à 39 €,math,math,1.0
+train,combien de minuutes dans 28 jours,math,math,1.0
+train,390 / 18,math,math,1.0
+train,compte 15 % de frais à 25,math,math,1.0
+train,mensualité pour 156000 € sur 8 ans,math,math,1.0
+train,convertir 312 °F en °C,math,math,1.0
+train,59 % de 3622,math,math,1.0
+train,surface d'un triangle de 1 cm,math,math,1.0
+train,prix de 12 licences à 37 €,math,math,1.0
+train,Combien font 314 plus 469,math,math,1.0
+train,surface d'un rectangle de 29 cm,math,math,1.0
+train,"combien coûte 3 pizzas à 12,50 € plus 15 % de pourboire",math,math,1.0
+train,promo de 37 % sur 64 €,math,math,1.0
+train,119 / 245,math,math,1.0
+train,136 litres in gallons,math,math,1.0
+train,promo de 5 % sur 78 €,math,math,1.0
+train,repas: 158 * 3,math,math,1.0
+train,140 x 42,math,math,1.0
+train,combien font 314 plus 469,math,math,1.0
+train,3756 USD en EUR,math,math,1.0
+train,remboursement mensuel pour 49000 € sur 21 ans,math,math,1.0
+train,durée de 3500 images à 24  i/s,math,math,1.0
+train,combien font 3 + 4,math,math,1.0
+train,combien font 149 divisé par 407,math,math,1.0
+train,partage 86 € entre 4 personnes,math,math,1.0
+train,4715 EUR too GBP,math,math,1.0
+train,"écart de prix entre 49,99 et 39,99",math,math,1.0
+train,Pi fois 2,math,math,1.0
+train,combien de heures dans 58 heures,math,math,1.0
+train,sinus de 30 degrés,math,math,1.0
+train,remise de 30 % sr 79 €,math,math,1.0
+train,725 miles en km,math,math,1.0
+train,ca fait combien 190 fois 283,math,math,1.0
+train,augmentation de 5 % sur un salaire  de 2800,math,math,1.0
+train,surface d'un appartement de 6 m sur 9 m,math,math,1.0
+train,combien font 7 heures à 45 € de l'heure,math,math,1.0
+train,combien de minutes dans 26 mois,math,math,1.0
+train,remboursement ensuel pour 251000 € sur 20 ans,math,math,1.0
+train,377 - 39,math,math,1.0
+train,258 km en mi,math,math,1.0
+train,66 % de 2034,math,math,1.0
+train,12 % de 172,math,math,1.0
+train,"total de 10 menus à 72,18 €",math,math,1.0
+train,calcule 17 au carré,math,math,1.0
+train,logement: 112 + 9,math,math,1.0
+train,ça fait combien 190 fois 283,math,math,1.0
+train,périmètre d'un rectangle de 4 m sur 7 m,math,math,1.0
+train,424 EUR een USD,math,math,1.0
+train,calcule le pourcentage de 314 sur 422,math,math,1.0
+train,71 % de 1847,math,math,1.0
+train,mensualité pour 168000 € sur 8 ans,math,math,1.0
+train,surface d'un carré de 28 m,math,math,1.0
+train,73 % de4441,math,math,1.0
+train,18 fois 24,math,math,1.0
+train,671 yens to euros,math,math,1.0
+train,convertir 42 litres en gallons,math,math,1.0
+train,combien me reste-t-il si je dépense 340 sur 1200,math,math,1.0
+train,468 / 448,math,math,1.0
+train,"Liste : papier toilette, courgettes, bananes, steaks",list,list,1.0
+train,recette du pain perdu https://cuisine.journaldesfemmes.fr/recette/315812-pain-perdu,list,list,1.0
+train,ajoute « prendr rendez-vous chez le dentiste »,list,list,1.0
+train,eau gazeuse pain lessive,list,plain,0.903
+train,ce qu il faut pour un gâteau au chocolat,list,list,1.0
+train,fais une check-list pour la rentree,list,list,1.0
+train,"à faire : exporter les rushs, renouveler le passeport, acheter un cadeau, rendre les livres",list,list,1.0
+train,"supermarché : carottes, lessive",list,list,1.0
+train,ajoute « prendre rendez-vous chez le dentiste » a la liste,list,list,1.0
+train,https://www.cuisineaz.com/recettes/tarte-aux-pommes-66173,list,list,1.0
+train,il faut prendre pâtes et eau gazeuse,list,list,1.0
+train,rajoute du farine,list,list,1.0
+train,ingredients pour une quiche,list,list,1.0
+train,"mes tâches : réviser la voiture, ranger le garage, réserver le restaurant, renouveler le passeport",list,list,1.0
+train,ce qu il faut pour une ratatouille,list,list,1.0
+train,les ingrédients d'un tiramisu,list,list,1.0
+train,prépare une todo pour le voyage à LLisbonne,list,list,1.0
+train,mets huile d'olive dans la liste,list,list,1.0
+train,ajoute « réserver le restaurant » à ma todo,list,list,1.0
+train,mets des dentifrice,list,list,0.973
+train,"Tâches : envoyer le devis, appeler le plombier, rendre les livres",list,list,1.0
+train,"courses : lessive, confiture, ail, steaks, lait, fromage",list,list,1.0
+train,"todo : faire le montage, exporter les rushs, rendre les livres, relancer le client",list,list,1.0
+train,liste de courses pour la semaine,list,list,1.0
+train,prépare une todo pour le voyage à Lisbonne,list,list,1.0
+train,prépare une todo pour la rentrée,list,list,1.0
+train,prépare une liste pour le voyage à Lisbonne,list,list,1.0
+train,yaourts bananes ampoules,list,list,0.993
+train,"todo : réserver le restaurant, envoyer le devis, rendre les livres, relancer le client",list,list,1.0
+train,faut racheter yaourts et lait,list,list,1.0
+train,note des steaks,list,plain,1.0
+train,"liste : citrons, thé, dentifrice",list,list,1.0
+train,ajoute « sortir les poubelles » à ma todo,list,list,1.0
+train,"valise : maillot, crème solaire, chargeur",list,list,1.0
+train,rajoute du shampoing à mes courses,list,list,1.0
+train,je dois acheter piles et croquettes,list,list,1.0
+train,cree une check-list pour le demenagement,list,list,1.0
+train,ajoute « relancer le client » aux tâches,list,list,1.0
+train,mes tâches de demain,list,list,1.0
+train,rajoute des salade à la liste,list,list,1.0
+train,ajoute « prendre rendez-vous chez le dentiste » à la liste,list,list,1.0
+train,"supermarché : steaks, ampoules, chocolat, piles",list,list,1.0
+train,"tâches : envoyer le devis, appeler le plombier, rendre les livres",list,list,1.0
+train,crée une check-list pour le déménagement,list,list,1.0
+train,rajoute « préparer la réunion » à la liste,list,list,1.0
+train,note les films à voir,list,list,1.0
+train,ingrédients pour un risotto,list,list,1.0
+train,https://www.cuisineaz.com/recettes/soupe-potiron-35332,list,list,1.0
+train,"liste : pommes, ail, céréales, yaourts",list,list,1.0
+train,fais une check-list pour le départ en vacances,list,list,1.0
+train,"mes tâches : appeler le plombier, rendre les livres, réviser la voiture, faire la déclaration d'impôts",list,list,1.0
+train,"Courses : lessive, confiture, ail, steaks, lait, fromage",list,list,1.0
+train,note de la farine à mes courses,list,list,1.0
+train,fromage carottes eau gazeuse,list,list,0.987
+train,a faire avant vendredi,list,list,0.999
+train,https://www.cuisineaz.com/recettes/quiche-lorraine--26061,list,list,1.0
+train,"cadeaux de Noël : papa, maman, Léo",list,list,1.0
+train,"supermarché : steaks, piles, bananes, oignons, vin rouge",list,list,1.0
+train,farine courgettes sucre,list,list,1.0
+train,cree une liste pour le tournage,list,list,1.0
+train,"courses : café, miel, baananes, croquettes, salade, thé",list,list,1.0
+train,ce qu il faut pour une ratatouile,list,list,1.0
+train,on n'a pls de café,list,plain,1.0
+train,je dois racheter papier toilette et café,list,list,1.0
+train,mets des bananes sur la liste,list,list,1.0
+train,faut prendre courgettes et carottes,list,list,1.0
+train,https://www.cuisineaz.com/recettes/quiche-lorraine-26061,list,list,1.0
+train,fais une check-list pour le voyage a Lisbonne,list,list,1.0
+train,faut acheter pain et miel,list,list,1.0
+train,"liste : bananes, lessive, citrons",list,list,1.0
+train,penser à prendre les clés du local,list,plain,1.0
+train,fais une check-list pour la rentrée,list,list,1.0
+train,saumon dentifrice riz,list,plain,1.0
+train,crée une check-list pour la rentrée,list,list,1.0
+train,on n'a plus de café,list,plain,1.0
+train,"liste : papier toilette, courgettes, bananes, steaks",list,list,1.0
+train,lessive jambon eau gazeuse,list,plain,0.964
+train,faut prendre salade e croquettes,list,list,1.0
+train,crée une check-list pour le tournage,list,list,1.0
+train,crée une todo pour la fête,list,list,1.0
+train,je dois acheter ail et jambon,list,list,1.0
+train,rajoute les oeufs,list,list,1.0
+train,"tâches : payer la facture d'électricité, préparer la réunion, répondre à Marie, réviser la voiture",list,list,1.0
+train,je dois racheter papier toilette et cafe,list,list,1.0
+train,ce qu il faut pour une pizza maison,list,list,1.0
+train,ajoute du pain et du lait,list,list,1.0
+train,beurre bananes steaks,list,plain,0.986
+train,faut prendre salade et croquettes,list,list,1.0
+train,ajoute « prendre rendez-vous chez le dentiste »,list,list,1.0
+train,"à faire : rendre les livres, payer la facture d'électricité, renouveler le passeport",list,list,1.0
+train,"courses : café, miel, bananes, croquettes, salade, thé",list,list,1.0
+train,mets huile d'olive dansla liste,list,list,1.0
+train,ajoute « payer la facture d'électricité »,list,list,0.997
+train,note des bananes à mes courses,list,list,1.0
+train,https://www.750g.com/gratin-dauphinois-r12345.htm,list,list,1.0
+train,https://www.marmiton.org/recettes/boeuf-bourguignon-92923,list,list,1.0
+train,https://www.marmiton.org/recettes/tarte-aux-pommes-17610,list,list,1.0
+train,liste des documents pour la maairie,list,list,1.0
+train,https://www.cuisineaz.comrecettes/boeuf-bourguignon-89295,list,list,1.0
+train,Ce qu il faut pour une pizza maison,list,list,1.0
+train,"supermarché : sucre, piles, œufs, céréales, beurre, tomates",list,list,1.0
+train,ajoute de l'huile d'olive à la liste,list,list,1.0
+train,"à acheter : shampoing, café, papier toilette, vin rouge, huile d'olive",list,list,1.0
+train,"supermarché : céréales, chocolat, tomates, saumon, courgettes",list,list,1.0
+train,ajoute « acheter un cadeau » à la liste,list,list,1.0
+train,"mes tâches : renouveler le passeport, relancer le client, rendre les livres",list,list,1.0
+train,mets du yaourts,list,plain,1.0
+train,crée une liste pour la fête,list,list,1.0
+train,https://www.cuisineaz.com/recettes/lasagnes-a-la-bolognaise-56170.aspx,list,list,1.0
+train,ampoules huile d'olive piles,list,list,0.776
+train,il faut racheter carottes et céréales,list,list,1.0
+train,"todo : appeler maman, payer le loyer",list,list,1.0
+train,https://www.cuisineaz.com/recettes/boeuf-bourguignon-89295,list,list,1.0
+train,crée une liste pour le tournage,list,list,1.0
+train,je dois prendre steaks et poulet,list,list,1.0
+train,https://www.ricardocuisine.com/recettes/chili-con-carne-29898,list,list,1.0
+train,https://www.marmiton.org/recettes/soupe-potiron-70048,list,list,1.0
+train,"à faire : exporter les rushs, acheter un cadeau, envoyer le devis",list,list,1.0
+train,https://www.cuisineaz.com/recettes/boeuf-bourguignon-66575,list,list,1.0
+train,cequ il faut pour une ratatouille,list,list,1.0
+train,étapes pour installer le serveur,list,list,0.993
+train,https://www.cuisineaz.com/recettes/quiche-lorraine-7836,list,list,1.0
+train,à faire avant vendredi,list,list,0.994
+train,ajoute « arroser les plantes » à ma todo,list,list,1.0
+train,Rajoute du shampoing à mes courses,list,list,1.0
+train,il faut prendre ail et farine,list,list,1.0
+train,"supermarché : saumon, confiture, yaourts, vin rouge, ampoules",list,list,1.0
+train,crème fraîche bananes salade,list,plain,0.983
+train,"tâches : répondre à Marie, arroser les plantes, payer la facture d'électricité",list,list,1.0
+train,rajoute « réviser la voiture »,list,list,1.0
+train,"courses : tomates, pâtes, huile",list,list,1.0
+train,croquettes pâtes beurre,list,plain,0.985
+train,eau gazeuse pommes salade,list,plain,1.0
+train,https://www.cuisineaz.com/recettes/quiche-lorraine-49114,list,list,1.0
+train,"Mes tâches : appeler le plombier, rendre les livres, réviser la voiture, faire la déclaration d'impôts",list,list,1.0
+train,https://www.ricardocuisine.com/recettes/tarte-aux-pommes-38990,list,list,1.0
+train,"À acheter : shampoing, café, papier toilette, vin rouge, huile d'olive",list,list,1.0
+train,fais une check-list pour le voyage à Lisbonne,list,list,1.0
+train,"supermarché : carottes, céréales, lait, riz, jambon",list,list,1.0
+train,https://www.cuisineaz.com/recettess/tarte-aux-pommes-66173,list,list,1.0
+train,note riz dans la liste,list,list,1.0
+train,"à faire : répondre à Marie, réviser la voiture, exporter les rushs, envoyer le devis",list,list,1.0
+train,faut racheter croquettes et shampoing,list,list,1.0
+train,prépare une todo pour le tournage,list,list,1.0
+train,génère une requête bash pour télécharger un fichier,code,code,1.0
+train,syntaxe pour faire une requête http en python,code,code,1.0
+train,comment tuer le process sur le port 8080,code,code,0.999
+train,fais une fonction zsh pour télécharger un fichier,code,code,1.0
+train,docker ps -a,code,code,1.0
+train,commande rust pour changer les permissions,code,code,1.0
+train,Génère un snippet python pour parser du json,code,code,1.0
+train,"func add(a: Int, b: Int) -> Int { a + b }",code,code,1.0
+train,comment déclarer un tableau en bash,code,code,1.0
+train,comment faire une requête http en python,code,code,1.0
+train,ffmpeg -i install jq,code,code,1.0
+train,génère un snippet python pour parser du JSON,code,code,1.0
+train,corrige cette fonction bash,code,code,1.0
+train,one-liner swift pour faire un backup,code,code,1.0
+train,docker install jq,code,code,1.0
+train,docker compose pour postgres,code,code,1.0
+train,ffmpeg -i get pods,code,code,1.0
+train,npm get pods,code,code,1.0
+train,la commande python pour compresser un dossier,code,code,1.0
+train,ls -la | grep mp4,code,code,1.0
+train,snippet swift pour lire un fichier,code,code,1.0
+train,fonction javascript debounce,code,code,1.0
+train,debug cette requête python,code,code,1.0
+train,syntaxe pour lire un fichier en swift,code,code,1.0
+train,comment faire une boucle en rust,code,code,1.0
+train,comment faire une boucle en ffmpeg,code,code,1.0
+train,commande python pour extraire l audio,code,code,1.0
+train,def fib(n): return n if n < 2 else fib(n-1) + fib(n-2),code,code,1.0
+train,npm rebase -ii HEAD~3,code,code,1.0
+train,comment gerer une exception en swift,code,code,1.0
+train,syntaxe pour déclarer un tableau en python,code,code,1.0
+train,git ps -a,code,code,1.0
+train,commande kotlin pour extraire l audio,code,code,1.0
+train,debugcette fonction javascript,code,code,1.0
+train,Git input.mov -c:v libx264 out.mp4,code,code,1.0
+train,regex pour un email,code,code,1.0
+train,syntaxe pour faire une requete http en python,code,code,1.0
+train,Génère une requête rust qui compte les mots,code,code,1.0
+train,donne-moi un snippet javascript pour parser du JSON,code,code,1.0
+train,commente cette requête ffmpeg,code,code,1.0
+train,commande zsh pour faire un backup,code,code,1.0
+train,one-liner swift pour faire un bacup,code,code,1.0
+train,debug cette fonction javascript,code,code,1.0
+train,npm status,code,code,1.0
+train,écris un script sql pour redimensionner des images,code,code,1.0
+train,fais une classee rust pour redimensionner des images,code,code,1.0
+train,syntaxe pour faire une boucle en bash,code,code,1.0
+train,docker innstall jq,code,code,1.0
+train,syntaxe pour lire un fichier en ffmpeg,code,code,1.0
+train,syntaxe pour faire une boucle en javascript,code,code,1.0
+train,formate ce script ffmpeg,code,code,1.0
+train,commande go pour faire un backup,code,code,1.0
+train,la commande javascript pour faire un backup,code,code,1.0
+train,commande go pour chercher uun texte récursivement,code,code,1.0
+train,génère une fonction ffmpeg qui trie une liste,code,code,1.0
+train,donne-moi une classe zsh pour redimensionner des images,code,code,1.0
+train,npm rebase -i HEAD~3,code,code,1.0
+train,rangee ce code json,code,code,1.0
+train,génère un snippet kotlin pour parser du JSON,code,code,1.0
+train,corrige ce script bash,code,code,1.0
+train,indente ce code,code,code,1.0
+train,npm rebase -i HEAD3,code,code,1.0
+train,git status,code,code,1.0
+train,one-liner javascript pour chercher un texte récursivement,code,code,1.0
+train,commande go pour chercher un texte récursivement,code,code,1.0
+train,brew get pods,code,code,1.0
+train,corrige cette fonction typescript,code,code,1.0
+train,git rbase -i HEAD~3,code,code,1.0
+train,comment gérer une exception en swift,code,code,1.0
+train,génère une requête python qui lit un CSV,code,code,1.0
+train,ssh-keygen -t ed25519,code,code,1.0
+train,git rebase -i HEAD~3,code,code,1.0
+train,range cette requête javascript,code,code,1.0
+train,npm install jq,code,code,1.0
+train,one-liner ffmpeg pour compresser un dossier,code,code,1.0
+train,écris une fonction python qui inverse une liste,code,code,1.0
+train,commente ce script rust,code,code,1.0
+train,debug cette requete kotlin,code,code,1.0
+train,syntaxe pour faire une boucle en zsh,code,code,1.0
+train,génère une requête rust qui compte les mots,code,code,1.0
+train,syntaxe pour faire une requête http en ffmpeg,code,code,1.0
+train,commande pour trouver les gros fichiers,code,code,1.0
+train,git input.mov -c:v libx264 out.mp4,code,code,1.0
+train,comment faire un rsync incrémental,code,code,1.0
+train,commande ffmpeg pour faire un backup,code,code,1.0
+train,écris une classe rust pour parser du JSON,code,code,1.0
+train,one-liner sql pour compresser un dossier,code,code,1.0
+train,range ce script python,code,code,1.0
+train,SELECT * FROM note WHERE archived = 0,code,code,1.0
+train,donne-moi une classe go pour redimensionner des images,code,code,1.0
+train,commande ffmpeg pour extraire l audio,code,code,1.0
+train,debug cette requete python,code,code,1.0
+train,commande ffmpeg pour convertir en h264,code,code,1.0
+train,const x = arr.map(v => v * 2),code,code,1.0
+train,syntaxe pour faire une requete http en kotlin,code,code,1.0
+train,syntaxe pour faire une requête http en kotlin,code,code,1.0
+train,écris une classe zsh pour redimensionner des images,code,code,1.0
+train,debug cette requête kotlin,code,code,1.0
+test,déjeuner avec le client mardi à 12h,plain,plain,1.0
+test,notes de la conférence sur l'étaonnage,plain,plain,1.0
+test,phrase : « tout est possible »,plain,plain,1.0
+test,pourquoi la mer est salée,plain,plain,1.0
+test,Pourquoi la mer est salée,plain,plain,1.0
+test,idée : tester une autre police pour le générique,plain,plain,1.0
+test,numéro client du fournisseur : sur le frigo,plain,plain,1.0
+test,nous avons commencé la série hier,plain,plain,1.0
+test,on a vu le concert hier,plain,plain,1.0
+test,Phrase : « rien ne se perd »,plain,plain,1.0
+test,résumé du livre : un homme seul sur Mars,plain,plain,1.0
+test,idée : un court-métrage sur un phare abandonné,plain,plain,1.0
+test,Adresse du fournisseur : voir carnet,plain,plain,1.0
+test,on a vu le film hier,plain,plain,1.0
+test,on a vu l film hier,plain,plain,1.0
+test,j ai fini le projet ce week-end,plain,plain,1.0
+test,pensée : proposer un atelier étalonnage,plain,plain,1.0
+test,j'ai couru 10 km ce matin,plain,plain,1.0
+test,Réplique : « le temps file »,plain,plain,1.0
+test,à retenir : proposer un atelier étalonnage,plain,plain,1.0
+test,remarque : revoir la fin du scénario,plain,plain,1.0
+test,appel avec Marie demain à 13h,plain,plain,1.0
+test,Référence de marie : 57118,plain,plain,1.0
+test,citation : « rien ne se perd  »,plain,plain,1.0
+test,adresse du fournisseur : voir carnet,plain,plain,1.0
+test,le chat a encore vomi sur le tapis,plain,plain,1.0
+test,le code wifi du bureau est sur lefrigo,plain,plain,1.0
+test,réunion avec Paul jeudi,plain,plain,1.0
+test,référeence du fournisseur : rue du Midi 8,plain,plain,1.0
+test,"rêve bizarre cette nuit, un train sous l'eau",plain,plain,1.0
+test,pensée : un podcast sur le cinéma belge,plain,plain,1.0
+test,reunion avec le client mardi a 13h,plain,plain,1.0
+test,notre mixage arrive mardi,plain,plain,1.0
+test,pomodoro 40 min,timer,timer,1.0
+test,sonne dans 23 minutes,timer,timer,1.0
+test,crée un ttimer,timer,timer,1.0
+test,rappelle-moi dans 16 heures,timer,timer,1.0
+test,minuteur de 59 secondes,timer,timer,1.0
+test,programme un  chrono,timer,timer,1.0
+test,Chrono pour le footing,timer,timer,1.0
+test,chronoomètre pour le footing,timer,timer,1.0
+test,pause de 45 min,timer,timer,1.0
+test,session pomodoro 47 min,timer,timer,1.0
+test,repos de la pâte de 11 minutes,timer,timer,1.0
+test,compte à rebors de 10 minutes,timer,timer,1.0
+test,sieste de 35 min,timer,timer,1.0
+test,préviens-moi dans 19 minutes,timer,timer,1.0
+test,lance le minuteur,timer,timer,1.0
+test,pause de 13 min,timer,timer,1.0
+test,sieste de 19 min,timer,timer,1.0
+test,chrono pour le footing,timer,timer,1.0
+test,minuteur de 8 heures,timer,timer,1.0
+test,cuisson 45 minutes,timer,timer,1.0
+test,sieste de 20 minutes,timer,timer,1.0
+test,rappelle-moi dans 29 secondes,timer,timer,1.0
+test,sonne dans 5 secondes,timer,timer,1.0
+test,temps de pose 23 min,timer,timer,1.0
+test,repos de la pâte de 31 min,timer,timer,1.0
+test,minuterie 82 s,timer,timer,1.0
+test,session pomodoro,timer,timer,1.0
+test,log de 1000,math,math,1.0
+test,aire d'un carré de 22 m,math,math,1.0
+test,convertis 336 litres en gallons,math,math,1.0
+test,"mensualité d'un prêt de 200000 € sur 20 ans à 3,5 %",math,math,1.0
+test,"total de 5 licences à 2,03 €",math,math,1.0
+test,245 mph in km/h,math,math,1.0
+test,calcule le ratio de 115 sur 335,math,math,1.0
+test,intérêts composés de 1000 € à 4 % pendant 10 ans,math,math,1.0
+test,périmètre d'un riangle de 29 m,math,math,1.0
+test,compte 14 % de frais à 95,math,math,1.0
+test,aire d'un carre de 22 m,math,math,1.0
+test,712 kg en lb,math,math,1.0
+test,compte 15 % de frai à 25,math,math,1.0
+test,surface d'un carré de 23 m,math,math,1.0
+test,remise de 30 % sur 79 €,math,math,1.0
+test,264 * 108,math,math,1.0
+test,promo de 46 % sur 82 €,math,math,1.0
+test,mensualite pour 233000 € sur 6 ans,math,math,1.0
+test,Convertis 248 mph en km/h,math,math,1.0
+test,périmètre d'un triangle de 29 m,math,math,1.0
+test,combien font389 pieds en mètres,math,math,1.0
+test,remboursement mensuel pour 251000 € sur 20 ans,math,math,1.0
+test,loyer: 265 * 5,math,math,1.0
+test,ajoute 20 % de fais à 63,math,math,1.0
+test,ajoute 28 % de pourboire à 27.3,math,math,1.0
+test,calcule le ratio de 149 sur 78,math,math,1.0
+test,remboursement mensuel pour 146000 € sur 15 ans,math,math,1.0
+test,total de 5 jours de location à 58.7 €,math,math,1.0
+test,combien font 290 °C en °F,math,math,1.0
+test,convertis 8 °C en °F,math,math,1.0
+test,81 % de 4589,math,math,1.0
+test,12 % de 2716,math,math,1.0
+test,durée de 3500 images à 24 i/s,math,math,1.0
+test,158 x 393,math,math,1.0
+test,3448 yens to euros,math,math,1.0
+test,ajoute 17 % de frais à 44,math,math,1.0
+test,12 * 8,math,math,1.0
+test,calcule 200 moins 334,math,math,1.0
+test,pourcentage de réduction entre 120 et 90,math,math,1.0
+test,combien font  290 °C en °F,math,math,1.0
+test,combien de secondes dans 60 jurs,math,math,1.0
+test,compte 15 % de frais a 85,math,math,1.0
+test,logement: 360 * 4,math,math,1.0
+test,calcule 413 plus 56,math,math,1.0
+test,"réduction de 7 % sur 32,17 €",math,math,1.0
+test,"a faire : repondre a Marie, reviser la voiture, exporter les rushs, envoyer le devis",list,list,1.0
+test,ingrédients pour une quiche,list,list,1.0
+test,liste des invités pour samedi,list,list,1.0
+test,crée une todo pour le tournage,list,list,1.0
+test,"check-list tournage : batteries, cartes SD, micro",list,list,1.0
+test,"todo : réserver le restaurant, faire la déclaration d'impôts",list,list,1.0
+test,liste des invites pour samedi,list,list,1.0
+test,ingrédients pour un gâteau au chocolat,list,list,1.0
+test,"mes tâches : exporter les rushs, ranger le garage, prendre rendez-vous chez le dentiste, sortir les poubelles",list,list,1.0
+test,note de la salade,list,plain,1.0
+test,sucre steaks lait,list,plain,1.0
+test,"tâches : répondre à Marie, arrosr les plantes, payer la facture d'électricité",list,list,1.0
+test,ce qu il faut pour un risotto,list,list,1.0
+test,https://www.cuisineaz.com/recettes/chili-con-carne-54885,list,list,1.0
+test,cree une todo pour la fete,list,list,1.0
+test,Je dois acheter ail et jambon,list,list,1.0
+test,ampoules sucre oignons,list,plain,1.0
+test,"Liste : citrons, thé, dentifrice",list,list,1.0
+test,note des ail à mes courses,list,list,1.0
+test,faut racheter citrons et salade,list,list,1.0
+test,je dois acheter yaourts et citrons,list,list,1.0
+test,rajoute « exporter les rushs » à la liste,list,list,1.0
+test,faut prendre corgettes et carottes,list,list,1.0
+test,ajoute « rendre les livres »,list,list,1.0
+test,ce qu'il faut emporter au camping,list,list,1.0
+test,ajoute du pommes dans la liste,list,list,1.0
+test,rajoute « prendre rendez-vous chez le dentiste » à ma todo,list,list,1.0
+test,farine thé riz,list,plain,0.96
+test,il faut acheter des piles et des ampoules,list,list,1.0
+test,https://www.marmiton.org/recettes/recette_crepes.aspx,list,list,1.0
+test,ajoute du huile d'olive a mes courses,list,list,1.0
+test,https://www.ricardocuisine.com/recettes/soupe-potiron-85675,list,list,1.0
+test,fais une check-list pour la fête,list,list,1.0
+test,liste des documents pour la mairie,list,list,1.0
+test,ajoute du huile d'olive à mes courses,list,list,1.0
+test,fais une classe rust pour redimensionner des images,code,code,1.0
+test,donne-moi une fonction kotlin qui trie une liste,code,code,1.0
+test,kotlin data class Note(val id: Long),code,code,1.0
+test,requête SQL pour compter les clients par ville,code,code,1.0
+test,syntaxe pour gérer une exception en ffmpeg,code,code,1.0
+test,script bash qui renomme les fichiers en minuscules,code,code,1.0
+test,range ce code json,code,code,1.0
+test,Regex pour un email,code,code,1.0
+test,range cette fonction bash,code,code,1.0
+test,Écris une classe zsh pour redimensionner des images,code,code,1.0
+test,Const x = arr.map(v => v * 2),code,code,1.0
+test,corrige ce code : for i in range(10) print(i),code,code,1.0
+test,git log --oneline -5,code,code,1.0
+test,Range cette requête javascript,code,code,1.0
+test,corrige cette requête typescript,code,code,1.0
+test,optimise cette requête rust,code,code,1.0
+test,boucle for en rust,code,code,1.0
+test,doker install jq,code,code,1.0
+test,fais un script kotlin pour parser du JSON,code,code,1.0
+test,Commande ffmpeg pour faire un backup,code,code,1.0
+test,comment lire un fichier en ffmpeg,code,code,1.0
+test,commande go pour lister les fichiers,code,code,1.0
+test,commente ce script python,code,code,1.0
+test,npm ps -a,code,code,1.0

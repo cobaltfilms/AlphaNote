@@ -192,7 +192,14 @@ locale (embeddings hash-64, aucun réseau).
 
 ### 6.4 IA
 
-- Activation du routage de mode par serveur JEV (désactivé par défaut).
+- Sans serveur, un petit modèle embarqué classe la demande sur l'appareil
+  (toast « via modèle local ») ; les mots-clés ne servent plus qu'en dernier
+  recours.
+- Activation du routage de mode par serveur JEV (désactivé par défaut,
+  facultatif).
+- Rédaction de formules : Apple Intelligence sur l'appareil quand il est
+  disponible (Mac M1 ou plus récent, iPhone 15 Pro ou plus récent), sinon le
+  serveur JEV s'il est configuré.
 - URL du serveur, délai, test.
 - Jeton d'accès (ID et secret) : pour un serveur publié derrière Cloudflare Access
   (ex. `https://jev.cobaltfilms.be`), joignable sans VPN. Le secret reste dans le

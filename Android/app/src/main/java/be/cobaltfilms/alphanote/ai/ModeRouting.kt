@@ -26,7 +26,7 @@ enum class NoteMode(val keyword: String, val label: String, val title: String) {
     }
 }
 
-enum class RouteSource(val label: String) { JEV("JEV"), MOTS_CLES("mots-clés") }
+enum class RouteSource(val label: String) { JEV("JEV"), LOCAL("modèle local"), MOTS_CLES("mots-clés") }
 
 data class ModeDecision(val mode: NoteMode, val source: RouteSource, val echec: String? = null)
 
@@ -50,7 +50,10 @@ Réponds uniquement selon le schéma, sans rédiger. En cas de doute, plain."""
 
     val schema: JEVSchema get() = mapOf("mode" to modeField)
 
-    suspend fun route(question: String, noteKeyword: String?, config: JEVConfig?, transport: JEVTransport = OkHttpJEVTransport): ModeDecision {
+    suspend fun route(
+        question: String, noteKeyword: String?, config: JEVConfig?, transport: JEVTransport = OkHttpJEVTransport,
+        local: ((String) -> LocalModeClassifier.Decision?)? = null
+    ): ModeDecision {
         val trimmed = question.trim()
         if (trimmed.isEmpty()) return ModeDecision(NoteMode.PLAIN, RouteSource.MOTS_CLES)
 
@@ -65,6 +68,10 @@ Réponds uniquement selon le schéma, sans rédiger. En cas de doute, plain."""
                 }
                 is JEVOutcome.Erreur -> echec = outcome.message
             }
+        }
+        // Sans serveur (ou s'il a échoué) : le modèle local du téléphone.
+        local?.invoke(trimmed)?.takeIf { it.confidence >= LocalModeClassifier.MINIMUM_CONFIDENCE }?.let {
+            return ModeDecision(it.mode, RouteSource.LOCAL, echec)
         }
         return ModeDecision(KeywordIntentRouter.classify(trimmed, noteKeyword), RouteSource.MOTS_CLES, echec)
     }

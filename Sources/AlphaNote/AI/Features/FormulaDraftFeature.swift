@@ -42,11 +42,30 @@ struct FormulaDraftFeature {
         UserDefaults.standard.object(forKey: AISettingsKeys.formulaDraftEnabled) as? Bool ?? true
     }
 
+    /// Une source capable de rédiger : Apple Intelligence sur l'appareil, ou
+    /// un serveur JEV configuré (et activé).
+    static var hasDrafter: Bool {
+        AppleFormulaDrafter.isAvailable || (AIFeatureGate.isEnabled && JEVClient.config() != nil)
+    }
+
+    /// Apple Intelligence d'abord (sur l'appareil, hors ligne), sinon JEV.
     func draft(
         question: String,
         transport: JEVTransport = URLSessionJEVTransport()
     ) async -> JEVOutcome<Draft> {
-        guard let config = JEVClient.config() else {
+        if AppleFormulaDrafter.isAvailable {
+            switch await AppleFormulaDrafter.draft(question: question) {
+            case let .ok(lines):
+                if let fault = Self.validate(lines) {
+                    return .erreur("Formule de l'IA rejetée : \(fault).")
+                }
+                return .ok(Draft(lines: lines, model: AppleFormulaDrafter.modelName))
+            case let .erreur(message):
+                // Pas de serveur derrière : l'échec d'Apple est la réponse.
+                guard AIFeatureGate.isEnabled, JEVClient.config() != nil else { return .erreur(message) }
+            }
+        }
+        guard AIFeatureGate.isEnabled, let config = JEVClient.config() else {
             return .erreur("Aucun serveur IA configuré.")
         }
         return await draft(question: question, config: config, transport: transport)
