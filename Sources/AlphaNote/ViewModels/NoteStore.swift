@@ -425,18 +425,28 @@ final class NoteStore: ObservableObject {
     // MARK: - Minuteur
 
     func timerParameters(for note: Note) -> (mode: TimerSession.Mode, seconds: Int) {
+        Self.timerParameters(content: note.content)
+    }
+
+    /// Mode et réglage lus dans la note. Pour une alarme (« alarm 07:30 »),
+    /// `seconds` est l'heure, en secondes depuis minuit.
+    static func timerParameters(content: String) -> (mode: TimerSession.Mode, seconds: Int) {
         var mode: TimerSession.Mode = .countdown
-        var seconds = 600
-        for line in note.content.components(separatedBy: .newlines) {
+        var pair: (Int, Int)?
+        for line in content.components(separatedBy: .newlines) {
             if let detected = TimerSession.Mode(keyword: line) { mode = detected }
             if let match = line.range(of: #"(\d+):(\d{1,2})"#, options: .regularExpression) {
                 let parts = line[match].split(separator: ":")
-                if parts.count == 2, let minutes = Int(parts[0]), let secs = Int(parts[1]) {
-                    seconds = minutes * 60 + secs
+                if parts.count == 2, let first = Int(parts[0]), let second = Int(parts[1]) {
+                    pair = (first, second)
                 }
             }
         }
-        return (mode, seconds)
+        if mode == .alarm {
+            let (hours, minutes) = pair ?? (7, 0)
+            return (mode, TimerSession.normalizedClock(hours * 3600 + minutes * 60))
+        }
+        return (mode, pair.map { $0.0 * 60 + $0.1 } ?? 600)
     }
 
     /// Réglage du minuteur reporté dans la note (« countdown 4:30 ») : l'aperçu
@@ -451,7 +461,11 @@ final class NoteStore: ObservableObject {
     }
 
     static func timerLine(mode: TimerSession.Mode, seconds: Int) -> String {
-        mode == .stopwatch ? mode.rawValue : "\(mode.rawValue) \(seconds / 60):" + String(format: "%02d", seconds % 60)
+        switch mode {
+        case .stopwatch: return mode.rawValue
+        case .alarm: return "\(mode.rawValue) \(TimerSession.clock(seconds))"
+        case .countdown: return "\(mode.rawValue) \(seconds / 60):" + String(format: "%02d", seconds % 60)
+        }
     }
 
     /// Remplace la ligne de réglage (première ligne qui commence par un mode),
@@ -459,7 +473,7 @@ final class NoteStore: ObservableObject {
     static func contentWithTimerLine(_ content: String, mode: TimerSession.Mode, seconds: Int) -> String {
         var lines = content.components(separatedBy: "\n")
         let line = timerLine(mode: mode, seconds: seconds)
-        let modeWords = ["countdown", "stopwatch", "pomodoro", "minuteur", "chrono"]
+        let modeWords = ["countdown", "stopwatch", "alarm", "alarme", "pomodoro", "minuteur", "chrono"]
         if let index = lines.firstIndex(where: { candidate in
             let first = candidate.trimmingCharacters(in: .whitespaces).lowercased().split(separator: " ").first.map(String.init) ?? ""
             return modeWords.contains(first)

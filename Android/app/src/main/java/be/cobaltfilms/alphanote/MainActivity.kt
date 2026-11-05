@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import be.cobaltfilms.alphanote.data.AppSettings
 import be.cobaltfilms.alphanote.data.AppSettingsRepository
+import be.cobaltfilms.alphanote.timer.TimerAlarms
+import be.cobaltfilms.alphanote.timer.TimerRegistry
 import be.cobaltfilms.alphanote.ui.screens.AlphaNoteNavHost
 import be.cobaltfilms.alphanote.ui.screens.SharedTextEvent
 import be.cobaltfilms.alphanote.ui.theme.AlphaNoteTheme
@@ -37,6 +39,17 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        TimerRegistry.shared.appVisible = true
+        TimerAlarms.cancelAllNotifications(this)
+    }
+
+    override fun onStop() {
+        TimerRegistry.shared.appVisible = false
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

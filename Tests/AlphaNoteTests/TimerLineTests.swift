@@ -11,7 +11,37 @@ final class TimerLineTests: XCTestCase {
     }
 
     func testAddsLineUnderHeaderWhenMissing() {
-        XCTAssertEqual(NoteStore.contentWithTimerLine("timer", mode: .pomodoro, seconds: 1500), "timer\npomodoro 25:00")
+        XCTAssertEqual(NoteStore.contentWithTimerLine("timer", mode: .countdown, seconds: 1500), "timer\ncountdown 25:00")
+    }
+
+    func testAlarmLineIsTimeOfDay() {
+        XCTAssertEqual(NoteStore.contentWithTimerLine("timer\ncountdown 5:00", mode: .alarm, seconds: 7 * 3600 + 30 * 60),
+                       "timer\nalarm 07:30")
+        let parameters = NoteStore.timerParameters(content: "timer\nalarm 18:05")
+        XCTAssertEqual(parameters.mode, .alarm)
+        XCTAssertEqual(parameters.seconds, 18 * 3600 + 5 * 60)
+    }
+
+    func testLegacyPomodoroLineReadsAsCountdown() {
+        let parameters = NoteStore.timerParameters(content: "timer\npomodoro 25:00")
+        XCTAssertEqual(parameters.mode, .countdown)
+        XCTAssertEqual(parameters.seconds, 1500)
+        XCTAssertEqual(NoteStore.contentWithTimerLine("timer\npomodoro 25:00", mode: .alarm, seconds: 6 * 3600), "timer\nalarm 06:00")
+    }
+
+    func testAlarmFiresAtNextOccurrence() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Brussels")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 5, hour: 8, minute: 0))!
+        XCTAssertEqual(TimerSession.secondsUntil(9 * 3600, from: now, calendar: calendar), 3600)
+        XCTAssertEqual(TimerSession.secondsUntil(7 * 3600, from: now, calendar: calendar), 23 * 3600, "heure passée : demain")
+    }
+
+    func testLegacyPomodoroSnapshotStillDecodes() throws {
+        let json = #"{"mode":"pomodoro","state":"paused","targetDuration":1500,"elapsed":10}"#
+        let snapshot = try JSONDecoder().decode(TimerSession.Snapshot.self, from: Data(json.utf8))
+        XCTAssertEqual(snapshot.mode, .countdown)
+        XCTAssertNil(snapshot.alarmTime)
     }
 
     func testStopwatchHasNoDuration() {

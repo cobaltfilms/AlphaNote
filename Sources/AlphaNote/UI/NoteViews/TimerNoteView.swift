@@ -4,7 +4,8 @@ import SwiftUI
 /// changer de note, cacher la fenêtre ou relancer l'app n'arrête rien.
 struct TimerNoteView: View {
     @ObservedObject var session: TimerSession
-    /// Mode ou durée changés : la note garde le réglage (« countdown 4:30 »).
+    /// Mode, durée ou heure changés : la note garde le réglage (« countdown 4:30 »,
+    /// « alarm 07:30 »).
     var onSettingsChange: (TimerSession.Mode, TimeInterval) -> Void = { _, _ in }
     @AppStorage("fontSize") private var fontSize: Double = 14
 
@@ -35,7 +36,7 @@ struct TimerNoteView: View {
                     Circle()
                         .trim(from: 0, to: session.progress)
                         .stroke(
-                            session.mode == .pomodoro ? Color(platform: Palette.timer) : Palette.accentColor,
+                            session.mode == .alarm ? Color(platform: Palette.timer) : Palette.accentColor,
                             style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .frame(width: 220, height: 220)
@@ -54,7 +55,15 @@ struct TimerNoteView: View {
                 }
             }
 
-            if session.mode != .stopwatch, session.state == .stopped || session.state == .finished {
+            if session.mode == .alarm {
+                DatePicker("Heure de l'alarme", selection: alarmDateBinding, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    #if os(macOS)
+                    .datePickerStyle(.stepperField)
+                    #endif
+                    .font(.system(size: fontSize))
+                    .help("L'alarme sonne à cette heure, demain si elle est déjà passée.")
+            } else if session.mode != .stopwatch, session.state == .stopped || session.state == .finished {
                 // Grille souple : les boutons passent à la ligne au lieu d'être rognés.
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], spacing: 8) {
                     ForEach(presets, id: \.seconds) { preset in
@@ -95,14 +104,14 @@ struct TimerNoteView: View {
                 Button {
                     session.toggle()
                 } label: {
-                    Image(systemName: session.state == .running ? "pause.fill" : "play.fill")
+                    Image(systemName: playSymbol)
                         .font(.system(size: 20, weight: .semibold))
                         .frame(width: 56, height: 56)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Palette.accentColor)
                 .keyboardShortcut(.space, modifiers: [])
-                .accessibilityLabel(session.state == .running ? "Pause" : "Démarrer")
+                .accessibilityLabel(playLabel)
 
                 Button {
                     session.reset()
@@ -118,8 +127,33 @@ struct TimerNoteView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: session.mode) { _, mode in onSettingsChange(mode, session.targetDuration) }
-        .onChange(of: session.targetDuration) { _, seconds in onSettingsChange(session.mode, seconds) }
+        .onChange(of: session.mode) { _, mode in onSettingsChange(mode, session.settingSeconds) }
+        .onChange(of: session.targetDuration) { _, _ in onSettingsChange(session.mode, session.settingSeconds) }
+        .onChange(of: session.alarmTime) { _, _ in onSettingsChange(session.mode, session.settingSeconds) }
+    }
+
+    private var playSymbol: String {
+        if session.mode == .alarm { return session.state == .running ? "bell.slash.fill" : "bell.fill" }
+        return session.state == .running ? "pause.fill" : "play.fill"
+    }
+
+    private var playLabel: String {
+        if session.mode == .alarm { return session.state == .running ? "Désarmer" : "Armer" }
+        return session.state == .running ? "Pause" : "Démarrer"
+    }
+
+    /// L'heure de l'alarme vue comme une date du jour, pour le sélecteur.
+    private var alarmDateBinding: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(bySettingHour: session.alarmTime / 3600, minute: (session.alarmTime % 3600) / 60,
+                                      second: 0, of: Date()) ?? Date()
+            },
+            set: { date in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                session.setAlarmTime((parts.hour ?? 0) * 3600 + (parts.minute ?? 0) * 60)
+            }
+        )
     }
 
     // Minutes et secondes réglées séparément ; jamais moins de 5 s au total.
@@ -138,6 +172,13 @@ struct TimerNoteView: View {
     }
 
     private var stateLabel: String {
+        if session.mode == .alarm {
+            switch session.state {
+            case .running: return "Sonne dans \(TimerSession.format(session.remaining))"
+            case .finished: return "Alarme"
+            case .stopped, .paused: return "Désarmée"
+            }
+        }
         switch session.state {
         case .stopped: return session.mode == .stopwatch ? "Prêt" : "En attente"
         case .running: return "En cours"

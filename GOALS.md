@@ -36,7 +36,7 @@
 | `math`  | Math  | Inline evaluation on lines ending with `=` |
 | `list`  | List  | Checklist with `/x` checked items, `#` headings |
 | `code`  | Code  | Monospace editor with language hint from title |
-| `timer` | Timer | Stopwatch, countdown, pomodoro |
+| `timer` | Timer | Stopwatch, countdown, alarm (time of day) |
 
 ### Unit & Currency Conversion
 - Parse expressions like `10 km to mi`, `72 kg to lbs`, `100°F to °C`
@@ -176,7 +176,7 @@ Sources/AlphaNote/
 - [x] Math note view with safe evaluator
 - [x] List note view with checkboxes
 - [x] Code note view with monospace font
-- [x] Timer note view (stopwatch/countdown/pomodoro)
+- [x] Timer note view (stopwatch/countdown/alarm)
 - [x] Unit conversion
 - [x] Currency conversion with API cache
 - [x] Global hotkey (⌥A)
@@ -229,7 +229,7 @@ Sources/AlphaNote/
 - [x] Currency conversion (API + cache)
 - [x] Checklist mode
 - [x] Code editor mode
-- [x] Timer modes (stopwatch, countdown, pomodoro)
+- [x] Timer modes (stopwatch, countdown, alarm)
 - [x] Settings (general, appearance, sync, AI, updates, advanced)
 - [ ] OCR paste (Phase 2)
 - [x] Search (Phase 2)

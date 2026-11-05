@@ -105,7 +105,7 @@ struct GeneralSettingsView: View {
                         .help("Écouter")
                     }
                 } label: {
-                    FieldLabel("Sonnerie", help: "Jouée en boucle à la fin d'un minuteur ou d'un pomodoro, jusqu'à ce qu'on l'arrête.")
+                    FieldLabel("Sonnerie", help: "Jouée en boucle à la fin d'un minuteur ou à l'heure d'une alarme, jusqu'à ce qu'on l'arrête.")
                 }
             } header: {
                 Text("Minuteur")

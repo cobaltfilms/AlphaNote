@@ -24,3 +24,7 @@ utilisé : sa pile (tensorflow-text 2.15) n'existe pas pour Apple Silicon.
 
 Résultats au 31/10/2026, sur les 203 phrases de test : Core ML 98,5 %, TFLite
 97,5 %, ancien routeur par mots-clés 51,7 %.
+
+Au 05/11/2026, alarmes à heure fixe ajoutées au mode timer (« réveille-moi à
+7h30 », « alarme à 14h ») et pomodoro retiré : sur les 207 phrases de test,
+Core ML 96,6 %, TFLite 98,1 %.

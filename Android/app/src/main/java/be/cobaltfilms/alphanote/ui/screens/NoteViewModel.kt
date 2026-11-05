@@ -40,6 +40,7 @@ import be.cobaltfilms.alphanote.sync.SyncRunState
 import be.cobaltfilms.alphanote.sync.SyncSettings
 import be.cobaltfilms.alphanote.sync.SyncSettingsRepository
 import be.cobaltfilms.alphanote.timer.TimerRegistry
+import be.cobaltfilms.alphanote.timer.TimerSession
 import be.cobaltfilms.alphanote.update.AppUpdateInfo
 import be.cobaltfilms.alphanote.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
@@ -512,23 +513,32 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 label = if (sec == 0) "Minuteur $min min" else "Minuteur $min min $sec sec"
             }
             KeywordIntentRouter.TimerType.STOPWATCH -> { content = "timer\nstopwatch"; label = "Chronomètre" }
-            KeywordIntentRouter.TimerType.POMODORO -> {
-                val min = totalSeconds / 60
-                content = "timer\npomodoro $min:00"; label = "Pomodoro $min min"
+            KeywordIntentRouter.TimerType.ALARM -> {
+                val clock = TimerSession.clock(totalSeconds)
+                content = "timer\nalarm $clock"; label = "Alarme $clock"
             }
         }
+        val isAlarm = type == KeywordIntentRouter.TimerType.ALARM
+        val done = if (isAlarm) "$label armée." else "$label créé."
         // Note vide (on vient de l'ouvrir pour la demande) : elle devient le minuteur.
         val current = _currentNote.value
         if (current != null && current.content.isBlank()) {
             dirtyNote = null; pendingSave?.cancel()
             replaceCurrent(current, content)
-            return "$label créé."
+            if (isAlarm) armAlarm(current.uuid, totalSeconds)
+            return done
         }
         flush()
         val created = repository.createNote(content, "timer")
         _currentNote.value = created
         _openNote.tryEmit(created.id)
-        return "$label créé."
+        if (isAlarm) armAlarm(created.uuid, totalSeconds)
+        return done
+    }
+
+    /** Une alarme demandée est armée tout de suite, sans attendre « Armer ». */
+    private fun armAlarm(noteUUID: String, alarmTime: Int) {
+        TimerRegistry.shared.session(noteUUID, TimerSession.Mode.ALARM, alarmTime).arm(alarmTime)
     }
 
     private suspend fun applyCode(note: Note?): String {

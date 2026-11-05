@@ -69,7 +69,8 @@ struct ModeRoutingFeature {
         Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste », \
         « https://www.marmiton.org/recettes/recette_crepes.aspx ».
         - timer : la demande veut un minuteur, un compte à rebours, un chronomètre \
-        ou une session pomodoro. Exemples : « minuteur 25 minutes », « lance un chrono ».
+        ou une alarme à une heure donnée. Exemples : « minuteur 25 minutes », « lance un chrono », \
+        « réveille-moi à 7h30 », « alarme à 14h ».
         - code : la demande écrit, corrige ou range un snippet de code ou une commande.
         - plain : cas par défaut — une pensée, une question, du texte, une note \
         qui ne correspond à aucun autre mode.

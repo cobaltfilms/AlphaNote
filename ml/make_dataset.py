@@ -113,20 +113,27 @@ def list_examples():
     ]
     return fixed + [t() for t in templates for _ in range(14)]
 
+def clock_time():
+    h, mm = random.randint(0, 23), pick('00', '15', '30', '45', str(random.randint(1, 59)).zfill(2))
+    return pick(f"{h}h", f"{h}h{mm}", f"{h}:{mm}", f"{h} heures", f"{h}h{mm}")
+
 def timer_examples():
     fixed = [
-        "minuteur 25 minutes", "lance un chrono", "compte à rebours de 10 minutes", "pomodoro", "lance un pomodoro de 50 minutes",
+        "minuteur 25 minutes", "lance un chrono", "compte à rebours de 10 minutes", "réveille-moi à 7h30", "alarme à 14h",
         "rappelle-moi dans 5 minutes", "timer 3 min", "mets un minuteur pour les pâtes", "chronomètre", "démarre un chrono",
         "minuteur 1 h 30", "compte à rebours 45 secondes", "cuisson des œufs 6 minutes", "sieste de 20 minutes",
         "pause de 15 min", "session de travail de 25 min", "alarme dans 10 minutes", "lance le minuteur",
         "compte à rebours jusqu'à la fin de la réunion, 40 minutes", "timer pour le thé, 4 min",
+        "mets une alarme à 6h45", "sonne à 18h15", "réveil à 7 heures", "alarme demain 8h", "fais sonner à midi",
+        "réveille-moi à 6:30", "alarme 7:00", "préviens-moi à 16h pour l'appel",
     ]
     templates = [
         lambda: f"{pick('minuteur', 'timer', 'compte à rebours', 'décompte', 'minuterie')} {pick('de ', '')}{num(1, 90)} {pick('minutes', 'min', 'mn', 'secondes', 's', 'heures', 'h')}",
-        lambda: f"{pick('lance', 'mets', 'démarre', 'programme', 'crée')} un {pick('minuteur', 'timer', 'compte à rebours', 'chrono', 'pomodoro')}{pick('', ' de ' + num(1, 60) + ' minutes')}",
+        lambda: f"{pick('lance', 'mets', 'démarre', 'programme', 'crée')} un {pick('minuteur', 'timer', 'compte à rebours', 'chrono')}{pick('', ' de ' + num(1, 60) + ' minutes')}",
         lambda: f"{pick('rappelle-moi', 'préviens-moi', 'sonne')} dans {num(1, 60)} {pick('minutes', 'secondes', 'heures')}",
         lambda: f"{pick('cuisson', 'infusion', 'pause', 'sieste', 'repos de la pâte', 'temps de pose')} {pick('de ', '')}{num(2, 45)} {pick('min', 'minutes')}",
-        lambda: f"{pick('pomodoro', 'session pomodoro', 'focus')} {pick('', num(15, 60) + ' min')}".strip(),
+        lambda: f"{pick('réveille-moi', 'alarme', 'mets une alarme', 'réveil', 'sonne', 'fais sonner', 'rappelle-moi', 'préviens-moi')} {pick('à', 'pour', 'vers', 'demain à')} {clock_time()}",
+        lambda: f"{pick('alarme', 'réveil', 'mets une alarme', 'programme une alarme')} {pick('', 'à ')}{pick('midi', 'minuit', str(random.randint(5, 9)) + 'h', str(random.randint(5, 9)) + 'h30')}{pick('', ' demain', ' pour le train', ' pour le rendez-vous')}",
         lambda: f"{pick('chrono', 'chronomètre', 'stopwatch')} {pick('', 'pour la course', 'pour le footing', 'pour la réunion')}".strip(),
         lambda: f"{pick('mets', 'lance', 'démarre', 'fais')} un compte à rebours {pick('de', 'sur')} {num(1, 90)} {pick('minutes', 'secondes', 'min')}",
         lambda: f"{pick('dans', 'pendant')} {num(2, 60)} minutes {pick('préviens-moi', 'fais sonner', 'sonne')}",

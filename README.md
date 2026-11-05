@@ -18,7 +18,7 @@ between thoughts.
 - **One editor for every mode** — `math`, `list`, `code` or `timer` on the first line just decorates the text; no focus loss
 - **Live math** — variables, inline results, functions, percent, units, currencies (async rates)
 - **Checklists** — click the margin to tick, `- ` bullets continue on Enter
-- **Timers** — countdown / stopwatch / pomodoro that survive note switches and relaunch
+- **Timers** — countdown / stopwatch / alarm at a given time, that survive note switches and relaunch
 - **⌘K natural-language routing** — a JEV decision server *classifies* the request, local code applies it; keyword fallback shown on screen
 - **Overlay note list** (⌥⌘L) with text + local semantic search, pins and archive
 - **Local SQLite persistence** (debounced writes) + optional Nextcloud sync (ETag-aware)

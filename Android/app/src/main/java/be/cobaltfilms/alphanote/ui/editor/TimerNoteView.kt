@@ -1,5 +1,10 @@
 package be.cobaltfilms.alphanote.ui.editor
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -19,12 +25,19 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
@@ -48,8 +61,37 @@ fun TimerNoteView(
     val palette = LocalAlphaPalette.current
     val snapshot by session.snapshot.collectAsState()
     val presets = listOf(5, 10, 15, 25, 45, 60)
-    LaunchedEffect(snapshot.mode, snapshot.targetSeconds) {
-        onSettingsChange(snapshot.mode, snapshot.targetSeconds.roundToInt())
+    val isAlarm = snapshot.mode == TimerSession.Mode.ALARM
+    var pickingTime by remember { mutableStateOf(false) }
+    // App fermée, c'est une notification qui sonne : Android 13+ demande l'accord.
+    val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(snapshot.state) {
+        if (snapshot.state == TimerSession.State.RUNNING && snapshot.mode != TimerSession.Mode.STOPWATCH &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LaunchedEffect(snapshot.mode, snapshot.targetSeconds, snapshot.alarmTime) {
+        onSettingsChange(snapshot.mode, if (isAlarm) snapshot.alarmTime else snapshot.targetSeconds.roundToInt())
+    }
+    if (pickingTime) {
+        val pickerState = rememberTimePickerState(
+            initialHour = snapshot.alarmTime / 3600, initialMinute = (snapshot.alarmTime % 3600) / 60, is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { pickingTime = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    session.setAlarmTime(pickerState.hour * 3600 + pickerState.minute * 60)
+                    pickingTime = false
+                }) { Text("OK", color = palette.accent) }
+            },
+            dismissButton = { TextButton(onClick = { pickingTime = false }) { Text("Annuler", color = palette.secondary) } },
+            text = { TimePicker(state = pickerState) }
+        )
     }
 
     Column(
@@ -90,7 +132,11 @@ fun TimerNoteView(
                     color = if (snapshot.state == TimerSession.State.FINISHED) palette.timer else palette.text
                 )
                 Text(
-                    when (snapshot.state) {
+                    if (isAlarm) when (snapshot.state) {
+                        TimerSession.State.RUNNING -> "sonne dans ${TimerSession.format(session.remaining)}"
+                        TimerSession.State.FINISHED -> "alarme"
+                        else -> "désarmée"
+                    } else when (snapshot.state) {
                         TimerSession.State.RUNNING -> "en cours"
                         TimerSession.State.PAUSED -> "en pause"
                         TimerSession.State.FINISHED -> "terminé"
@@ -112,7 +158,9 @@ fun TimerNoteView(
                 onClick = { session.toggle() },
                 colors = ButtonDefaults.buttonColors(containerColor = palette.accent, contentColor = palette.window)
             ) {
-                Text(when (snapshot.state) {
+                Text(if (isAlarm) {
+                    if (snapshot.state == TimerSession.State.RUNNING) "Désarmer" else "Armer"
+                } else when (snapshot.state) {
                     TimerSession.State.RUNNING -> "Pause"
                     TimerSession.State.PAUSED -> "Reprendre"
                     TimerSession.State.FINISHED -> "Recommencer"
@@ -122,7 +170,13 @@ fun TimerNoteView(
             OutlinedButton(onClick = { session.reset() }) { Text("Réinitialiser", color = palette.secondary) }
         }
 
-        if (snapshot.mode != TimerSession.Mode.STOPWATCH && snapshot.state != TimerSession.State.RUNNING) {
+        if (isAlarm) {
+            Spacer(Modifier.height(4.dp))
+            Text("Heure de l'alarme — demain si elle est passée", color = palette.secondary, fontSize = 12.sp)
+            OutlinedButton(onClick = { pickingTime = true }) {
+                Text(TimerSession.clock(snapshot.alarmTime), color = palette.text, fontFamily = FontFamily.Monospace, fontSize = 18.sp)
+            }
+        } else if (snapshot.mode != TimerSession.Mode.STOPWATCH && snapshot.state != TimerSession.State.RUNNING) {
             Spacer(Modifier.height(4.dp))
             Text("Durée", color = palette.secondary, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Dictée de la barre de commande -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Minuteurs et alarmes qui sonnent app fermée (timer/TimerAlarms.kt) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Android 11+ : rendre visible le service de reconnaissance vocale -->
     <queries>
@@ -123,6 +128,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <receiver android:name=".timer.TimerAlarmReceiver" android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

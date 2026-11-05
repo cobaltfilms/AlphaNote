@@ -299,7 +299,8 @@ private enum HelpSection: String, CaseIterable, Identifiable {
 
             ## `timer`
 
-            - Minuteur, chrono ou pomodoro ; préréglages 5 à 60 min, réglage fin à la seconde (pas de 5 s).
+            - Minuteur, chrono ou alarme ; préréglages 5 à 60 min, réglage fin à la seconde (pas de 5 s).
+            - Alarme : sonne à l'heure choisie (demain si elle est passée). « réveille-moi à 7h30 » la crée et l'arme.
             - Le minuteur continue si vous changez de note ou cachez la fenêtre, et survit au redémarrage.
             - À la fin : sonnerie en boucle jusqu'à « Arrêter la sonnerie », et l'icône du Dock rebondit. Sonnerie au choix dans Réglages › Général › Minuteur (▶︎ pour écouter).
             """

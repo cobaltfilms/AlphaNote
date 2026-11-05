@@ -43,7 +43,7 @@ Réponds uniquement selon le schéma, sans rédiger. En cas de doute, plain."""
         description = """Le mode que la demande appelle.
 - math : la demande cherche un résultat chiffré — calcul, pourcentage, réduction, écart de prix, conversion d'unités ou de devises, ou une formule décrite en mots (aire, volume, mensualité, intérêts…). Exemples : « 12 * 8 », « pourcentage de réduction entre 120 et 90 », « 10 km to mi », « aire d'un cercle de rayon 3 ».
 - list : la demande veut une liste, une check-list, des tâches, des courses, des ingrédients, ajouter des éléments à une liste, ou contient le lien d'une recette (ses ingrédients deviennent la liste). Exemples : « courses : tomates, pâtes, huile », « ajoute de l'huile d'olive à la liste », « https://www.marmiton.org/recettes/recette_crepes.aspx ».
-- timer : la demande veut un minuteur, un compte à rebours, un chronomètre ou une session pomodoro. Exemples : « minuteur 25 minutes », « lance un chrono ».
+- timer : la demande veut un minuteur, un compte à rebours, un chronomètre ou une alarme à une heure donnée. Exemples : « minuteur 25 minutes », « lance un chrono », « réveille-moi à 7h30 », « alarme à 14h ».
 - code : la demande écrit, corrige ou range un snippet de code ou une commande.
 - plain : cas par défaut — une pensée, une question, du texte, une note qui ne correspond à aucun autre mode."""
     )
@@ -79,7 +79,8 @@ Réponds uniquement selon le schéma, sans rédiger. En cas de doute, plain."""
 
 /** Routage de secours par mots-clés — port de AI/KeywordIntentRouter.swift. */
 object KeywordIntentRouter {
-    enum class TimerType { COUNTDOWN, STOPWATCH, POMODORO }
+    /** ALARM : sonne à une heure donnée ; la valeur associée = secondes depuis minuit. */
+    enum class TimerType { COUNTDOWN, STOPWATCH, ALARM }
 
     fun classify(question: String, noteKeyword: String?): NoteMode = when {
         // Un lien = une recette à lire en liste ; avant les maths, qu'une URL
@@ -112,8 +113,10 @@ object KeywordIntentRouter {
     fun isTimerRequest(question: String, noteKeyword: String?): Boolean {
         if (noteKeyword.orEmpty().lowercase() == "timer") return true
         val query = normalized(question)
-        val markers = listOf("timer", "minuteur", "chrono", "pomodoro", "countdown", "stopwatch")
+        val markers = listOf("timer", "minuteur", "chrono", "countdown", "stopwatch", "alarme", "alarm", "reveil")
         if (markers.any { query.contains(it) }) return true
+        // « à 7h30 », « vers 14:15 » : une heure, donc une alarme.
+        if (Regex("\\b(a|vers|pour)\\s+\\d{1,2}\\s*(h|:)\\s*\\d{0,2}\\b").containsMatchIn(query)) return true
         val patterns = listOf(Regex("\\d+\\s*(min|minute|mn)\\b"), Regex("\\d+\\s*(sec|secondes?)\\b"), Regex("\\d+\\s*(h|heure|hour)s?\\b"))
         return patterns.any { it.containsMatchIn(query) }
     }
@@ -121,8 +124,8 @@ object KeywordIntentRouter {
     fun parseTimerRequest(question: String): Pair<TimerType, Int> {
         val query = normalized(question)
         val type = when {
-            query.contains("pomodoro") -> TimerType.POMODORO
             query.contains("stopwatch") || query.contains("chrono") -> TimerType.STOPWATCH
+            isAlarmRequest(query) -> return TimerType.ALARM to (alarmTime(question) ?: (7 * 3600))
             else -> TimerType.COUNTDOWN
         }
         var totalSeconds = 0
@@ -143,6 +146,33 @@ object KeywordIntentRouter {
         }
         if (totalSeconds == 0) totalSeconds = 10 * 60
         return type to totalSeconds
+    }
+
+    /**
+     * Une heure de la journée plutôt qu'une durée : « réveille-moi à 7h »,
+     * « alarme 6:45 », « sonne à 18h ». « alarme dans 10 minutes » reste un
+     * minuteur, comme « minuteur pour 2h ». Port de KeywordIntentRouter.swift.
+     */
+    private fun isAlarmRequest(query: String): Boolean {
+        if (query.contains("dans ") || query.contains("pendant ")) return false
+        if (listOf("alarme", "alarm", "reveil").any { query.contains(it) }) return true
+        val durationWords = listOf("minuteur", "timer", "countdown", "compte a rebours", "decompte", "minuterie")
+        if (durationWords.any { query.contains(it) }) return false
+        return Regex("\\b(a|vers|pour)\\s+(\\d{1,2}\\s*(h|:)|midi\\b|minuit\\b)").containsMatchIn(query)
+    }
+
+    /** Heure lue dans la demande, en secondes depuis minuit. */
+    fun alarmTime(question: String): Int? {
+        val query = normalized(question)
+        if (Regex("\\bmidi\\b").containsMatchIn(query)) return 12 * 3600
+        if (Regex("\\bminuit\\b").containsMatchIn(query)) return 0
+        val match = Regex("(\\d{1,2})\\s*(?:h|:|heures?)\\s*(\\d{1,2})?").find(query) ?: return null
+        var hours = match.groupValues[1].toIntOrNull() ?: return null
+        val minutes = match.groupValues[2].toIntOrNull() ?: 0
+        if (hours >= 24 || minutes >= 60) return null
+        val evening = Regex("\\bdu soir\\b|apres-midi|\\d\\s*pm\\b|\\bpm\\b").containsMatchIn(query)
+        if (evening && hours < 12) hours += 12
+        return hours * 3600 + minutes * 60
     }
 
     fun normalized(text: String): String =

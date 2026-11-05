@@ -203,10 +203,10 @@ final class AIStore {
         case .stopwatch:
             content = "timer\nstopwatch"
             label = "Chronomètre"
-        case .pomodoro:
-            let min = totalSeconds / 60
-            content = "timer\npomodoro \(min):00"
-            label = "Pomodoro \(min) min"
+        case .alarm:
+            let clock = TimerSession.clock(totalSeconds)
+            content = "timer\nalarm \(clock)"
+            label = "Alarme \(clock)"
         }
 
         // Note vide (ouverte pour la demande) : elle devient le minuteur, au
@@ -215,12 +215,27 @@ final class AIStore {
             var updated = current
             updated.content = content
             noteStore.updateNote(updated)
-            return "\(label) créé."
+            armIfAlarm(timerType, totalSeconds, noteUUID: updated.uuid)
+            return timerConfirmation(timerType, label: label)
         }
         guard noteStore.createNote(keyword: "timer", content: content) else {
             return "Création impossible."
         }
-        return "\(label) créé."
+        if let created = currentNote { armIfAlarm(timerType, totalSeconds, noteUUID: created.uuid) }
+        return timerConfirmation(timerType, label: label)
+    }
+
+    /// Une alarme demandée est armée tout de suite : on n'attend pas qu'on
+    /// appuie sur « Armer » pour qu'elle sonne.
+    private func armIfAlarm(_ type: KeywordIntentRouter.TimerType, _ alarmTime: Int, noteUUID: String) {
+        guard type == .alarm else { return }
+        TimerRegistry.shared
+            .session(for: noteUUID, defaultMode: .alarm, defaultSeconds: alarmTime)
+            .arm(alarmTime: alarmTime)
+    }
+
+    private func timerConfirmation(_ type: KeywordIntentRouter.TimerType, label: String) -> String {
+        type == .alarm ? "\(label) armée." : "\(label) créé."
     }
 
     private func applyCode(to note: Note) -> String {

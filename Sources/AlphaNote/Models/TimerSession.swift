@@ -14,22 +14,29 @@ import Combine
 @MainActor
 final class TimerSession: ObservableObject, Identifiable {
     enum Mode: String, CaseIterable, Codable {
-        case stopwatch, countdown, pomodoro
+        /// `alarm` : sonne à une heure donnée (« alarm 07:30 »), pas après une durée.
+        case stopwatch, countdown, alarm
 
         var label: String {
             switch self {
             case .stopwatch: return "Chrono"
             case .countdown: return "Minuteur"
-            case .pomodoro: return "Pomodoro"
+            case .alarm: return "Alarme"
             }
         }
 
         init?(keyword: String) {
             let lower = keyword.lowercased()
-            if lower.contains("pomodoro") { self = .pomodoro }
+            if lower.contains("alarm") { self = .alarm }
             else if lower.contains("stopwatch") || lower.contains("chrono") { self = .stopwatch }
-            else if lower.contains("countdown") || lower.contains("minuteur") { self = .countdown }
+            // « pomodoro » : ancien mode, relu comme un minuteur.
+            else if lower.contains("countdown") || lower.contains("minuteur") || lower.contains("pomodoro") { self = .countdown }
             else { return nil }
+        }
+
+        init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Mode(rawValue: raw) ?? .countdown
         }
     }
 
@@ -44,15 +51,18 @@ final class TimerSession: ObservableObject, Identifiable {
     @Published private(set) var targetDuration: TimeInterval
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var isSoundPlaying = false
+    /// Heure de l'alarme, en secondes depuis minuit (mode `alarm`).
+    @Published private(set) var alarmTime: Int
 
     private var runStartDate: Date?
     private var tick: Timer?
     private let alarm = AlarmPlayer()
 
-    init(id: String, mode: Mode, targetDuration: TimeInterval) {
+    init(id: String, mode: Mode, targetDuration: TimeInterval, alarmTime: Int = 7 * 3600) {
         self.id = id
         self.mode = mode
         self.targetDuration = targetDuration
+        self.alarmTime = Self.normalizedClock(alarmTime)
     }
 
     // MARK: - Lecture
@@ -60,8 +70,14 @@ final class TimerSession: ObservableObject, Identifiable {
     var remaining: TimeInterval { max(0, targetDuration - elapsed) }
 
     var displayTime: String {
+        if mode == .alarm { return Self.clock(alarmTime) }
         let total = mode == .stopwatch ? elapsed : remaining
         return Self.format(total)
+    }
+
+    /// Valeur écrite dans la note : la durée, ou l'heure pour une alarme.
+    var settingSeconds: TimeInterval {
+        mode == .alarm ? TimeInterval(alarmTime) : targetDuration
     }
 
     var progress: Double {
@@ -73,10 +89,31 @@ final class TimerSession: ObservableObject, Identifiable {
 
     func setMode(_ newMode: Mode) {
         guard newMode != mode else { return }
+        let leavingAlarm = mode == .alarm
         mode = newMode
         reset()
-        if newMode == .pomodoro { targetDuration = 25 * 60 }
+        // La durée servait au compte à rebours jusqu'à l'alarme.
+        if leavingAlarm { targetDuration = 10 * 60 }
         persist()
+    }
+
+    /// Change l'heure de l'alarme ; armée, elle se recale sur la nouvelle heure.
+    func setAlarmTime(_ secondsSinceMidnight: Int) {
+        alarmTime = Self.normalizedClock(secondsSinceMidnight)
+        if mode == .alarm, state == .running {
+            elapsed = 0
+            runStartDate = Date()
+            targetDuration = Self.secondsUntil(alarmTime)
+        }
+        persist()
+    }
+
+    /// Passe en alarme à cette heure et l'arme (demande en langage naturel).
+    func arm(alarmTime secondsSinceMidnight: Int) {
+        if mode != .alarm { setMode(.alarm) }
+        reset()
+        alarmTime = Self.normalizedClock(secondsSinceMidnight)
+        start()
     }
 
     func setTargetDuration(_ seconds: TimeInterval) {
@@ -89,7 +126,8 @@ final class TimerSession: ObservableObject, Identifiable {
 
     func toggle() {
         switch state {
-        case .running: pause()
+        // Une alarme ne se met pas en pause : on la désarme.
+        case .running: mode == .alarm ? reset() : pause()
         case .stopped, .paused: start()
         case .finished:
             reset()
@@ -100,6 +138,10 @@ final class TimerSession: ObservableObject, Identifiable {
     func start() {
         guard state != .running else { return }
         stopSound()
+        if mode == .alarm {
+            elapsed = 0
+            targetDuration = Self.secondsUntil(alarmTime)
+        }
         runStartDate = Date()
         state = .running
         scheduleTick()
@@ -187,6 +229,27 @@ final class TimerSession: ObservableObject, Identifiable {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
+    /// « 07:30 » pour 27 000 s depuis minuit.
+    static func clock(_ secondsSinceMidnight: Int) -> String {
+        let value = normalizedClock(secondsSinceMidnight)
+        return String(format: "%02d:%02d", value / 3600, (value % 3600) / 60)
+    }
+
+    static func normalizedClock(_ seconds: Int) -> Int {
+        let day = 24 * 3600
+        return ((seconds / 60 * 60) % day + day) % day
+    }
+
+    /// Délai jusqu'à la prochaine occurrence de l'heure (demain si elle est passée).
+    static func secondsUntil(_ secondsSinceMidnight: Int, from now: Date = Date(), calendar: Calendar = .current) -> TimeInterval {
+        let value = normalizedClock(secondsSinceMidnight)
+        let components = DateComponents(hour: value / 3600, minute: (value % 3600) / 60, second: 0)
+        guard let next = calendar.nextDate(after: now, matching: components, matchingPolicy: .nextTime) else {
+            return 24 * 3600
+        }
+        return max(1, next.timeIntervalSince(now))
+    }
+
     // MARK: - Persistance
 
     struct Snapshot: Codable {
@@ -195,14 +258,16 @@ final class TimerSession: ObservableObject, Identifiable {
         let targetDuration: TimeInterval
         let elapsed: TimeInterval
         let runStartDate: Date?
+        var alarmTime: Int? = nil
     }
 
     func snapshot() -> Snapshot {
-        Snapshot(mode: mode, state: state, targetDuration: targetDuration, elapsed: elapsed, runStartDate: runStartDate)
+        Snapshot(mode: mode, state: state, targetDuration: targetDuration, elapsed: elapsed, runStartDate: runStartDate, alarmTime: alarmTime)
     }
 
     func restore(from snapshot: Snapshot) {
         mode = snapshot.mode
+        if let saved = snapshot.alarmTime { alarmTime = Self.normalizedClock(saved) }
         targetDuration = snapshot.targetDuration
         elapsed = snapshot.elapsed
         state = snapshot.state
@@ -240,7 +305,10 @@ final class TimerRegistry {
         if let existing = sessions[noteUUID] {
             return existing
         }
-        let session = TimerSession(id: noteUUID, mode: defaultMode, targetDuration: TimeInterval(defaultSeconds))
+        // Pour une alarme, defaultSeconds est l'heure (secondes depuis minuit).
+        let session = defaultMode == .alarm
+            ? TimerSession(id: noteUUID, mode: .alarm, targetDuration: 10 * 60, alarmTime: defaultSeconds)
+            : TimerSession(id: noteUUID, mode: defaultMode, targetDuration: TimeInterval(defaultSeconds))
         if let snapshot = storedSnapshots()[noteUUID] {
             session.restore(from: snapshot)
         }

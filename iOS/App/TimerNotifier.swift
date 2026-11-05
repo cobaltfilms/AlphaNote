@@ -52,7 +52,7 @@ final class TimerNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func content(for session: TimerSession, sound: UNNotificationSound?) -> UNNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = session.mode == .pomodoro ? "Pomodoro terminé" : "Minuteur terminé"
+        content.title = session.mode == .alarm ? "Alarme \(TimerSession.clock(session.alarmTime))" : "Minuteur terminé"
         content.body = noteTitle(for: session.id) ?? "AlphaNote"
         content.sound = sound
         content.interruptionLevel = .timeSensitive

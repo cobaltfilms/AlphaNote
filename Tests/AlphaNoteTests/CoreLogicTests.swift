@@ -63,9 +63,21 @@ final class CoreLogicTests: XCTestCase {
         let mixed = KeywordIntentRouter.parseTimerRequest("1 h 30 min")
         XCTAssertEqual(mixed?.totalSeconds, 5400)
 
-        let pomodoro = KeywordIntentRouter.parseTimerRequest("pomodoro")
-        XCTAssertEqual(pomodoro?.type, .pomodoro)
-        XCTAssertEqual(pomodoro?.totalSeconds, 600, "durée par défaut")
+        let byDefault = KeywordIntentRouter.parseTimerRequest("lance le minuteur")
+        XCTAssertEqual(byDefault?.type, .countdown)
+        XCTAssertEqual(byDefault?.totalSeconds, 600, "durée par défaut")
+
+        let wakeUp = KeywordIntentRouter.parseTimerRequest("réveille-moi à 7h30")
+        XCTAssertEqual(wakeUp?.type, .alarm)
+        XCTAssertEqual(wakeUp?.totalSeconds, 7 * 3600 + 30 * 60)
+        XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("alarme à 14h")?.totalSeconds, 14 * 3600)
+        XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("sonne à 18:15")?.type, .alarm)
+        XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("alarme à 7 h du soir")?.totalSeconds, 19 * 3600)
+        XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("rappelle-moi à midi")?.totalSeconds, 12 * 3600)
+        XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("alarme dans 10 minutes")?.type, .countdown, "« dans » = une durée")
+        XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("mets un minuteur pour 2h")?.type, .countdown)
+        XCTAssertEqual(KeywordIntentRouter.classify("réveille-moi à 6h45", noteKeyword: nil), .timer)
+        XCTAssertEqual(KeywordIntentRouter.classify("sonne à 18h15", noteKeyword: nil), .timer)
 
         XCTAssertEqual(KeywordIntentRouter.parseTimerRequest("lance un chrono")?.type, .stopwatch)
     }

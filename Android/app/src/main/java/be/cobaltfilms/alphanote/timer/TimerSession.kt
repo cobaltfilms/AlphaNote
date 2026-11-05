@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.time.Duration
+import java.time.ZonedDateTime
 import java.util.Locale
 
 /**
@@ -27,29 +29,39 @@ class TimerSession internal constructor(
     val id: String,
     mode: Mode,
     targetSeconds: Double,
-    private val registry: TimerRegistry
+    private val registry: TimerRegistry,
+    alarmTime: Int = 7 * 3600
 ) {
+    /** ALARM : sonne à une heure donnée (« alarm 07:30 »), pas après une durée. */
     enum class Mode(val label: String) {
-        STOPWATCH("Chrono"), COUNTDOWN("Minuteur"), POMODORO("Pomodoro");
+        STOPWATCH("Chrono"), COUNTDOWN("Minuteur"), ALARM("Alarme");
 
         companion object {
             fun fromKeyword(keyword: String): Mode? {
                 val lower = keyword.lowercase()
                 return when {
-                    lower.contains("pomodoro") -> POMODORO
+                    lower.contains("alarm") -> ALARM
                     lower.contains("stopwatch") || lower.contains("chrono") -> STOPWATCH
-                    lower.contains("countdown") || lower.contains("minuteur") -> COUNTDOWN
+                    // « pomodoro » : ancien mode, relu comme un minuteur.
+                    lower.contains("countdown") || lower.contains("minuteur") || lower.contains("pomodoro") -> COUNTDOWN
                     else -> null
                 }
             }
+
+            /** Nom enregistré ; l'ancien POMODORO devient un minuteur. */
+            fun fromStored(name: String): Mode = entries.firstOrNull { it.name == name } ?: COUNTDOWN
         }
     }
 
     enum class State { STOPPED, RUNNING, PAUSED, FINISHED }
 
-    data class Snapshot(val mode: Mode, val state: State, val targetSeconds: Double, val elapsed: Double, val runStartMillis: Long?, val soundPlaying: Boolean)
+    /** [alarmTime] : heure de l'alarme, en secondes depuis minuit. */
+    data class Snapshot(
+        val mode: Mode, val state: State, val targetSeconds: Double, val elapsed: Double, val runStartMillis: Long?,
+        val soundPlaying: Boolean, val alarmTime: Int = 7 * 3600
+    )
 
-    private val _snapshot = MutableStateFlow(Snapshot(mode, State.STOPPED, targetSeconds, 0.0, null, false))
+    private val _snapshot = MutableStateFlow(Snapshot(mode, State.STOPPED, targetSeconds, 0.0, null, false, normalizedClock(alarmTime)))
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
 
     private var tickJob: Job? = null
@@ -61,15 +73,43 @@ class TimerSession internal constructor(
     val elapsed: Double get() = _snapshot.value.elapsed
     val remaining: Double get() = maxOf(0.0, targetSeconds - elapsed)
     val progress: Float get() = if (mode == Mode.STOPWATCH || targetSeconds <= 0) 0f else (elapsed / targetSeconds).coerceIn(0.0, 1.0).toFloat()
-    val displayTime: String get() = format(if (mode == Mode.STOPWATCH) elapsed else remaining)
+    val alarmTime: Int get() = _snapshot.value.alarmTime
+    val displayTime: String get() = when (mode) {
+        Mode.ALARM -> clock(alarmTime)
+        Mode.STOPWATCH -> format(elapsed)
+        Mode.COUNTDOWN -> format(remaining)
+    }
+    /** Valeur écrite dans la note : la durée, ou l'heure pour une alarme. */
+    val settingSeconds: Int get() = if (mode == Mode.ALARM) alarmTime else targetSeconds.toInt()
 
     // ---- Commandes ----
 
     fun setMode(newMode: Mode) {
         if (newMode == mode) return
+        val leavingAlarm = mode == Mode.ALARM
         reset()
-        _snapshot.value = _snapshot.value.copy(mode = newMode, targetSeconds = if (newMode == Mode.POMODORO) 25 * 60.0 else targetSeconds)
+        // La durée servait au compte à rebours jusqu'à l'alarme.
+        _snapshot.value = _snapshot.value.copy(mode = newMode, targetSeconds = if (leavingAlarm) 10 * 60.0 else targetSeconds)
         persist()
+    }
+
+    /** Change l'heure de l'alarme ; armée, elle se recale sur la nouvelle heure. */
+    fun setAlarmTime(secondsSinceMidnight: Int) {
+        val value = normalizedClock(secondsSinceMidnight)
+        _snapshot.value = if (mode == Mode.ALARM && state == State.RUNNING) {
+            _snapshot.value.copy(alarmTime = value, elapsed = 0.0, runStartMillis = System.currentTimeMillis(), targetSeconds = secondsUntil(value))
+        } else {
+            _snapshot.value.copy(alarmTime = value)
+        }
+        persist()
+    }
+
+    /** Passe en alarme à cette heure et l'arme (demande en langage naturel). */
+    fun arm(alarmTime: Int) {
+        if (mode != Mode.ALARM) setMode(Mode.ALARM)
+        reset()
+        _snapshot.value = _snapshot.value.copy(alarmTime = normalizedClock(alarmTime))
+        start()
     }
 
     fun setTargetSeconds(seconds: Double) {
@@ -80,7 +120,8 @@ class TimerSession internal constructor(
 
     fun toggle() {
         when (state) {
-            State.RUNNING -> pause()
+            // Une alarme ne se met pas en pause : on la désarme.
+            State.RUNNING -> if (mode == Mode.ALARM) reset() else pause()
             State.STOPPED, State.PAUSED -> start()
             State.FINISHED -> { reset(); start() }
         }
@@ -89,6 +130,7 @@ class TimerSession internal constructor(
     fun start() {
         if (state == State.RUNNING) return
         stopSound()
+        if (mode == Mode.ALARM) _snapshot.value = _snapshot.value.copy(elapsed = 0.0, targetSeconds = secondsUntil(alarmTime))
         _snapshot.value = _snapshot.value.copy(state = State.RUNNING, runStartMillis = System.currentTimeMillis())
         scheduleTick()
         persist()
@@ -142,6 +184,8 @@ class TimerSession internal constructor(
     }
 
     private fun playSound() {
+        // Hors écran, c'est la notification de TimerAlarms qui sonne.
+        if (!registry.appVisible) return
         val context = registry.context ?: return
         alarm.play(context, registry.alarmSound, loop = true)
         _snapshot.value = _snapshot.value.copy(soundPlaying = true)
@@ -184,6 +228,25 @@ class TimerSession internal constructor(
             return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, secs)
             else String.format(Locale.US, "%02d:%02d", minutes, secs)
         }
+
+        /** « 07:30 » pour 27 000 s depuis minuit. */
+        fun clock(secondsSinceMidnight: Int): String {
+            val value = normalizedClock(secondsSinceMidnight)
+            return String.format(Locale.US, "%02d:%02d", value / 3600, (value % 3600) / 60)
+        }
+
+        fun normalizedClock(seconds: Int): Int {
+            val day = 24 * 3600
+            return ((seconds / 60 * 60) % day + day) % day
+        }
+
+        /** Délai jusqu'à la prochaine occurrence de l'heure (demain si elle est passée). */
+        fun secondsUntil(secondsSinceMidnight: Int, now: ZonedDateTime = ZonedDateTime.now()): Double {
+            val value = normalizedClock(secondsSinceMidnight)
+            var next = now.withHour(value / 3600).withMinute((value % 3600) / 60).withSecond(0).withNano(0)
+            if (!next.isAfter(now)) next = next.plusDays(1)
+            return maxOf(1.0, Duration.between(now, next).toMillis() / 1000.0)
+        }
     }
 }
 
@@ -197,11 +260,21 @@ class TimerRegistry private constructor() {
     /** Sonnerie choisie dans Réglages (tenue à jour par NoteViewModel). */
     @Volatile var alarmSound: AlarmSound = AlarmSound.MINUTERIE
 
+    /** Activité à l'écran (MainActivity onStart/onStop). */
+    @Volatile var appVisible: Boolean = false
+
+    fun stopSound(noteUUID: String) { sessions[noteUUID]?.stopSound() }
+
     fun attach(context: Context) { this.context = context.applicationContext }
 
     fun session(noteUUID: String, defaultMode: TimerSession.Mode, defaultSeconds: Int): TimerSession {
         sessions[noteUUID]?.let { return it }
-        val session = TimerSession(noteUUID, defaultMode, defaultSeconds.toDouble(), this)
+        // Pour une alarme, defaultSeconds est l'heure (secondes depuis minuit).
+        val session = if (defaultMode == TimerSession.Mode.ALARM) {
+            TimerSession(noteUUID, defaultMode, 10 * 60.0, this, alarmTime = defaultSeconds)
+        } else {
+            TimerSession(noteUUID, defaultMode, defaultSeconds.toDouble(), this)
+        }
         stored()[noteUUID]?.let { session.restore(it) }
         sessions[noteUUID] = session
         return session
@@ -219,6 +292,7 @@ class TimerRegistry private constructor() {
         val all = stored().toMutableMap()
         all[session.id] = session.snapshot.value
         save(all)
+        context?.let { TimerAlarms.update(it, session, alarmSound) }
     }
 
     private fun prefs() = context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -231,12 +305,13 @@ class TimerRegistry private constructor() {
             root.keys().forEach { key ->
                 val o = root.getJSONObject(key)
                 out[key] = TimerSession.Snapshot(
-                    mode = TimerSession.Mode.valueOf(o.getString("mode")),
+                    mode = TimerSession.Mode.fromStored(o.getString("mode")),
                     state = TimerSession.State.valueOf(o.getString("state")),
                     targetSeconds = o.getDouble("target"),
                     elapsed = o.getDouble("elapsed"),
                     runStartMillis = if (o.isNull("runStart")) null else o.getLong("runStart"),
-                    soundPlaying = false
+                    soundPlaying = false,
+                    alarmTime = o.optInt("alarmTime", 7 * 3600)
                 )
             }
             out
@@ -249,7 +324,8 @@ class TimerRegistry private constructor() {
             root.put(key, JSONObject()
                 .put("mode", s.mode.name).put("state", s.state.name)
                 .put("target", s.targetSeconds).put("elapsed", s.elapsed)
-                .put("runStart", s.runStartMillis ?: JSONObject.NULL))
+                .put("runStart", s.runStartMillis ?: JSONObject.NULL)
+                .put("alarmTime", s.alarmTime))
         }
         prefs()?.edit()?.putString(KEY, root.toString())?.apply()
     }
@@ -259,26 +335,34 @@ class TimerRegistry private constructor() {
         private const val PREFS = "alphanote_timers"
         private const val KEY = "timerSessionsV1"
 
-        /** Mode et durée lus dans le contenu d'une note timer (défaut : minuteur 10 min). */
+        /**
+         * Mode et réglage lus dans le contenu d'une note timer (défaut : minuteur
+         * 10 min). Pour une alarme (« alarm 07:30 »), le réglage est l'heure, en
+         * secondes depuis minuit.
+         */
         fun parameters(content: String): Pair<TimerSession.Mode, Int> {
             var mode = TimerSession.Mode.COUNTDOWN
-            var seconds = 600
+            var pair: Pair<Int, Int>? = null
             for (line in content.split("\n")) {
                 TimerSession.Mode.fromKeyword(line)?.let { mode = it }
                 Regex("(\\d+):(\\d{1,2})").find(line)?.let { match ->
-                    val minutes = match.groupValues[1].toIntOrNull() ?: return@let
-                    val secs = match.groupValues[2].toIntOrNull() ?: return@let
-                    seconds = minutes * 60 + secs
+                    val first = match.groupValues[1].toIntOrNull() ?: return@let
+                    val second = match.groupValues[2].toIntOrNull() ?: return@let
+                    pair = first to second
                 }
             }
-            return mode to seconds
+            if (mode == TimerSession.Mode.ALARM) {
+                val (hours, minutes) = pair ?: (7 to 0)
+                return mode to TimerSession.normalizedClock(hours * 3600 + minutes * 60)
+            }
+            return mode to (pair?.let { it.first * 60 + it.second } ?: 600)
         }
 
         /** Ligne de réglage écrite dans la note (« countdown 4:30 », « stopwatch »). */
         fun timerLine(mode: TimerSession.Mode, seconds: Int): String = when (mode) {
             TimerSession.Mode.STOPWATCH -> "stopwatch"
             TimerSession.Mode.COUNTDOWN -> "countdown ${seconds / 60}:${"%02d".format(seconds % 60)}"
-            TimerSession.Mode.POMODORO -> "pomodoro ${seconds / 60}:${"%02d".format(seconds % 60)}"
+            TimerSession.Mode.ALARM -> "alarm ${TimerSession.clock(seconds)}"
         }
 
         /**
@@ -289,7 +373,7 @@ class TimerRegistry private constructor() {
         fun contentWithTimerLine(content: String, mode: TimerSession.Mode, seconds: Int): String {
             val lines = content.split("\n").toMutableList()
             val line = timerLine(mode, seconds)
-            val modeWords = setOf("countdown", "stopwatch", "pomodoro", "minuteur", "chrono")
+            val modeWords = setOf("countdown", "stopwatch", "alarm", "alarme", "pomodoro", "minuteur", "chrono")
             val index = lines.indexOfFirst { it.trim().lowercase().split(" ").first() in modeWords }
             if (index >= 0) {
                 lines[index] = line

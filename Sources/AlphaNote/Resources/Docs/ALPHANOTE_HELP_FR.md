@@ -111,8 +111,10 @@ Activez avec `code` ou `code: swift`. Police monospace, interligne serré.
 
 Activez avec `timer` ou `timer: focus`, ou via `⌘K` (« minuteur 25 min »).
 
-- Minuteur, Chrono, Pomodoro (25 min par défaut) ; préréglages 5 min à 1 h,
-  réglage fin en minutes et en secondes (pas de 5 s).
+- Minuteur, Chrono, Alarme ; préréglages 5 min à 1 h, réglage fin en minutes
+  et en secondes (pas de 5 s).
+- Alarme : sonne à une heure donnée (ligne `alarm 07:30`), demain si l'heure
+  est passée. « réveille-moi à 7h30 » ou « alarme à 14h » la crée déjà armée.
 - Le minuteur continue si vous changez de note ou cachez la fenêtre, et est
   restauré au redémarrage.
 - Sonnerie au choix dans Réglages › Général › Minuteur : dix sonneries
@@ -156,7 +158,7 @@ L'IA ne rédige qu'une chose : une formule, en mode math.
   Désactivable dans Réglages › IA.
 - `list` : les éléments (virgules) deviennent une liste cochable. Un lien de
   recette devient la liste de ses ingrédients (lue dans la page, sans IA).
-- `timer` : crée une note minuteur / chrono / pomodoro.
+- `timer` : crée une note minuteur / chrono / alarme (« sonne à 18h15 »).
 - `code` : passe la note en mode code.
 - `plain` : rien n'est appliqué.
 
