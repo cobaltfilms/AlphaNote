@@ -1,7 +1,7 @@
 {
-  "version": "0.5.2",
-  "versionCode": 502,
-  "notes": "Correction : \u00ab Ajouter une image \u00bb fermait l'application. Les images s'affichent d\u00e9sormais en grand sous le texte (en grille quand il y en a plusieurs) et la ligne de r\u00e9f\u00e9rence n'appara\u00eet plus dans la note. L'ajout se fait depuis le menu \u22ef de la note.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.2/AlphaNote-0.5.2.apk",
+  "version": "0.5.3",
+  "versionCode": 503,
+  "notes": "Alarme \u00e0 une heure donn\u00e9e (remplace le pomodoro), cr\u00e9\u00e9e par \u00ab r\u00e9veille-moi \u00e0 7h30 \u00bb ; minuteurs et alarmes sonnent app ferm\u00e9e.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.3/AlphaNote-0.5.3.apk",
   "minimumSdk": 26
 }
