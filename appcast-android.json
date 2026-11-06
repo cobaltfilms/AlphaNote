@@ -1,7 +1,7 @@
 {
-  "version": "0.6.0",
-  "versionCode": 600,
-  "notes": "Rappels \u00e0 date et heure : une ou plusieurs alertes (notification, sonnerie, vibration), \u00e9crits dans la note (ligne \u00ab rappel AAAA-MM-JJ HH:MM : \u2026 \u00bb).",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.0/AlphaNote-0.6.0.apk",
+  "version": "0.6.1",
+  "versionCode": 601,
+  "notes": "Rappels : synchronis\u00e9s depuis le Mac ; leurs alarmes sont reprogramm\u00e9es apr\u00e8s chaque synchro. Correctif des rappels re\u00e7us par synchro.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.1/AlphaNote-0.6.1.apk",
   "minimumSdk": 26
 }
