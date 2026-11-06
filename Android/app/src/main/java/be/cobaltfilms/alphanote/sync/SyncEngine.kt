@@ -285,6 +285,8 @@ class SyncEngine(
                 )
             )
             settingsRepository.markLastSync(syncTimestamp)
+            // Les notes reçues portent peut-être des rappels : on reprogramme les alarmes.
+            be.cobaltfilms.alphanote.reminders.ReminderScheduler.rescheduleAll(appContext, repository)
             _state.value = if (skipped == 0) SyncRunState.Success(syncTimestamp)
             else SyncRunState.Error("Synchronisation faite, mais $skipped note(s) illisible(s) ou refusée(s) par le serveur ont été ignorées.")
         } catch (error: CancellationException) {

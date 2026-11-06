@@ -86,6 +86,9 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             }
         }
         var options: UNNotificationPresentationOptions = [.banner, .list]
+        // Sans nature connue (notification sans nos données), le son système reste joué.
+        // Avec « sonnerie », la sonnerie de l'app remplace le son système (plus haut).
+        if kinds.isEmpty { options.insert(.sound) }
         completionHandler(options)
     }
 

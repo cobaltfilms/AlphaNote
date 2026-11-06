@@ -256,6 +256,8 @@ class LanSyncCoordinator(context: Context, private val repository: NoteRepositor
         _state.value = State.Syncing
         _state.value = try {
             val report = engine.sync(peer, store.token() ?: throw LanSyncException(401, "non appairé"))
+            // Les notes reçues portent peut-être des rappels : on reprogramme les alarmes.
+            be.cobaltfilms.alphanote.reminders.ReminderScheduler.rescheduleAll(appContext, repository)
             State.Done(System.currentTimeMillis(), report.applied, report.pushed)
         } catch (e: LanSyncException) {
             if (e.status == 401) State.Failed("Appairage expiré : appairez le téléphone de nouveau.")
