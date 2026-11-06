@@ -1,6 +1,6 @@
 {
-  "version": "0.5.3",
-  "notes": "Alarme \u00e0 une heure donn\u00e9e (remplace le pomodoro), cr\u00e9\u00e9e par \u00ab r\u00e9veille-moi \u00e0 7h30 \u00bb ; minuteurs et alarmes sonnent app ferm\u00e9e sur Android.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.3/AlphaNote-0.5.3.zip",
+  "version": "0.6.1",
+  "notes": "Rappels \u00e0 date et heure (notification, sonnerie) : \u00e9crits dans la note, r\u00e9gl\u00e9s \u00e0 chaque modification ou synchro. Les sonneries jouent m\u00eame sans Ne pas d\u00e9ranger ; la vibration n'existe pas sur Mac.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.1/AlphaNote-0.6.1.zip",
   "minimumSystemVersion": "14.0"
 }
