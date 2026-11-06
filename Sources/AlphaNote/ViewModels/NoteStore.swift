@@ -179,6 +179,7 @@ final class NoteStore: ObservableObject {
         updated.updatedAt = Date()
         replaceInMemory(updated)
         SyncEngine.shared.notifyLocalChange()
+        ReminderScheduler.shared.sync(note: updated)
         Task.detached(priority: .utility) { await SemanticSearchFeature().index(note: updated) }
     }
 
@@ -254,6 +255,7 @@ final class NoteStore: ObservableObject {
         Note.update(note)
         purgeJournalIfNeeded(id)
         SyncEngine.shared.notifyLocalChange()
+        ReminderScheduler.shared.sync(note: note)
         Task.detached(priority: .utility) { await SemanticSearchFeature().index(note: note) }
     }
 
@@ -327,6 +329,7 @@ final class NoteStore: ObservableObject {
         let nextSelection = note.id == currentNote?.id ? adjacentNoteID(forDeletedNoteID: note.id) : currentNote?.id
         Note.delete(note)
         TimerRegistry.shared.discard(noteUUID: note.uuid)
+        ReminderScheduler.shared.sync(noteUUID: note.uuid, title: "", content: "", isVault: false)
         Task.detached(priority: .utility) { await EmbeddingStore.shared.removeEmbedding(noteUUID: note.uuid) }
         SyncEngine.shared.notifyLocalChange()
         reloadNotes(selecting: nextSelection)

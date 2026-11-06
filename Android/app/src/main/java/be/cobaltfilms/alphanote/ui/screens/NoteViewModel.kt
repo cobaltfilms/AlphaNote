@@ -30,6 +30,9 @@ import be.cobaltfilms.alphanote.domain.ListModeFormatter
 import be.cobaltfilms.alphanote.domain.MathEvaluator
 import be.cobaltfilms.alphanote.domain.NoteAttachments
 import be.cobaltfilms.alphanote.domain.RecipeIngredientExtractor
+import be.cobaltfilms.alphanote.domain.Reminders
+import be.cobaltfilms.alphanote.domain.ReminderKind
+import be.cobaltfilms.alphanote.reminders.ReminderScheduler
 import be.cobaltfilms.alphanote.model.Note
 import be.cobaltfilms.alphanote.search.SemanticSearch
 import be.cobaltfilms.alphanote.sync.CloudJsonCoder
@@ -134,6 +137,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             VaultKeyring.isUnlocked.collectLatest { unlocked -> if (unlocked) onVaultOpened() else onVaultClosed() }
         }
         syncEngine.start(viewModelScope)
+        viewModelScope.launch { ReminderScheduler.rescheduleAll(application, repository) }
         lanSync.attach(viewModelScope)
         lanSync.requestSync(0)
         viewModelScope.launch { repository.activeNotes.collectLatest { _activeNotes.value = it } }
@@ -223,6 +227,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         // L'écriture ne doit jamais être interrompue à mi-chemin : une frappe
         // ou un retour arrière qui annule la coroutine ne perd pas la note.
         val saved = withContext(NonCancellable) { repository.updateNote(toStore) }
+        scheduleReminders(dirty)
         purgeJournalIfNeeded()
         if (_currentNote.value?.id == saved.id) {
             _currentNote.value = _currentNote.value?.copy(updatedAt = saved.updatedAt, keyword = saved.keyword)
@@ -235,6 +240,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             pendingSave?.cancel()
             val toStore = storable(note, unseal) ?: run { dirtyNote = note; return@launch }
             dirtyNote = null
+            scheduleReminders(note)
             val saved = repository.updateNote(toStore)
             purgeJournalIfNeeded()
             // À l'écran, le texte en clair (pas l'enveloppe stockée).
@@ -284,6 +290,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (_currentNote.value?.id == note.id) { dirtyNote = null; pendingSave?.cancel(); _currentNote.value = null }
             repository.deleteNote(note)
+            ReminderScheduler.sync(getApplication(), note.uuid, "", "", TimerRegistry.shared.alarmSound)
             TimerRegistry.shared.discard(note.uuid)
             noteChanged()
         }
@@ -632,6 +639,17 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun setAutoCleanup(enabled: Boolean) = viewModelScope.launch { appSettingsRepository.setAutoCleanup(enabled) }
     fun setConfirmDelete(enabled: Boolean) = viewModelScope.launch { appSettingsRepository.setConfirmDelete(enabled) }
     fun setAppcastUrl(url: String) = viewModelScope.launch { appSettingsRepository.setAppcastUrl(url) }
+
+    /** Ajoute une ligne de rappel à la note courante ; la planification suit la sauvegarde. */
+    fun addReminder(at: java.time.LocalDateTime, kinds: Set<ReminderKind>) {
+        val current = _currentNote.value ?: return
+        edit(Reminders.withReminder(current.content, at, kinds))
+    }
+
+    private fun scheduleReminders(note: Note) {
+        if (note.isVault) return
+        ReminderScheduler.sync(getApplication(), note.uuid, note.effectiveTitle, note.content, TimerRegistry.shared.alarmSound)
+    }
 
     fun setAiEnabled(enabled: Boolean) = viewModelScope.launch { aiSettingsRepository.setEnabled(enabled) }
     fun setFormulaDraftEnabled(enabled: Boolean) = viewModelScope.launch { aiSettingsRepository.setFormulaDraftEnabled(enabled) }

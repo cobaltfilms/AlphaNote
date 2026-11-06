@@ -156,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PreferencesMigration.migrateLegacyDefaultsIfNeeded()
         DatabaseManager.shared.setup()
         SyncEngine.shared.start()
+        ReminderScheduler.shared.start()
         if UserDefaults.standard.bool(forKey: LANSyncServer.enabledKey) { LANSyncServer.shared.start() }
         applyTheme()
         applyActivationPolicy()

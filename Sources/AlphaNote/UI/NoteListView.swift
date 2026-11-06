@@ -22,6 +22,7 @@ struct NoteListView: View {
     @State private var commandDraft = ""
     @State private var isRouting = false
     @State private var renamingNote: Note?
+    @State private var reminderNote: Note?
     @State private var renameDraft = ""
     @State private var showMicPermissionAlert = false
     @State private var confirmDelete: Note?
@@ -47,6 +48,12 @@ struct NoteListView: View {
                 if !listening, !commandDraft.isEmpty, !isRouting { submitCommand() }
             }
             .sheet(item: $renamingNote) { note in renameSheet(for: note) }
+            .sheet(item: $reminderNote) { note in
+                ReminderSheet(
+                    onAdd: { at, kinds in addReminder(to: note, at: at, kinds: kinds); reminderNote = nil },
+                    onCancel: { reminderNote = nil }
+                )
+            }
             .alert("Supprimer cette note ?", isPresented: deleteAlertBinding, presenting: confirmDelete) { note in
                 Button("Supprimer", role: .destructive) { store.deleteNote(note) }
                 Button("Annuler", role: .cancel) {}
@@ -242,6 +249,15 @@ struct NoteListView: View {
         .help("Mode de la note — la première ligne (math, list, code, timer) le change aussi")
     }
 
+    /// Ajoute une ligne de rappel à la note : relecture de la version à jour (après les sauvegardes en attente).
+    private func addReminder(to note: Note, at: Date, kinds: Set<ReminderKind>) {
+        store.flushPendingSaves()
+        guard var fresh = Note.fetchByUUID(note.uuid), !fresh.isVault else { return }
+        fresh.content = Reminders.withReminder(fresh.content, at: at, kinds: kinds)
+        store.updateNote(fresh)
+        store.showToast("Rappel ajouté : \(Reminders.formatter().string(from: at))", symbol: "bell")
+    }
+
     private func noteMenu(for note: Note) -> some View {
         Menu {
             Button { toggleCommandField() } label: { Label("Demande en langage naturel…", systemImage: "sparkles") }
@@ -250,6 +266,7 @@ struct NoteListView: View {
                 Label(note.isPinned ? "Désépingler" : "Épingler", systemImage: note.isPinned ? "pin.slash" : "pin")
             }
             Button { beginRename(note) } label: { Label("Renommer…", systemImage: "pencil") }
+            if !note.isVault { Button { reminderNote = note } label: { Label("Rappel…", systemImage: "bell") } }
             Button { store.duplicateNote(note) } label: { Label("Dupliquer", systemImage: "plus.square.on.square") }
             Button { copyNote(note) } label: { Label("Copier le contenu", systemImage: "doc.on.doc") }
             if note.isVault, vault.isUnlocked {
@@ -637,6 +654,7 @@ struct NoteListView: View {
         .contextMenu {
             Button(note.isPinned ? "Désépingler" : "Épingler") { store.togglePin(note) }
             Button("Renommer…") { beginRename(note) }
+            if !note.isVault { Button("Rappel…") { reminderNote = note } }
             Button("Dupliquer") { store.duplicateNote(note) }
             if archived {
                 Button("Désarchiver") { store.unarchiveNote(note) }

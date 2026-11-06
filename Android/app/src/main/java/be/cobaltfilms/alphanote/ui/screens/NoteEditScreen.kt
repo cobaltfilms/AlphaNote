@@ -11,6 +11,12 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Notifications
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import be.cobaltfilms.alphanote.ui.components.ReminderDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,6 +97,10 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
     val isRouting by viewModel.isRouting.collectAsState()
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    var showReminder by remember { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) viewModel.showToast("Sans autorisation, les rappels arriveront sans notification. Activez-la dans Réglages.")
+    }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(viewModel::addImage) }
     val snackbarHostState = remember { SnackbarHostState() }
     val focusRequester = remember { FocusRequester() }
@@ -217,6 +227,7 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "Actions", tint = palette.secondary) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (!note.isVault) DropdownMenuItem(text = { Text("Rappel…") }, leadingIcon = { Icon(Icons.Default.Notifications, null, tint = palette.accent) }, onClick = { menu = false; showReminder = true })
                             if (!note.isVault) DropdownMenuItem(text = { Text("Demande en langage naturel…") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = palette.accent) }, onClick = { menu = false; showCommand = true })
                             if (!note.isVault && mode != NoteMode.TIMER) DropdownMenuItem(
                                 text = { Text("Ajouter une image") },
@@ -266,6 +277,19 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                 LaunchedEffect(note.id) { if (note.content.isBlank()) runCatching { focusRequester.requestFocus() } }
             }
         }
+    }
+
+    if (showReminder && note != null) {
+        ReminderDialog(
+            onDismiss = { showReminder = false },
+            onConfirm = { at, kinds ->
+                viewModel.addReminder(at, kinds)
+                showReminder = false
+                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        )
     }
 
     if (renaming && note != null) RenameDialog(note, onDismiss = { renaming = false }, onRename = { viewModel.rename(note, it); renaming = false })
