@@ -1,7 +1,7 @@
 {
-  "version": "0.5.3",
-  "versionCode": 503,
-  "notes": "Alarme \u00e0 une heure donn\u00e9e (remplace le pomodoro), cr\u00e9\u00e9e par \u00ab r\u00e9veille-moi \u00e0 7h30 \u00bb ; minuteurs et alarmes sonnent app ferm\u00e9e.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.5.3/AlphaNote-0.5.3.apk",
+  "version": "0.6.0",
+  "versionCode": 600,
+  "notes": "Rappels \u00e0 date et heure : une ou plusieurs alertes (notification, sonnerie, vibration), \u00e9crits dans la note (ligne \u00ab rappel AAAA-MM-JJ HH:MM : \u2026 \u00bb).",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.0/AlphaNote-0.6.0.apk",
   "minimumSdk": 26
 }
