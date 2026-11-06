@@ -18,7 +18,8 @@ struct ReminderSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Alertes").font(.subheadline).foregroundStyle(.secondary)
-                ForEach(ReminderKind.allCases, id: \.self) { kind in
+                // Pas de vibration sur Mac : le Mac n'a pas de moteur de vibration.
+                ForEach(ReminderKind.allCases.filter { $0 != .vibration }, id: \.self) { kind in
                     Toggle(label(kind), isOn: Binding(
                         get: { kinds.contains(kind) },
                         set: { isOn in

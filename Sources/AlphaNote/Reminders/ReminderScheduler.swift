@@ -9,8 +9,8 @@ import UserNotifications
 ///
 /// Sonnerie : si AlphaNote tourne, la sonnerie choisie (comme pour les minuteurs)
 /// est jouée ; sinon le son système de la notification prend le relais.
-/// Vibration : le Mac n'a pas de moteur de vibration. Le retour haptique du
-/// trackpad n'existe que si AlphaNote est au premier plan.
+/// Vibration : ignorée sur Mac (le Mac n'a pas de moteur de vibration). Le texte
+/// reste partagé avec Android, où la vibration existe.
 @MainActor
 final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
     static let shared = ReminderScheduler()
@@ -83,9 +83,6 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             if kinds.contains(.sonnerie) {
                 // La sonnerie choisie joue une fois ; le son système est alors coupé.
                 self.alarm.play(AlarmSound.current, loop: false)
-            }
-            if kinds.contains(.vibration) {
-                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
             }
         }
         var options: UNNotificationPresentationOptions = [.banner, .list]
