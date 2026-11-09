@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Canal public de releases : github.com/cobaltfilms/AlphaNote.
-# git.cobaltfilms.be exige une connexion pour tout (même un dépôt public), donc
-# les apps lisent l'appcast et téléchargent les binaires sur GitHub, comme
-# AlphaSUB/AlphaDCP. Le code reste sur Gitea ; le dépôt GitHub ne porte que
-# les releases et les appcasts.
+# Canal public : github.com/cobaltfilms/AlphaNote (code open source, releases,
+# appcasts). git.cobaltfilms.be exige une connexion pour tout, donc les apps
+# lisent l'appcast et téléchargent les binaires sur GitHub, comme AlphaSUB/AlphaDCP.
+# Le développement reste sur Gitea, qui pousse un miroir vers GitHub : GitHub ne
+# doit jamais porter de commit ou de tag absent de Gitea (le miroir l'écraserait).
 #
 # À sourcer depuis release.sh / release-android.sh. Requiert `gh` connecté au
 # compte cobaltfilms.
@@ -15,6 +15,9 @@ GH_REPO="cobaltfilms/AlphaNote"
 # Crée la release v<version> si besoin ; remplace un asset du même nom.
 gh_release_asset() {
     local version="$1" file="$2" notes="$3"
+    # Le tag (créé et poussé sur Gitea par l'appelant) part aussi vers GitHub,
+    # sinon `gh release create` en fabriquerait un autre sur la tête de main.
+    git push "https://github.com/$GH_REPO.git" "v$version" >/dev/null 2>&1 || true
     if ! gh release view "v$version" --repo "$GH_REPO" >/dev/null 2>&1; then
         gh release create "v$version" --repo "$GH_REPO" --title "AlphaNote $version" --notes "$notes" >/dev/null
     fi

@@ -70,6 +70,25 @@ scripts/ios.sh test   # tests partagés + tests d'interface
 open Package.swift
 ```
 
+## AI (optional)
+
+AI features are **off by default**. The ⌘K routing talks to a JEV decision
+server, which is not part of this repository; without it, AlphaNote uses the
+on-device classifier and the keyword fallback. See `RESUME-IA.md` and `ml/`.
+
+## Downloads & updates
+
+Signed builds for macOS and Android are published in
+[Releases](https://github.com/cobaltfilms/AlphaNote/releases). The apps check
+`appcast.json` (macOS) and `appcast-android.json` (Android) on the `main`
+branch of this repository — please keep these files at the root.
+
+## Contributing
+
+Development happens on Cobalt Films' own Git server; this GitHub repository is
+a mirror of it. Issues and pull requests are welcome here: accepted changes are
+applied upstream and come back through the mirror.
+
 ## License
 
-Proprietary — Cobalt Films
+Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Cobalt Films.
