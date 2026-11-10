@@ -10,8 +10,8 @@ struct AttachmentRef: Identifiable, Hashable {
 }
 
 /// Vignettes des images de la note, sous l'éditeur (Android : NoteImages.kt).
-/// Une image référencée mais absente (ajoutée sur un autre appareil : les
-/// images ne sont pas synchronisées) apparaît en gris.
+/// Une image référencée mais absente (ajoutée sur un autre appareil et
+/// pas encore arrivée par la synchro Nextcloud) apparaît en gris.
 struct ImageStrip: View {
     let noteUUID: String
     let names: [String]
@@ -86,7 +86,7 @@ struct ImageViewer: View {
                             .onEnded { _ in withAnimation { scale = 1 } })
                 } else {
                     ContentUnavailableView("Image absente de cet appareil", systemImage: "photo",
-                                           description: Text("Les images ne sont pas synchronisées : elle est restée sur l'appareil où elle a été ajoutée."))
+                                           description: Text("Elle a été ajoutée sur un autre appareil et arrivera avec la synchronisation Nextcloud."))
                         .foregroundStyle(.white)
                 }
             }

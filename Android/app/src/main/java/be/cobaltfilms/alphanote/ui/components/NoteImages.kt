@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -142,7 +143,9 @@ private fun NoteImageViewer(noteUuid: String, name: String, onClose: () -> Unit,
 @Composable
 private fun loadNoteImage(noteUuid: String, name: String): State<ImageBitmap?> {
     val appContext = LocalContext.current.applicationContext
-    return produceState<ImageBitmap?>(initialValue = null, noteUuid, name) {
+    // Change quand la synchro a téléchargé des fichiers : une image absente est relue.
+    val revision by NoteAttachments.revision.collectAsState()
+    return produceState<ImageBitmap?>(initialValue = null, noteUuid, name, revision) {
     val file = NoteAttachments.file(appContext, noteUuid, name)
     value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.path)?.asImageBitmap() }
     }

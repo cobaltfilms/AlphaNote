@@ -2,12 +2,15 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Images attachées aux notes, même format qu'Android (domain/NoteAttachments.kt).
+/// Pièces jointes des notes (images et notes vocales), même format qu'Android
+/// (domain/NoteAttachments.kt).
 ///
 /// Les octets vivent dans `Application Support/AlphaNote/attachments/<uuid de la
-/// note>/<nom>.jpg` ; le texte de la note ne garde qu'une ligne
-/// `![image](att:<nom>)`. Pas encore synchronisées vers Nextcloud : seule la
-/// ligne circule.
+/// note>/<nom>` ; le texte de la note ne garde qu'une ligne
+/// `![image](att:<nom>.jpg)` ou `![audio](att:<nom>.m4a)`. La synchro Nextcloud
+/// fait circuler les fichiers à côté des notes (`Sync/AttachmentSync.swift`) :
+/// envoyés s'ils manquent sur le serveur, téléchargés s'ils manquent ici,
+/// jamais modifiés. La synchro Wi-Fi directe ne transporte que le texte.
 enum NoteAttachments {
     private static let reference = try! NSRegularExpression(pattern: #"!\[[^\]]*\]\(att:([A-Za-z0-9._-]+)\)"#)
     static let maxSide = 1600
@@ -20,8 +23,80 @@ enum NoteAttachments {
         }
     }
 
-    static func markdown(_ name: String) -> String { "![image](att:\(name))" }
+    /// Extensions des enregistrements (m4a sur Apple et Android, wav en repli).
+    static let audioExtensions: Set<String> = ["m4a", "wav"]
 
+    static func isAudio(_ name: String) -> Bool {
+        audioExtensions.contains((name as NSString).pathExtension.lowercased())
+    }
+
+    /// Images seulement, dans l'ordre d'apparition (galeries).
+    static func imageNames(in content: String) -> [String] {
+        names(in: content).filter { !isAudio($0) }
+    }
+
+    /// Notes vocales seulement, dans l'ordre d'apparition.
+    static func audioNames(in content: String) -> [String] {
+        names(in: content).filter(isAudio)
+    }
+
+    static func markdown(_ name: String) -> String {
+        isAudio(name) ? "![audio](att:\(name))" : "![image](att:\(name))"
+    }
+
+    /// Nom de fichier d'un nouvel enregistrement.
+    static func newAudioName() -> String { UUID().uuidString.lowercased() + ".m4a" }
+
+    /// Ligne faite d'une seule référence vers une note vocale.
+    static func isAudioLine(_ line: String) -> Bool {
+        guard isImageLine(line) else { return false }
+        return names(in: line).first.map(isAudio) ?? false
+    }
+
+    /// macOS : l'éditeur montre tout sauf les lignes de notes vocales (elles ont
+    /// leur propre barre de lecture). Inverse : `withAudio`.
+    static func textHidingAudio(_ content: String) -> String {
+        content.components(separatedBy: "\n").filter { !isAudioLine($0) }.joined(separator: "\n")
+    }
+
+    /// Contenu stocké : le texte de l'éditeur macOS, puis les notes vocales de `content`.
+    static func withAudio(_ visible: String, content: String) -> String {
+        let refs = audioNames(in: content)
+        guard !refs.isEmpty else { return visible }
+        return visible + "\n" + refs.map(markdown).joined(separator: "\n")
+    }
+
+    /// Ajoute une note vocale : la transcription rejoint le texte (paragraphe à
+    /// part), la référence du fichier va en fin de note avec les autres pièces
+    /// jointes. Le thème éventuel reste la dernière ligne de texte.
+    static func addingVoiceNote(to content: String, audioName: String, transcript: String) -> String {
+        let theme = NoteThemes.explicit(in: content)
+        let lines = NoteThemes.removingTheme(from: content).components(separatedBy: "\n")
+        var body = lines.filter { !isImageLine($0) }.joined(separator: "\n")
+        while body.hasSuffix("\n") || body.hasSuffix(" ") { body.removeLast() }
+        let spoken = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !spoken.isEmpty {
+            body += body.isEmpty ? spoken : "\n\n" + spoken
+        }
+        body = NoteThemes.settingTheme(theme, in: body)
+        let refs = names(in: content) + [audioName]
+        let tail = refs.map(markdown).joined(separator: "\n")
+        return body.isEmpty ? tail : body + "\n" + tail
+    }
+
+    /// Retire la référence d'une pièce jointe (la ligne entière).
+    static func removingReference(_ name: String, from content: String) -> String {
+        content.components(separatedBy: "\n")
+            .filter { !($0.contains("(att:\(name))") && isImageLine($0)) }
+            .joined(separator: "\n")
+    }
+
+    /// Supprime tous les fichiers joints d'une note.
+    static func removeAll(noteUUID: String) {
+        try? FileManager.default.removeItem(at: rootDirectory.appendingPathComponent(noteUUID, isDirectory: true))
+    }
+
+    /// Ligne faite d'une seule pièce jointe (image ou note vocale).
     static func isImageLine(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         let ns = trimmed as NSString

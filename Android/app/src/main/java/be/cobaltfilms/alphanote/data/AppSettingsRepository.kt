@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import be.cobaltfilms.alphanote.domain.NoteGrouping
 import be.cobaltfilms.alphanote.timer.AlarmSound
 import be.cobaltfilms.alphanote.ui.theme.ColorTheme
 
@@ -26,6 +27,8 @@ data class AppSettings(
     val listCheckTrigger: String = "/x",
     val autoCleanup: Boolean = true,
     val confirmDelete: Boolean = true,
+    /** Façon de ranger la liste des notes (même réglage que « noteGrouping » côté Apple). */
+    val grouping: NoteGrouping = NoteGrouping.RECENT,
     val appcastUrl: String = AppSettingsRepository.APPCAST_URL_DEFAULT
 )
 
@@ -42,6 +45,7 @@ class AppSettingsRepository(context: Context) {
             listCheckTrigger = (prefs[LIST_TRIGGER] ?: "/x").ifBlank { "/x" },
             autoCleanup = prefs[AUTO_CLEANUP] ?: true,
             confirmDelete = prefs[CONFIRM_DELETE] ?: true,
+            grouping = NoteGrouping.fromRaw(prefs[NOTE_GROUPING]),
             appcastUrl = prefs[APPCAST_URL]?.takeUnless { it == LEGACY_APPCAST_URL } ?: APPCAST_URL_DEFAULT
         )
     }
@@ -53,6 +57,7 @@ class AppSettingsRepository(context: Context) {
     suspend fun setListCheckTrigger(trigger: String) { dataStore.edit { it[LIST_TRIGGER] = trigger.trim().ifBlank { "/x" } } }
     suspend fun setAutoCleanup(enabled: Boolean) { dataStore.edit { it[AUTO_CLEANUP] = enabled } }
     suspend fun setConfirmDelete(enabled: Boolean) { dataStore.edit { it[CONFIRM_DELETE] = enabled } }
+    suspend fun setGrouping(grouping: NoteGrouping) { dataStore.edit { it[NOTE_GROUPING] = grouping.raw } }
     suspend fun setAppcastUrl(url: String) { dataStore.edit { it[APPCAST_URL] = url.trim() } }
 
     companion object {
@@ -66,6 +71,7 @@ class AppSettingsRepository(context: Context) {
         private val LIST_TRIGGER = stringPreferencesKey("list_check_trigger")
         private val AUTO_CLEANUP = booleanPreferencesKey("auto_cleanup")
         private val CONFIRM_DELETE = booleanPreferencesKey("confirm_delete")
+        private val NOTE_GROUPING = stringPreferencesKey("note_grouping")
         private val APPCAST_URL = stringPreferencesKey("appcast_url")
     }
 }

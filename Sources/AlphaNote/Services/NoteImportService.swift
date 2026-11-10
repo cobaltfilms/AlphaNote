@@ -7,12 +7,22 @@ struct NoteImportReport {
     let skippedDuplicates: Int
     let skippedEmpty: Int
     let failed: Int
+    /// Notes déjà importées, complétées par ce passage (dossier → thème, date d'origine).
+    var updated: Int = 0
+    /// Notes de la corbeille de la source, laissées de côté.
+    var skippedTrashed: Int = 0
 
     var summary: String {
         if scanned == 0 {
-            return "\(source): no notes found in the selected source."
+            return "\(source) : aucune note trouvée."
         }
-        return "\(source): \(imported)/\(scanned) imported, \(skippedDuplicates) duplicates skipped, \(skippedEmpty) empty skipped, \(failed) failed."
+        var parts = ["\(imported) importée(s) sur \(scanned)"]
+        if updated > 0 { parts.append("\(updated) déjà là, complétée(s) (thème, date)") }
+        if skippedDuplicates > 0 { parts.append("\(skippedDuplicates) doublon(s) ignoré(s)") }
+        if skippedEmpty > 0 { parts.append("\(skippedEmpty) vide(s) ou verrouillée(s)") }
+        if skippedTrashed > 0 { parts.append("\(skippedTrashed) dans la corbeille") }
+        if failed > 0 { parts.append("\(failed) en échec") }
+        return "\(source) : " + parts.joined(separator: ", ") + "."
     }
 }
 
@@ -87,27 +97,71 @@ final class NoteImportService {
         return report
     }
 
+    /// Importe Apple Notes en gardant ce qui range les notes : le dossier
+    /// devient le thème, les dates d'origine sont conservées, la corbeille
+    /// (« Suppressions récentes ») est laissée de côté. Relancer l'import
+    /// complète les notes déjà importées sans les dupliquer.
     func importAppleNotes() throws -> NoteImportReport {
         let rawNotes = try fetchAppleNotesInBatches()
-        let entries: [ImportEntry] = rawNotes.map { dto in
-            let plain = dto.plaintext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return ImportEntry(
-                title: (dto.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-                content: normalizeImportedText(plain)
-            )
-        }
+        let kept = rawNotes.filter { !Self.isTrashFolder($0.folder) }
+        let entries: [ImportEntry] = kept.map(Self.entry(from:))
 
-        let report = importEntries(entries, source: "Apple Notes")
+        var report = importEntries(entries, source: "Apple Notes")
+        report.skippedTrashed = rawNotes.count - kept.count
         notifyNotesChanged()
         return report
     }
 
-    private func importEntries(_ entries: [ImportEntry], source: String) -> NoteImportReport {
+    /// Dossier « Suppressions récentes » d'Apple Notes, dans les langues courantes.
+    static func isTrashFolder(_ folder: String?) -> Bool {
+        guard let folder else { return false }
+        return trashFolderKeys.contains(NoteThemes.key(folder))
+    }
+
+    private static let trashFolderKeys: Set<String> = Set([
+        "Recently Deleted", "Suppressions récentes", "Supprimées récemment", "Onlangs verwijderd",
+        "Zuletzt gelöscht", "Eliminados recientemente", "Eliminati di recente",
+    ].map(NoteThemes.key))
+
+    /// Dossier par défaut : il ne dit rien du sujet, la note reste sans thème écrit.
+    private static let defaultFolderKeys: Set<String> = Set(["Notes", "Notities", "Notizen", "Notas", "Note"].map(NoteThemes.key))
+
+    static func theme(fromFolder folder: String?) -> String? {
+        guard let folder else { return nil }
+        let name = NoteThemes.normalized(folder)
+        guard !name.isEmpty, !defaultFolderKeys.contains(NoteThemes.key(name)) else { return nil }
+        return name
+    }
+
+    private static func entry(from dto: AppleNoteDTO) -> ImportEntry {
+        ImportEntry(
+            title: (dto.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+            content: dto.plaintext ?? "",
+            theme: theme(fromFolder: dto.folder),
+            createdAt: dto.created.flatMap(Self.isoDate),
+            updatedAt: dto.modified.flatMap(Self.isoDate)
+        )
+    }
+
+    private static func isoDate(_ raw: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: raw)
+    }
+
+    func importEntries(_ entries: [ImportEntry], source: String) -> NoteImportReport {
         let existing = Note.fetchAllIncludingDeleted()
-        var dedupeSet = Set(existing.map { dedupeKey(title: $0.effectiveTitle, content: normalizeImportedText($0.content)) })
+        // Une note déjà importée se reconnaît même après avoir reçu un thème.
+        func key(of note: Note) -> String {
+            dedupeKey(title: note.effectiveTitle, content: normalizeImportedText(NoteThemes.removingTheme(from: note.content)))
+        }
+        var dedupeSet = Set(existing.map(key(of:)))
+        var liveByKey: [String: Note] = [:]
+        for note in existing where !note.isDeleted && !note.isVault { liveByKey[key(of: note)] = note }
         var nextPosition = (existing.map(\.position).max() ?? -1) + 1
 
         var imported = 0
+        var updated = 0
         var skippedDuplicates = 0
         var skippedEmpty = 0
         var failed = 0
@@ -127,16 +181,25 @@ final class NoteImportService {
             let finalTitle = cleanedTitle.isEmpty ? fallbackTitle(from: cleanedContent) : cleanedTitle
             let key = dedupeKey(title: finalTitle, content: cleanedContent)
             if dedupeSet.contains(key) {
-                skippedDuplicates += 1
+                if let live = liveByKey[key], complete(live, with: entry) {
+                    updated += 1
+                } else {
+                    skippedDuplicates += 1
+                }
                 continue
             }
 
             var note = Note(position: nextPosition)
-            note.title = finalTitle
-            note.content = cleanedContent
+            // Titre laissé libre quand c'est déjà la première ligne : il suivra le texte.
+            note.title = finalTitle == fallbackTitle(from: cleanedContent) ? "" : finalTitle
+            note.content = NoteThemes.settingTheme(entry.theme, in: cleanedContent)
             note.detectKeyword()
+            if let createdAt = entry.createdAt {
+                note.createdAt = createdAt
+                note.updatedAt = entry.updatedAt ?? createdAt
+            }
 
-            let created = Note.create(note)
+            let created = Note.create(note, preservingDates: entry.createdAt != nil)
             if created.id == nil {
                 failed += 1
                 continue
@@ -153,8 +216,24 @@ final class NoteImportService {
             imported: imported,
             skippedDuplicates: skippedDuplicates,
             skippedEmpty: skippedEmpty,
-            failed: failed
+            failed: failed,
+            updated: updated
         )
+    }
+
+    /// Complète une note importée par une version précédente : thème tiré du
+    /// dossier si elle n'en a pas, date de création d'origine. Faux : rien à faire.
+    private func complete(_ note: Note, with entry: ImportEntry) -> Bool {
+        var completed = note
+        if let theme = entry.theme, NoteThemes.explicit(in: note.content) == nil {
+            completed.content = NoteThemes.settingTheme(theme, in: note.content)
+        }
+        if let createdAt = entry.createdAt, abs(note.createdAt.timeIntervalSince(createdAt)) > 86_400 {
+            completed.createdAt = createdAt
+        }
+        guard completed != note else { return false }
+        Note.update(completed)
+        return true
     }
 
     private func notifyNotesChanged() {
@@ -275,11 +354,20 @@ final class NoteImportService {
                 var n = notes[i];
                 var title = "";
                 var plain = "";
+                var folder = null;
+                var created = null;
+                var modified = null;
                 try { title = String(n.name()); } catch (e) { title = ""; }
                 try { plain = String(n.plaintext()); } catch (e) { plain = ""; }
+                try { folder = String(n.container().name()); } catch (e) { folder = null; }
+                try { created = n.creationDate().toISOString(); } catch (e) { created = null; }
+                try { modified = n.modificationDate().toISOString(); } catch (e) { modified = null; }
                 rows.push({
                     name: title,
-                    plaintext: plain
+                    plaintext: plain,
+                    folder: folder,
+                    created: created,
+                    modified: modified
                 });
             }
             return JSON.stringify({
@@ -370,14 +458,20 @@ final class NoteImportService {
     }
 }
 
-private struct ImportEntry {
+struct ImportEntry {
     let title: String
     let content: String
+    var theme: String?
+    var createdAt: Date?
+    var updatedAt: Date?
 }
 
 private struct AppleNoteDTO: Decodable {
     let name: String?
     let plaintext: String?
+    let folder: String?
+    let created: String?
+    let modified: String?
 }
 
 private struct AppleNotesBatchDTO: Decodable {

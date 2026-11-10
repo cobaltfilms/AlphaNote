@@ -40,6 +40,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Mic
+import be.cobaltfilms.alphanote.domain.NoteThemes
+import be.cobaltfilms.alphanote.ui.components.ThemeDialog
+import be.cobaltfilms.alphanote.ui.components.VoiceNoteStrip
+import be.cobaltfilms.alphanote.ui.components.VoiceRecordingBanner
 import be.cobaltfilms.alphanote.ui.components.VaultLockScreen
 import be.cobaltfilms.alphanote.vault.VaultKeyring
 import androidx.compose.material3.Icon
@@ -100,6 +106,17 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
     var showReminder by remember { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) viewModel.showToast("Sans autorisation, les rappels arriveront sans notification. Activez-la dans Réglages.")
+    }
+    val themes by viewModel.themeByUuid.collectAsState()
+    val recorder = viewModel.voiceRecorder
+    var showTheme by remember { mutableStateOf(false) }
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.startVoiceNote()
+        else viewModel.showToast("Micro non autorisé. Autorise AlphaNote dans les réglages de l'appareil.")
+    }
+    val startVoiceNote = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) viewModel.startVoiceNote()
+        else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
     }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(viewModel::addImage) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -195,6 +212,9 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             Column(modifier = Modifier.imePadding().navigationBarsPadding()) {
+                if (recorder.isRecording) {
+                    VoiceRecordingBanner(recorder, onStop = { viewModel.stopVoiceNote() }, onCancel = { viewModel.cancelVoiceNote() })
+                }
                 if (showCommand) {
                     CommandField(
                         currentKeyword = note?.keyword, isRouting = isRouting,
@@ -221,6 +241,10 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                 val locked = note != null && note.isVault && !vaultUnlocked
                 if (note != null) {
                     if (!note.isVault) IconButton(onClick = { showCommand = true }) { Icon(Icons.Default.AutoAwesome, contentDescription = "Demande à l'IA", tint = palette.accent) }
+                    // Note vocale : pas dans une note sécurisée (l'audio ne serait pas chiffré).
+                    if (!note.isVault && mode != NoteMode.TIMER && !recorder.isRecording) {
+                        IconButton(onClick = startVoiceNote) { Icon(Icons.Default.Mic, contentDescription = "Note vocale : enregistrer et transcrire", tint = palette.accent) }
+                    }
                     if (note.isVault && vaultUnlocked) IconButton(onClick = { VaultKeyring.lockNow() }) { Icon(Icons.Default.Lock, contentDescription = "Verrouiller le coffre", tint = palette.mode(NoteMode.VAULT)) }
                     if (!locked) IconButton(onClick = { shareNote(context, note, note.content) }) { Icon(Icons.Default.Share, contentDescription = "Partager la note", tint = palette.accent) }
                     ModeChip(mode = mode, onSelect = { viewModel.setMode(it) })
@@ -234,6 +258,7 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                                 leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, null, tint = palette.accent) },
                                 onClick = { menu = false; pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }
                             )
+                            if (!note.isVault) DropdownMenuItem(text = { Text("Thème…") }, leadingIcon = { Icon(Icons.Default.Label, null, tint = palette.accent) }, onClick = { menu = false; showTheme = true })
                             DropdownMenuItem(text = { Text(if (note.isPinned) "Désépingler" else "Épingler") }, onClick = { menu = false; viewModel.togglePin(note) })
                             DropdownMenuItem(text = { Text("Renommer…") }, onClick = { menu = false; renaming = true })
                             DropdownMenuItem(text = { Text("Dupliquer") }, onClick = { menu = false; viewModel.duplicate(note) })
@@ -262,17 +287,21 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
             } else {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     // Les images restent en clair sur l'appareil : pas dans le coffre.
-                    val images = if (note.isVault) emptyList() else NoteAttachments.names(note.content)
+                    val images = if (note.isVault) emptyList() else NoteAttachments.imageNames(note.content)
+                    val recordings = if (note.isVault) emptyList() else NoteAttachments.audioNames(note.content)
                     NoteEditor(
                         value = editorValue, onValueChange = ::processInput,
                         mode = mode, fontSize = settings.fontSize, checkTrigger = settings.listCheckTrigger,
                         focusRequester = focusRequester,
-                        bottomPadding = if (images.isEmpty()) 120.dp else 8.dp
+                        bottomPadding = if (images.isEmpty() && recordings.isEmpty()) 120.dp else 8.dp
                     )
+                    if (recordings.isNotEmpty()) {
+                        VoiceNoteStrip(noteUuid = note.uuid, names = recordings, player = viewModel.voicePlayer, onDelete = viewModel::removeVoiceNote)
+                    }
                     if (images.isNotEmpty()) {
                         NoteImageStrip(noteUuid = note.uuid, names = images, onRemove = viewModel::removeImage)
-                        Spacer(Modifier.height(120.dp))
                     }
+                    if (images.isNotEmpty() || recordings.isNotEmpty()) Spacer(Modifier.height(120.dp))
                 }
                 LaunchedEffect(note.id) { if (note.content.isBlank()) runCatching { focusRequester.requestFocus() } }
             }
@@ -289,6 +318,16 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
                     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
+        )
+    }
+
+    if (showTheme && note != null) {
+        ThemeDialog(
+            current = themes[note.uuid] ?: NoteThemes.explicit(note.content),
+            isExplicit = NoteThemes.explicit(note.content) != null,
+            themes = remember(themes) { NoteThemes.distinctNames(themes.values) },
+            onPick = { viewModel.setTheme(note, it); showTheme = false },
+            onDismiss = { showTheme = false }
         )
     }
 
@@ -311,7 +350,7 @@ fun NoteEditScreen(noteId: Long, viewModel: NoteViewModel, onBack: () -> Unit, o
  */
 private fun shareNote(context: android.content.Context, note: Note, content: String) {
     val text = listOf(displayTitle(note), NoteAttachments.textWithoutImages(content)).filter { it.isNotBlank() }.joinToString("\n\n")
-    val uris = NoteAttachments.names(content)
+    val uris = NoteAttachments.imageNames(content)
         .map { NoteAttachments.file(context, note.uuid, it) }
         .filter { it.exists() }
         .map { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it) }

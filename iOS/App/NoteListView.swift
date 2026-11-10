@@ -16,6 +16,11 @@ struct NoteListView: View {
     @State private var renaming: Note?
     @State private var renameDraft = ""
     @State private var deleting: Note?
+    @AppStorage(NoteGrouping.storageKey) private var groupingRaw = NoteGrouping.recent.rawValue
+    @State private var confirmJEV = false
+    @State private var bulkDelete: [Note] = []
+    @State private var theming: Note?
+    @State private var collapsedThemes: Set<String> = []
 
     var body: some View {
         NavigationStack {
@@ -26,7 +31,34 @@ struct NoteListView: View {
                     if !pinned.isEmpty {
                         Section("Épinglées") { rows(pinned) }
                     }
-                    Section(pinned.isEmpty ? "" : "Notes") { rows(others) }
+                    if grouping != .recent {
+                        ForEach(groupedSections(of: others), id: \.title) { section in
+                            Section {
+                                DisclosureGroup(isExpanded: expansion(of: section.title)) {
+                                    rows(section.notes)
+                                } label: {
+                                    Text("\(section.title) · \(section.notes.count)")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(section.title == NoteThemes.none || section.title == NoteOrganizer.keepTitle
+                                                         ? Palette.secondaryColor : Palette.accentColor)
+                                        // Tri à faire : agir sur toute la section d'un coup.
+                                        .contextMenu {
+                                            if grouping == .triage, section.title != NoteOrganizer.keepTitle {
+                                                Button {
+                                                    store.archiveNotes(section.notes)
+                                                    store.showToast("\(section.notes.count) note(s) archivée(s)", symbol: "archivebox")
+                                                } label: { Label("Archiver ces \(section.notes.count) notes", systemImage: "archivebox") }
+                                                Button(role: .destructive) { bulkDelete = section.notes } label: {
+                                                    Label("Supprimer ces \(section.notes.count) notes…", systemImage: "trash")
+                                                }
+                                            }
+                                        }
+                                }
+                            }
+                        }
+                    } else {
+                        Section(pinned.isEmpty ? "" : "Notes") { rows(others) }
+                    }
                     if !store.archivedNotes.isEmpty {
                         Section {
                             DisclosureGroup("Archives · \(store.archivedNotes.count)", isExpanded: $showArchives) {
@@ -35,7 +67,7 @@ struct NoteListView: View {
                         }
                     }
                     Section {
-                        Text(countLabel)
+                        Text(store.classification.map { "JEV range les notes : \($0.done)/\($0.total)" } ?? countLabel)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
@@ -60,6 +92,22 @@ struct NoteListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                         .accessibilityLabel("Réglages")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Ranger la liste", selection: $groupingRaw) {
+                            ForEach(NoteGrouping.allCases, id: \.rawValue) { mode in
+                                Label(mode.title, systemImage: mode.symbol).tag(mode.rawValue)
+                            }
+                        }
+                        Divider()
+                        Button { confirmJEV = true } label: { Label("Ranger avec JEV…", systemImage: "sparkles") }
+                            .disabled(store.classification != nil)
+                    } label: {
+                        Image(systemName: grouping == .recent ? "line.3.horizontal.decrease" : grouping.symbol)
+                    }
+                    .accessibilityLabel("Ranger la liste : \(grouping.title)")
+                    .accessibilityIdentifier("groupingMenu")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     syncIndicator
@@ -93,6 +141,28 @@ struct NoteListView: View {
                 }
                 Button("Annuler", role: .cancel) { renaming = nil }
             }
+            .sheet(item: $theming) { note in
+                ThemeSheet(
+                    current: store.theme(of: note),
+                    isExplicit: NoteThemes.explicit(in: note.content) != nil,
+                    themes: store.themeNames,
+                    onPick: { theme in store.setTheme(theme, for: note); theming = nil },
+                    onCancel: { theming = nil }
+                )
+                .presentationDetents([.medium, .large])
+            }
+            .alert("Ranger avec JEV ?", isPresented: $confirmJEV) {
+                Button("Envoyer et ranger") { Task { await store.classifyWithJEV() } }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Le titre et le début de \(store.jevCandidateCount) note(s) sans thème seront envoyés à \(store.jevServerName ?? "ton serveur JEV"), qui choisit un rayon pour chacune. Le rayon est écrit dans la note (« thème : … »). Les notes sécurisées et celles qui ont déjà un thème ne partent pas.")
+            }
+            .alert("Supprimer \(bulkDelete.count) note(s) ?", isPresented: Binding(get: { !bulkDelete.isEmpty }, set: { if !$0 { bulkDelete = [] } })) {
+                Button("Supprimer", role: .destructive) { store.deleteNotes(bulkDelete); bulkDelete = [] }
+                Button("Annuler", role: .cancel) { bulkDelete = [] }
+            } message: {
+                Text("Elles disparaissent de tous tes appareils à la prochaine synchro. Archiver les garde de côté sans les supprimer.")
+            }
             .confirmationDialog("Supprimer cette note ?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                                 titleVisibility: .visible) {
                 Button("Supprimer", role: .destructive) {
@@ -120,6 +190,28 @@ struct NoteListView: View {
     private var countLabel: String {
         let count = store.notes.count
         return count == 1 ? "1 note" : "\(count) notes"
+    }
+
+    // MARK: - Thèmes
+
+    private var grouping: NoteGrouping { NoteGrouping(rawValue: groupingRaw) ?? .recent }
+
+    private func groupedSections(of notes: [Note]) -> [(title: String, notes: [Note])] {
+        let byUUID = Dictionary(notes.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        return NoteOrganizer.sections(notes, grouping: grouping, themes: store.themeByUUID).map { section in
+            (section.title, section.noteUUIDs.compactMap { byUUID[$0] })
+        }
+    }
+
+    private func expansion(of title: String) -> Binding<Bool> {
+        // Une section repliée dans un mode ne l'est pas dans un autre.
+        let key = grouping.rawValue + "/" + NoteThemes.key(title)
+        return Binding(
+            get: { !collapsedThemes.contains(key) },
+            set: { expanded in
+                if expanded { collapsedThemes.remove(key) } else { collapsedThemes.insert(key) }
+            }
+        )
     }
 
     // MARK: - Lignes
@@ -191,6 +283,9 @@ struct NoteListView: View {
                 renameDraft = note.title.isEmpty ? NoteFormatting.displayTitle(note) : note.title
                 renaming = note
             } label: { Label("Renommer", systemImage: "pencil") }
+            if !note.isVault {
+                Button { theming = note } label: { Label("Thème…", systemImage: "tag") }
+            }
             Button { store.duplicateNote(note) } label: { Label("Dupliquer", systemImage: "plus.square.on.square") }
             Button { store.archiveNote(note) } label: { Label("Archiver", systemImage: "archivebox") }
         }

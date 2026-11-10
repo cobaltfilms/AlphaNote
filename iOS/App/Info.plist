@@ -32,11 +32,11 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AlphaNote joint le serveur JEV et Nextcloud sur ton réseau local.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>AlphaNote écoute le micro pour la dictée de la barre de commande.</string>
+	<string>AlphaNote écoute le micro pour la dictée et les notes vocales.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AlphaNote ajoute à une note les images que tu choisis.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>AlphaNote transcrit ta voix en texte pour la barre de commande.</string>
+	<string>AlphaNote transcrit ta voix : demandes dictées et notes vocales.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

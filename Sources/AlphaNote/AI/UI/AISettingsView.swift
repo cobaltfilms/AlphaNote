@@ -93,6 +93,12 @@ struct AISettingsView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Classement — POST /v1/decision").font(.caption.weight(.semibold))
                             schemaCard
+                            Text("Rangement par rayon, à la demande (« Ranger avec JEV ») — POST /v1/decision").font(.caption.weight(.semibold))
+                            Text("Seul cas où le contenu de notes est envoyé : le titre et les \(ThemeClassificationFeature.excerptLength) premiers caractères de chaque note sans thème. Jamais une note sécurisée.\n\n" + ThemeClassificationFeature.instructions + "\n\n" + ThemeClassificationFeature.field.description)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text("Formules — POST /v1/chat/completions").font(.caption.weight(.semibold))
                             Text(FormulaDraftFeature.systemPrompt)
                                 .font(.caption.monospaced())

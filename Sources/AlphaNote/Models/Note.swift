@@ -210,13 +210,17 @@ extension Note {
     }
 
     @discardableResult
-    static func create(_ note: Note) -> Note {
+    /// `preservingDates` : import d'une note qui existait ailleurs, ses dates
+    /// d'origine sont gardées.
+    static func create(_ note: Note, preservingDates: Bool = false) -> Note {
         var newNote = note
         if newNote.uuid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             newNote.uuid = UUID().uuidString.lowercased()
         }
-        newNote.createdAt = Date()
-        newNote.updatedAt = Date()
+        if !preservingDates {
+            newNote.createdAt = Date()
+            newNote.updatedAt = Date()
+        }
         newNote.lastModifiedByDeviceId = DeviceIdentity.currentDeviceID
         let dbQueue = DatabaseManager.shared.getDBQueue()
         do {

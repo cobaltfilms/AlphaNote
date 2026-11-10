@@ -8,6 +8,8 @@ import AppKit
 struct NoteListView: View {
     @StateObject fileprivate var store = NoteStore()
     @StateObject private var speechRecognizer = SpeechRecognizer()
+    @StateObject private var voiceRecorder = VoiceNoteRecorder()
+    @StateObject private var voicePlayer = VoiceNotePlayer()
     @ObservedObject private var vault = VaultKeyring.shared
 
     @AppStorage("fontSize") private var fontSize: Double = 14
@@ -26,6 +28,11 @@ struct NoteListView: View {
     @State private var renameDraft = ""
     @State private var showMicPermissionAlert = false
     @State private var confirmDelete: Note?
+    @AppStorage(NoteGrouping.storageKey) private var groupingRaw = NoteGrouping.recent.rawValue
+    @State private var confirmJEV = false
+    @State private var bulkDelete: [Note] = []
+    @State private var themingNote: Note?
+    @State private var collapsedThemes: Set<String> = []
 
     @FocusState private var isSearchFocused: Bool
     @FocusState private var isCommandFocused: Bool
@@ -53,6 +60,27 @@ struct NoteListView: View {
                     onAdd: { at, kinds in addReminder(to: note, at: at, kinds: kinds); reminderNote = nil },
                     onCancel: { reminderNote = nil }
                 )
+            }
+            .sheet(item: $themingNote) { note in
+                ThemeSheet(
+                    current: store.theme(of: note),
+                    isExplicit: NoteThemes.explicit(in: note.content) != nil,
+                    themes: store.themeNames,
+                    onPick: { theme in store.setTheme(theme, for: note); themingNote = nil },
+                    onCancel: { themingNote = nil }
+                )
+            }
+            .alert("Ranger avec JEV ?", isPresented: $confirmJEV) {
+                Button("Envoyer et ranger") { Task { await store.classifyWithJEV() } }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Le titre et le début de \(store.jevCandidateCount) note(s) sans thème seront envoyés à \(store.jevServerName ?? "ton serveur JEV"), qui choisit un rayon pour chacune. Le rayon est écrit dans la note (« thème : … »). Les notes sécurisées et celles qui ont déjà un thème ne partent pas.")
+            }
+            .alert("Supprimer \(bulkDelete.count) note(s) ?", isPresented: Binding(get: { !bulkDelete.isEmpty }, set: { if !$0 { bulkDelete = [] } })) {
+                Button("Supprimer", role: .destructive) { store.deleteNotes(bulkDelete); bulkDelete = [] }
+                Button("Annuler", role: .cancel) { bulkDelete = [] }
+            } message: {
+                Text("Elles disparaissent de tous tes appareils à la prochaine synchro. Archiver les garde de côté sans les supprimer.")
             }
             .alert("Supprimer cette note ?", isPresented: deleteAlertBinding, presenting: confirmDelete) { note in
                 Button("Supprimer", role: .destructive) { store.deleteNote(note) }
@@ -103,7 +131,19 @@ struct NoteListView: View {
 
             VStack(spacing: 0) {
                 topBar
+                if voiceRecorder.isRecording {
+                    VoiceRecordingBanner(recorder: voiceRecorder, onStop: finishVoiceNote, onCancel: { voiceRecorder.cancel() })
+                }
                 editorArea
+                if let note = store.currentNote, !note.isVault {
+                    let recordings = NoteAttachments.audioNames(in: note.content)
+                    if !recordings.isEmpty {
+                        VoiceNoteStrip(noteUUID: note.uuid, names: recordings, player: voicePlayer) { name in
+                            store.removeVoiceNote(named: name, from: note)
+                            store.showToast("Enregistrement supprimé", symbol: "trash")
+                        }
+                    }
+                }
             }
 
             if isCommandVisible {
@@ -131,6 +171,7 @@ struct NoteListView: View {
                 .onReceive(center.publisher(for: .alphaNoteFocusSearch)) { _ in view.openSearch() }
                 .onReceive(center.publisher(for: .alphaNoteToggleCommandField)) { _ in view.toggleCommandField() }
                 .onReceive(center.publisher(for: .alphaNoteConvertToList)) { _ in view.store.convertCurrentNoteToList() }
+                .onReceive(center.publisher(for: .alphaNoteToggleVoiceNote)) { _ in view.toggleVoiceNote() }
                 .onReceive(center.publisher(for: .alphaNoteNavigateNext)) { _ in view.store.navigateNext() }
                 .onReceive(center.publisher(for: .alphaNoteNavigatePrevious)) { _ in view.store.navigatePrevious() }
                 .onReceive(center.publisher(for: .alphaNoteTogglePin)) { _ in view.togglePinCurrent() }
@@ -164,6 +205,46 @@ struct NoteListView: View {
     fileprivate func setMode(_ mode: NoteMode?) {
         guard let mode, let note = store.currentNote else { return }
         store.setMode(mode, for: note)
+    }
+
+    // MARK: - Note vocale
+
+    /// Démarre une note vocale dans la note courante, ou termine celle en cours.
+    fileprivate func toggleVoiceNote() {
+        if voiceRecorder.isRecording {
+            finishVoiceNote()
+            return
+        }
+        guard let note = store.currentNote else { return }
+        guard !note.isVault else {
+            store.showToast("Pas de note vocale dans une note sécurisée : l'audio ne serait pas chiffré.", symbol: "lock.fill")
+            return
+        }
+        if speechRecognizer.isListening { speechRecognizer.stopListening() }
+        voicePlayer.stop()
+        Task {
+            if await !voiceRecorder.start(noteUUID: note.uuid) {
+                store.showToast(voiceRecorder.error ?? "Enregistrement impossible.", symbol: "mic.slash")
+            }
+        }
+    }
+
+    /// L'enregistrement rejoint la note où il a commencé, même si une autre
+    /// note est affichée entre-temps.
+    private func finishVoiceNote() {
+        Task {
+            guard let result = await voiceRecorder.stop() else {
+                store.showToast("Enregistrement trop court : rien n'a été gardé.", symbol: "mic.slash")
+                return
+            }
+            store.addVoiceNote(result)
+            store.showToast(
+                result.transcript.isEmpty
+                    ? "Note vocale ajoutée, sans transcription (aucune parole reconnue)."
+                    : "Note vocale ajoutée et transcrite.",
+                symbol: "waveform"
+            )
+        }
     }
 
     fileprivate func windowWillHide() {
@@ -202,6 +283,16 @@ struct NoteListView: View {
             Spacer(minLength: 8)
 
             if let note = store.currentNote {
+                if voiceRecorder.isRecording || (!note.isVault && note.keyword != "timer") {
+                    Button { toggleVoiceNote() } label: {
+                        Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(voiceRecorder.isRecording ? Color.red : Palette.secondaryColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help(voiceRecorder.isRecording ? "Terminer la note vocale (⌥⌘R)" : "Note vocale : enregistrer et transcrire (⌥⌘R)")
+                    .accessibilityIdentifier("voiceNoteButton")
+                }
                 modeChip(for: note)
                 noteMenu(for: note)
             }
@@ -267,6 +358,7 @@ struct NoteListView: View {
             }
             Button { beginRename(note) } label: { Label("Renommer…", systemImage: "pencil") }
             if !note.isVault { Button { reminderNote = note } label: { Label("Rappel…", systemImage: "bell") } }
+            if !note.isVault { Button { themingNote = note } label: { Label("Thème…", systemImage: "tag") } }
             Button { store.duplicateNote(note) } label: { Label("Dupliquer", systemImage: "plus.square.on.square") }
             Button { copyNote(note) } label: { Label("Copier le contenu", systemImage: "doc.on.doc") }
             if note.isVault, vault.isUnlocked {
@@ -337,15 +429,19 @@ struct NoteListView: View {
     private func contentBinding(for note: Note) -> Binding<String> {
         Binding(
             get: {
+                // Les lignes de notes vocales ne s'affichent pas dans le texte
+                // (barre de lecture sous l'éditeur).
                 guard let id = note.id, let current = store.notes.first(where: { $0.id == id }) else {
-                    return store.plaintext(of: note) ?? ""
+                    return NoteAttachments.textHidingAudio(store.plaintext(of: note) ?? "")
                 }
                 // Note sécurisée : déchiffrée pour l'affichage seulement.
-                return store.plaintext(of: current) ?? ""
+                return NoteAttachments.textHidingAudio(store.plaintext(of: current) ?? "")
             },
-            set: { newValue in
+            set: { typed in
                 guard let id = note.id, var current = store.notes.first(where: { $0.id == id }),
-                      store.plaintext(of: current) != newValue else { return }
+                      let stored = store.plaintext(of: current) else { return }
+                let newValue = NoteAttachments.withAudio(typed, content: stored)
+                guard stored != newValue else { return }
                 current.content = newValue
                 store.edit(current)
             }
@@ -467,6 +563,26 @@ struct NoteListView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(Palette.secondaryColor)
                 }
+                Menu {
+                    Picker("Ranger la liste", selection: $groupingRaw) {
+                        ForEach(NoteGrouping.allCases, id: \.rawValue) { mode in
+                            Label(mode.title, systemImage: mode.symbol).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    Divider()
+                    Button { confirmJEV = true } label: { Label("Ranger avec JEV…", systemImage: "sparkles") }
+                        .disabled(store.classification != nil)
+                } label: {
+                    Image(systemName: grouping == .recent ? "line.3.horizontal.decrease" : grouping.symbol)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(grouping == .recent ? Palette.secondaryColor : Palette.accentColor)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Ranger la liste : \(grouping.title.lowercased())")
+                .accessibilityIdentifier("groupingMenu")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
@@ -492,7 +608,14 @@ struct NoteListView: View {
                             sectionHeader("Épinglées", systemImage: "pin.fill")
                             ForEach(pinned, id: \.id) { note in noteRow(note, archived: false) }
                         }
-                        if !others.isEmpty {
+                        if isGrouped {
+                            ForEach(groupedSections(of: others), id: \.title) { section in
+                                groupHeader(section.title, notes: section.notes)
+                                if !collapsedThemes.contains(collapseKey(section.title)) {
+                                    ForEach(section.notes, id: \.id) { note in noteRow(note, archived: false) }
+                                }
+                            }
+                        } else if !others.isEmpty {
                             if !pinned.isEmpty { sectionHeader("Notes", systemImage: nil) }
                             ForEach(others, id: \.id) { note in noteRow(note, archived: false) }
                         }
@@ -540,9 +663,11 @@ struct NoteListView: View {
 
             Divider()
             HStack {
-                Text("\(store.notes.count) note\(store.notes.count > 1 ? "s" : "")")
+                Text(store.classification.map { "JEV range les notes : \($0.done)/\($0.total)" }
+                     ?? "\(store.notes.count) note\(store.notes.count > 1 ? "s" : "")")
                     .font(.system(size: 11))
-                    .foregroundStyle(Palette.secondaryColor)
+                    .monospacedDigit()
+                    .foregroundStyle(store.classification == nil ? Palette.secondaryColor : Palette.accentColor)
                 Spacer()
                 Button {
                     NotificationCenter.default.post(name: .alphaNoteOpenSettings, object: nil)
@@ -564,7 +689,7 @@ struct NoteListView: View {
     /// ↑ / ↓ dans le champ de recherche : change la note sélectionnée sans
     /// quitter le volet (ordre d'affichage : épinglées puis les autres).
     private func moveSelection(_ direction: MoveCommandDirection) {
-        let ordered = filteredNotes.filter(\.isPinned) + filteredNotes.filter { !$0.isPinned }
+        let ordered = orderedSidebarNotes
         guard !ordered.isEmpty else { return }
         let currentID = store.currentNote?.id
         let index = ordered.firstIndex(where: { $0.id == currentID })
@@ -580,13 +705,92 @@ struct NoteListView: View {
     /// Entrée dans la recherche : ouvre le premier résultat (déjà filtré au fil
     /// de la frappe) et rend le focus à l'éditeur.
     private func openFirstResultOrSearch() {
-        let ordered = filteredNotes.filter(\.isPinned) + filteredNotes.filter { !$0.isPinned }
+        let ordered = orderedSidebarNotes
         if let first = ordered.first, let id = first.id {
             store.selectNote(id: id)
             refocusEditor()
         } else {
             Task { await store.semanticSearch(query: searchQuery) }
         }
+    }
+
+    // MARK: - Liste par thème
+
+    private var grouping: NoteGrouping { NoteGrouping(rawValue: groupingRaw) ?? .recent }
+
+    /// La liste est rangée en sections hors recherche (une recherche traverse tout).
+    private var isGrouped: Bool {
+        grouping != .recent && searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func groupedSections(of notes: [Note]) -> [(title: String, notes: [Note])] {
+        let byUUID = Dictionary(notes.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        return NoteOrganizer.sections(notes, grouping: grouping, themes: store.themeByUUID).map { section in
+            (section.title, section.noteUUIDs.compactMap { byUUID[$0] })
+        }
+    }
+
+    /// Une section repliée dans un mode ne l'est pas dans un autre.
+    private func collapseKey(_ title: String) -> String { grouping.rawValue + "/" + NoteThemes.key(title) }
+
+    /// Notes dans l'ordre affiché (flèches et Entrée du champ de recherche).
+    private var orderedSidebarNotes: [Note] {
+        let pinned = filteredNotes.filter(\.isPinned)
+        let others = filteredNotes.filter { !$0.isPinned }
+        guard isGrouped else { return pinned + others }
+        return pinned + groupedSections(of: others)
+            .filter { !collapsedThemes.contains(collapseKey($0.title)) }
+            .flatMap(\.notes)
+    }
+
+    private func groupHeader(_ title: String, notes: [Note]) -> some View {
+        let key = collapseKey(title)
+        let collapsed = collapsedThemes.contains(key)
+        let muted = title == NoteThemes.none || title == NoteOrganizer.keepTitle
+        return HStack(spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    if collapsed { collapsedThemes.remove(key) } else { collapsedThemes.insert(key) }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                    Text(title.uppercased())
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.6)
+                        .lineLimit(1)
+                    Text("\(notes.count)")
+                        .font(.system(size: 10, weight: .medium))
+                        .monospacedDigit()
+                        .opacity(0.7)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Tri à faire : agir sur toute la section d'un coup.
+            if grouping == .triage, title != NoteOrganizer.keepTitle {
+                Menu {
+                    Button("Archiver ces \(notes.count) notes") {
+                        store.archiveNotes(notes)
+                        store.showToast("\(notes.count) note(s) archivée(s)", symbol: "archivebox")
+                    }
+                    Button("Supprimer ces \(notes.count) notes…", role: .destructive) { bulkDelete = notes }
+                } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 10, weight: .bold))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Archiver ou supprimer toute la section")
+            }
+        }
+        .foregroundStyle(muted ? Palette.secondaryColor : Palette.accentColor)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
     }
 
     private func sectionHeader(_ title: String, systemImage: String?) -> some View {
@@ -655,6 +859,7 @@ struct NoteListView: View {
             Button(note.isPinned ? "Désépingler" : "Épingler") { store.togglePin(note) }
             Button("Renommer…") { beginRename(note) }
             if !note.isVault { Button("Rappel…") { reminderNote = note } }
+            if !note.isVault { Button("Thème…") { themingNote = note } }
             Button("Dupliquer") { store.duplicateNote(note) }
             if archived {
                 Button("Désarchiver") { store.unarchiveNote(note) }
@@ -906,6 +1111,7 @@ extension Notification.Name {
     static let alphaNoteFocusSearch = Notification.Name("alphaNoteFocusSearch")
     static let alphaNoteToggleCommandField = Notification.Name("alphaNoteToggleCommandField")
     static let alphaNoteConvertToList = Notification.Name("alphaNoteConvertToList")
+    static let alphaNoteToggleVoiceNote = Notification.Name("alphaNoteToggleVoiceNote")
     static let alphaNoteNavigateNext = Notification.Name("alphaNoteNavigateNext")
     static let alphaNoteNavigatePrevious = Notification.Name("alphaNoteNavigatePrevious")
     static let alphaNoteTogglePin = Notification.Name("alphaNoteTogglePin")

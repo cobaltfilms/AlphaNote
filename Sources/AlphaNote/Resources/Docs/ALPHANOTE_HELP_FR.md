@@ -59,6 +59,7 @@ Volets éphémères :
 - `⌥⌘N` : nouvelle note · `⌥⌘←` / `⌥⌘→` : note précédente / suivante.
 - `⌥⌘L` : afficher / masquer le volet des notes · `⇧⌘F` : rechercher dans les notes.
 - `⌘K` : demande en langage naturel.
+- `⌥⌘R` : note vocale (enregistrer, puis terminer).
 - `⌥⌘1` … `⌥⌘5` : mode Texte, Math, Liste, Code, Minuteur.
 - `⇧⌘L` (réglable) : convertir la note en liste.
 - `⌥⌘P` : épingler · `⌥⌘E` : archiver · `⌥⌘⌫` : supprimer.
@@ -146,7 +147,62 @@ Pour les jetons, mots de passe et autres secrets. Activez avec `vault` ou
   synchronisée en clair auparavant : pour un vrai secret, créez la note en
   mode coffre d'abord.
 
-### 5.7 Demande en langage naturel (⌘K)
+### 5.7 Notes vocales
+
+Le bouton micro de la barre du haut (`⌥⌘R`) enregistre ta voix **et** la
+transcrit en même temps.
+
+- Pendant l'enregistrement, un bandeau montre la durée et le texte reconnu.
+  « Terminer » ajoute la note vocale à la note, « Annuler » jette tout.
+- La transcription devient du texte ordinaire de la note (modifiable,
+  cherchable, synchronisé). L'enregistrement s'écoute dans la barre sous
+  l'éditeur ; le supprimer laisse le texte.
+- La transcription utilise la reconnaissance vocale du système, sur l'appareil
+  quand la langue le permet. Si elle est refusée ou indisponible, l'audio est
+  gardé quand même et le bandeau dit pourquoi le texte manque.
+- Avec la synchronisation Nextcloud, le fichier audio suit la note (comme les
+  images) : il s'écoute sur tes autres appareils après leur synchro. Tant qu'il
+  n'est pas arrivé, la barre indique « Enregistrée sur un autre appareil ».
+  Sans Nextcloud, le fichier reste sur l'appareil qui l'a enregistré ; la
+  synchro Wi-Fi directe ne transporte que le texte.
+- Pas de note vocale dans une note sécurisée (l'audio ne serait pas chiffré).
+
+### 5.8 Ranger la liste : rayons, forme, mois, tri
+
+Le bouton de rangement du volet des notes (à droite de la recherche) choisit
+comment la liste est découpée. Les sections se replient.
+
+- **Par date** : l'ordre habituel.
+- **Par rayon** : le thème de chaque note. Écris `thème : Cuisine` sur une
+  ligne (ou menu de la note › « Thème… ») : c'est du texte, il se synchronise.
+  Une note sans cette ligne reçoit un rayon **proposé**, calculé sur l'appareil
+  (aucune IA, aucun réseau) : par ressemblance avec les notes déjà rangées,
+  puis d'après le vocabulaire de cinq rayons (Informatique, Image & son,
+  Argent & papiers, Vie perso, Cuisine), puis d'après sa forme (lignes de
+  terminal ou de code → Informatique). Le reste va dans « Sans thème ».
+- **Par forme** : ce qu'est la note, pas son sujet — commandes et code,
+  listes, liens, une seule ligne, textes longs, textes courts, calculs,
+  minuteurs. Calcul local.
+- **Par mois de création**.
+- **Tri à faire** : ce qui est probablement à archiver ou à supprimer —
+  doublons probables (même début ; la plus ancienne est gardée), minuteurs,
+  liens seuls, notes d'une seule ligne. Le menu « … » d'une section archive
+  ou supprime (après confirmation) toute la section. Une note épinglée,
+  sécurisée ou portant une pièce jointe n'y figure jamais.
+
+**Ranger avec JEV** (même menu) : à ta demande seulement, le titre et le début
+de chaque note sans thème sont envoyés à ton serveur JEV, qui choisit un rayon
+parmi les cinq ; le rayon est écrit dans la note (`thème : …`). Une fenêtre
+dit combien de notes partent et vers quel serveur avant tout envoi. Les notes
+sécurisées et celles qui ont déjà un thème ne partent jamais ; une note trop
+vague reste sans thème. C'est le seul cas où du contenu de notes quitte
+l'appareil pour l'IA.
+
+Import Apple Notes (Réglages › Synchronisation) : le dossier d'origine devient
+le thème, les dates d'origine sont gardées, les « Suppressions récentes » sont
+ignorées. Relancer l'import complète les notes déjà importées, sans doublon.
+
+### 5.9 Demande en langage naturel (⌘K)
 
 Une phrase est **classée** dans un mode, puis une action locale est appliquée.
 L'IA ne rédige qu'une chose : une formule, en mode math.

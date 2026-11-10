@@ -27,7 +27,7 @@ enum NoteFormatting {
         if note.title.isEmpty, !lines.isEmpty, lines[0].trimmingCharacters(in: .whitespaces) == note.effectiveTitle {
             lines.removeFirst()
         }
-        lines.removeAll(where: NoteAttachments.isImageLine)
+        lines.removeAll { NoteAttachments.isImageLine($0) || NoteThemes.isThemeLine($0) }
         let text = lines.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? "Vide" : text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }

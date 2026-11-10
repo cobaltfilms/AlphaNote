@@ -21,6 +21,9 @@ struct NoteEditScreen: View {
     @State private var showPhotoPicker = false
     @State private var sharing: ShareContent?
     @State private var viewing: AttachmentRef?
+    @State private var theming: Note?
+    @StateObject private var voiceRecorder = VoiceNoteRecorder()
+    @StateObject private var voicePlayer = VoiceNotePlayer()
 
     var body: some View {
         Group {
@@ -71,7 +74,22 @@ struct NoteEditScreen: View {
                 viewing = nil
             }
         }
-        .onDisappear { store.flushPendingSaves() }
+        .sheet(item: $theming) { note in
+            ThemeSheet(
+                current: store.theme(of: note),
+                isExplicit: NoteThemes.explicit(in: note.content) != nil,
+                themes: store.themeNames,
+                onPick: { theme in store.setTheme(theme, for: note); theming = nil },
+                onCancel: { theming = nil }
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .onDisappear {
+            store.flushPendingSaves()
+            voicePlayer.stop()
+            // Quitter l'écran termine la note vocale : elle n'est pas perdue.
+            if voiceRecorder.isRecording { finishVoiceNote() }
+        }
     }
 
     @ViewBuilder
@@ -94,16 +112,26 @@ struct NoteEditScreen: View {
             .padding(.horizontal, 16)
             .padding(.top, 10)
             .padding(.bottom, 4)
+            if voiceRecorder.isRecording {
+                VoiceRecordingBanner(recorder: voiceRecorder, onStop: finishVoiceNote, onCancel: { voiceRecorder.cancel() })
+            }
             if mode == .timer {
                 timerView(for: note)
                     .padding(.vertical, 12)
                 Divider()
             }
             NoteTextView(text: contentBinding, fontSize: fontSize, checkTrigger: checkTrigger, isFocused: $editorFocused)
-            let images = note.isVault ? [] : NoteAttachments.names(in: note.content)
+            let images = note.isVault ? [] : NoteAttachments.imageNames(in: note.content)
             if !images.isEmpty {
                 ImageStrip(noteUUID: note.uuid, names: images) { name in
                     viewing = AttachmentRef(noteUUID: note.uuid, name: name)
+                }
+            }
+            let recordings = note.isVault ? [] : NoteAttachments.audioNames(in: note.content)
+            if !recordings.isEmpty {
+                VoiceNoteStrip(noteUUID: note.uuid, names: recordings, player: voicePlayer) { name in
+                    store.removeVoiceNote(named: name, from: note)
+                    store.showToast("Enregistrement supprimé", symbol: "trash")
                 }
             }
             // Une note sécurisée ne passe jamais par l'IA : pas de barre.
@@ -154,6 +182,14 @@ struct NoteEditScreen: View {
             if editorFocused {
                 Button("OK") { editorFocused = false; hideKeyboard() }
             }
+            if let note = store.currentNote, voiceRecorder.isRecording || (!note.isVault && note.keyword != "timer") {
+                Button { toggleVoiceNote() } label: {
+                    Image(systemName: voiceRecorder.isRecording ? "stop.circle.fill" : "mic")
+                        .foregroundStyle(voiceRecorder.isRecording ? Color.red : Palette.accentColor)
+                }
+                .accessibilityLabel(voiceRecorder.isRecording ? "Terminer la note vocale" : "Note vocale")
+                .accessibilityIdentifier("voiceNoteButton")
+            }
             if let note = store.currentNote {
                 Menu {
                     noteMenu(for: note)
@@ -202,6 +238,7 @@ struct NoteEditScreen: View {
         } else {
             // Les images restent en clair sur l'appareil : pas dans le coffre.
             Button { showPhotoPicker = true } label: { Label("Ajouter une image", systemImage: "photo.badge.plus") }
+            Button { theming = note } label: { Label("Thème…", systemImage: "tag") }
         }
         Button { share(note) } label: { Label("Partager", systemImage: "square.and.arrow.up") }
             .disabled(store.plaintext(of: note) == nil)
@@ -239,6 +276,41 @@ struct NoteEditScreen: View {
         }
         store.deleteNote(note)
         dismiss()
+    }
+
+    // MARK: - Note vocale
+
+    private func toggleVoiceNote() {
+        if voiceRecorder.isRecording {
+            finishVoiceNote()
+            return
+        }
+        guard let note = store.currentNote, !note.isVault else { return }
+        voicePlayer.stop()
+        editorFocused = false
+        hideKeyboard()
+        Task {
+            if await !voiceRecorder.start(noteUUID: note.uuid) {
+                store.showToast(voiceRecorder.error ?? "Enregistrement impossible.", symbol: "mic.slash")
+            }
+        }
+    }
+
+    private func finishVoiceNote() {
+        let recorder = voiceRecorder
+        Task {
+            guard let result = await recorder.stop() else {
+                store.showToast("Enregistrement trop court : rien n'a été gardé.", symbol: "mic.slash")
+                return
+            }
+            store.addVoiceNote(result)
+            store.showToast(
+                result.transcript.isEmpty
+                    ? "Note vocale ajoutée, sans transcription (aucune parole reconnue)."
+                    : "Note vocale ajoutée et transcrite.",
+                symbol: "waveform"
+            )
+        }
     }
 
     // MARK: - Images

@@ -377,7 +377,7 @@ struct SyncSettingsView: View {
             } header: {
                 Text("Import")
             } footer: {
-                HelpNote("Les doublons (même titre et même contenu) sont ignorés.")
+                HelpNote("Apple Notes : le dossier devient le thème de la note, les dates d'origine sont gardées, les « Suppressions récentes » sont ignorées. Relancer l'import complète les notes déjà importées ; les doublons (même titre et même contenu) sont ignorés.")
             }
         }
         .formStyle(.grouped)

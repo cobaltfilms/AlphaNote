@@ -12,8 +12,8 @@ options:
     iOS: "17.0"
 settings:
   base:
-    MARKETING_VERSION: "0.5.3"
-    CURRENT_PROJECT_VERSION: "503"
+    MARKETING_VERSION: "0.6.2"
+    CURRENT_PROJECT_VERSION: "602"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
@@ -50,21 +50,26 @@ targets:
           - AI/Features/FormulaDraftFeature.swift
           - AI/Features/ModeRoutingFeature.swift
           - AI/Features/SemanticSearchFeature.swift
+          - AI/Features/ThemeClassificationFeature.swift
           - AI/Storage/*.swift
           - Database/DatabaseManager.swift
           - Evaluation/*.swift
           - Models/*.swift
+          - Reminders/*.swift
           - Vault/*.swift
           - Services/DeviceIdentity.swift
           - Services/KeychainService.swift
           - Services/NextcloudWebDAVClient.swift
           - Services/RecipeIngredientExtractor.swift
           - Services/SpeechRecognizer.swift
+          - Services/VoiceNoteRecorder.swift
           - Services/URLDetector.swift
+          - Sync/AttachmentSync.swift
           - Sync/SyncEngine.swift
           - Sync/SyncModels.swift
           - UI/NoteViews/TimerNoteView.swift
           - UI/NoteViews/NoteTitleField.swift
+          - UI/NoteViews/VoiceNoteViews.swift
           - UI/Theme/AlphaNoteTheme.swift
           - ViewModels/*.swift
           - Resources/Sounds/*.m4a
@@ -108,9 +113,9 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - audio
-        NSMicrophoneUsageDescription: "AlphaNote écoute le micro pour la dictée de la barre de commande."
+        NSMicrophoneUsageDescription: "AlphaNote écoute le micro pour la dictée et les notes vocales."
         NSFaceIDUsageDescription: "Face ID ouvre le coffre des notes sécurisées."
-        NSSpeechRecognitionUsageDescription: "AlphaNote transcrit ta voix en texte pour la barre de commande."
+        NSSpeechRecognitionUsageDescription: "AlphaNote transcrit ta voix : demandes dictées et notes vocales."
         NSPhotoLibraryUsageDescription: "AlphaNote ajoute à une note les images que tu choisis."
         NSLocalNetworkUsageDescription: "AlphaNote joint le serveur JEV et Nextcloud sur ton réseau local."
         NSAppTransportSecurity:
@@ -155,6 +160,7 @@ targets:
       - path: ../Tests/AlphaNoteTests
         includes:
           - AlphaNoteTests.swift
+          - AttachmentSyncTests.swift
           - CoreLogicTests.swift
           - EvaluationTests.swift
           - JEVClientTests.swift
@@ -165,6 +171,9 @@ targets:
           - SharedCoreTests.swift
           - TimerLineTests.swift
           - TimerRequestTests.swift
+          - RemindersTests.swift
+          - ThemesAndVoiceTests.swift
+          - OrganizerTests.swift
           - VaultTests.swift
     dependencies:
       - target: AlphaNote

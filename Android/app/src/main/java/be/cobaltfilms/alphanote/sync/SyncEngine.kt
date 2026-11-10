@@ -58,6 +58,7 @@ class SyncEngine(
     private var localChangeJob: Job? = null
     private var retryJob: Job? = null
     private val etagStore = ETagStore(context.applicationContext)
+    private val attachmentSync = AttachmentSync(context.applicationContext)
     private var engineScope: CoroutineScope? = null
 
     /** Une modification locale : synchro 30 s plus tard (regroupe les frappes). */
@@ -251,6 +252,13 @@ class SyncEngine(
                 if (note.isDeleted && note.deletedAt != null && note.deletedAt < cutoff) {
                     client.deleteNote(note.uuid)
                     knownETags.remove(note.uuid)
+                    // Ses pièces jointes partent avec elle ; un échec ici ne bloque rien.
+                    try {
+                        client.deleteAttachments(note.uuid)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                    }
                     continue
                 }
                 val localDto = CloudNoteDto.fromNote(note)
@@ -287,8 +295,15 @@ class SyncEngine(
             settingsRepository.markLastSync(syncTimestamp)
             // Les notes reçues portent peut-être des rappels : on reprogramme les alarmes.
             be.cobaltfilms.alphanote.reminders.ReminderScheduler.rescheduleAll(appContext, repository)
-            _state.value = if (skipped == 0) SyncRunState.Success(syncTimestamp)
-            else SyncRunState.Error("Synchronisation faite, mais $skipped note(s) illisible(s) ou refusée(s) par le serveur ont été ignorées.")
+
+            // Pièces jointes, après les notes : un échec ici est compté, jamais
+            // propagé — la synchro des notes est déjà faite.
+            val attachments = attachmentSync.run(client, finalNotes, etagScope)
+            _state.value = when {
+                skipped > 0 -> SyncRunState.Error("Synchronisation faite, mais $skipped note(s) illisible(s) ou refusée(s) par le serveur ont été ignorées.")
+                attachments.failed > 0 -> SyncRunState.Error("Notes synchronisées, mais ${attachments.failed} pièce(s) jointe(s) n'ont pas pu être envoyées ou reçues. Nouvel essai à la prochaine synchro.")
+                else -> SyncRunState.Success(syncTimestamp)
+            }
         } catch (error: CancellationException) {
             _state.value = SyncRunState.Idle
             throw error

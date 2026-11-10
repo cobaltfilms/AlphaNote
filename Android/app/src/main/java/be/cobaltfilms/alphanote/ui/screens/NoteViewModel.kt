@@ -9,17 +9,23 @@ import be.cobaltfilms.alphanote.ai.AISettingsRepository
 import be.cobaltfilms.alphanote.ai.FormulaDraftFeature
 import be.cobaltfilms.alphanote.ai.JEVClient
 import be.cobaltfilms.alphanote.ai.JEVOutcome
+import be.cobaltfilms.alphanote.ai.JEVTransport
 import be.cobaltfilms.alphanote.ai.KeywordIntentRouter
 import be.cobaltfilms.alphanote.ai.ModeDecision
 import be.cobaltfilms.alphanote.ai.LocalModeClassifier
 import be.cobaltfilms.alphanote.ai.ModeRoutingFeature
 import be.cobaltfilms.alphanote.ai.NoteMode
+import be.cobaltfilms.alphanote.ai.OkHttpJEVTransport
 import be.cobaltfilms.alphanote.ai.RouteSource
+import be.cobaltfilms.alphanote.ai.ThemeClassificationFeature
 import be.cobaltfilms.alphanote.data.AppSettings
 import be.cobaltfilms.alphanote.data.AppSettingsRepository
 import be.cobaltfilms.alphanote.data.NoteRepository
 import be.cobaltfilms.alphanote.data.ThemeMode
 import be.cobaltfilms.alphanote.services.LauncherIcons
+import be.cobaltfilms.alphanote.services.VoiceNotePlayer
+import be.cobaltfilms.alphanote.services.VoiceNoteRecorder
+import be.cobaltfilms.alphanote.services.VoiceNoteResult
 import be.cobaltfilms.alphanote.vault.VaultEnvelope
 import be.cobaltfilms.alphanote.vault.VaultKeyring
 import be.cobaltfilms.alphanote.timer.AlarmPlayer
@@ -29,6 +35,9 @@ import be.cobaltfilms.alphanote.domain.Converter
 import be.cobaltfilms.alphanote.domain.ListModeFormatter
 import be.cobaltfilms.alphanote.domain.MathEvaluator
 import be.cobaltfilms.alphanote.domain.NoteAttachments
+import be.cobaltfilms.alphanote.domain.NoteGrouping
+import be.cobaltfilms.alphanote.domain.NoteThemes
+import be.cobaltfilms.alphanote.domain.ThemeSorter
 import be.cobaltfilms.alphanote.domain.RecipeIngredientExtractor
 import be.cobaltfilms.alphanote.domain.Reminders
 import be.cobaltfilms.alphanote.domain.ReminderKind
@@ -58,6 +67,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.io.File
@@ -125,6 +135,21 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val _semanticResults = MutableStateFlow<List<Note>>(emptyList())
     val semanticResults: StateFlow<List<Note>> = _semanticResults.asStateFlow()
 
+    /** uuid → thème (écrit dans la note, ou proposé par [ThemeSorter]).
+     *  Recalculé hors du fil principal après chaque changement. */
+    private val _themeByUuid = MutableStateFlow<Map<String, String>>(emptyMap())
+    val themeByUuid: StateFlow<Map<String, String>> = _themeByUuid.asStateFlow()
+
+    data class ClassificationProgress(val done: Int, val total: Int)
+
+    /** Non null pendant un rangement par JEV. */
+    private val _classification = MutableStateFlow<ClassificationProgress?>(null)
+    val classification: StateFlow<ClassificationProgress?> = _classification.asStateFlow()
+
+    /** Note vocale en cours (une seule à la fois) et lecture des enregistrements. */
+    val voiceRecorder = VoiceNoteRecorder(application)
+    val voicePlayer = VoiceNotePlayer()
+
     val updatePhase: StateFlow<UpdateManager.Phase> = updateManager.phase
     val currentVersion: String get() = updateManager.currentVersion
 
@@ -142,6 +167,18 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         lanSync.requestSync(0)
         viewModelScope.launch { repository.activeNotes.collectLatest { _activeNotes.value = it } }
         viewModelScope.launch { repository.archivedNotes.collectLatest { _archivedNotes.value = it } }
+        viewModelScope.launch {
+            combine(_activeNotes, _archivedNotes) { active, archived -> active + archived }.collectLatest { notes ->
+                // Recalcul différé : une rafale de sauvegardes ne relance pas le classement à chaque fois.
+                if (_themeByUuid.value.isNotEmpty()) delay(THEME_REFRESH_DELAY_MS)
+                // Une note sécurisée n'est jamais classée : son texte est chiffré.
+                val items = notes.filter { !it.isVault }.map { ThemeSorter.Item(it.uuid, it.title, it.content, it.keyword) }
+                val themes = withContext(Dispatchers.Default) { ThemeSorter.assign(items) }
+                if (themes != _themeByUuid.value) _themeByUuid.value = themes
+            }
+        }
+        // Le micro s'est arrêté tout seul : on garde ce qui a été enregistré.
+        voiceRecorder.onInterrupted = { stopVoiceNote(interrupted = true) }
         viewModelScope.launch {
             appSettingsRepository.settings.collectLatest {
                 _settings.value = it
@@ -174,7 +211,11 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Sortie de l'écran ou passage en arrière-plan : on écrit, et une note
+     *  vocale en cours se termine (Android coupe le micro d'une app en arrière-plan). */
     fun close() {
+        stopVoiceNote()
+        voicePlayer.stop()
         viewModelScope.launch { flush() }
     }
 
@@ -197,6 +238,166 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         NoteAttachments.remove(getApplication(), current.uuid, name)
         val text = current.content.lines().filterNot { line -> NoteAttachments.names(line).contains(name) }.joinToString("\n")
         edit(text)
+    }
+
+    // ---- Thèmes ----
+
+    /** Écrit le thème dans la note (`null` : retire la ligne, le thème redevient proposé). */
+    fun setTheme(note: Note, theme: String?) {
+        if (note.isVault) return
+        viewModelScope.launch {
+            flush()
+            val fresh = repository.getNoteById(note.id) ?: return@launch
+            if (fresh.isVault) return@launch
+            val content = NoteThemes.settingTheme(theme, fresh.content)
+            if (content != fresh.content) replaceCurrent(fresh, content)
+        }
+    }
+
+    // ---- Rangement par JEV ----
+
+    /** Notes qu'un rangement par JEV enverrait au serveur. */
+    val jevCandidateCount: Int
+        get() = ThemeClassificationFeature.candidates(_activeNotes.value + _archivedNotes.value).size
+
+    /** Adresse du serveur de décision, pour le dire avant d'envoyer quoi que ce soit. */
+    val jevServerName: String? get() = _aiSettings.value.config?.url
+
+    /**
+     * Envoie au serveur JEV les notes sans thème écrit (jamais les notes
+     * sécurisées) et écrit le rayon décidé dans chacune (`thème : …`).
+     * Déclenché par l'utilisateur seulement.
+     */
+    fun classifyWithJev(transport: JEVTransport = OkHttpJEVTransport) {
+        if (_classification.value != null) return
+        // Null si l'IA est désactivée ou sans serveur.
+        val config = _aiSettings.value.config
+        if (config == null) {
+            showToast("Active l'IA et indique le serveur JEV dans Réglages › IA.")
+            return
+        }
+        // Levé tout de suite : une seconde demande ne part pas en parallèle.
+        _classification.value = ClassificationProgress(0, 0)
+        viewModelScope.launch {
+            val outcome = try {
+                flush()
+                val candidates = ThemeClassificationFeature.candidates(repository.getAllNotDeleted())
+                if (candidates.isEmpty()) {
+                    showToast("Toutes les notes ont déjà un thème.")
+                    return@launch
+                }
+                _classification.value = ClassificationProgress(0, candidates.size)
+                ThemeClassificationFeature.classify(candidates, config, transport) { done, total ->
+                    _classification.value = ClassificationProgress(done, total)
+                }
+            } finally {
+                _classification.value = null
+            }
+
+            flush()
+            var written = 0
+            for ((uuid, theme) in outcome.themes) {
+                // Relue : la note a pu être rangée à la main ou supprimée entre-temps.
+                val fresh = repository.getNoteByUuid(uuid) ?: continue
+                if (fresh.isDeleted || fresh.isVault || NoteThemes.explicit(fresh.content) != null) continue
+                val saved = repository.updateNote(fresh.copy(content = NoteThemes.settingTheme(theme, fresh.content)))
+                if (_currentNote.value?.id == saved.id) _currentNote.value = saved
+                written++
+            }
+            // Une seule notification de synchro pour tout le rangement.
+            if (written > 0) noteChanged()
+            val parts = mutableListOf("$written note(s) rangée(s) par JEV")
+            if (outcome.unsorted > 0) parts.add("${outcome.unsorted} laissée(s) sans thème")
+            if (outcome.failed > 0) parts.add("${outcome.failed} sans réponse")
+            val summary = parts.joinToString(", ") + "."
+            showToast(outcome.error?.let { "$summary $it" } ?: summary)
+        }
+    }
+
+    // ---- Tri en série ----
+
+    fun archiveNotes(batch: List<Note>) {
+        viewModelScope.launch {
+            flush()
+            for (note in batch) {
+                if (note.archived) continue
+                repository.archiveNote(note)
+                if (_currentNote.value?.id == note.id) _currentNote.value = _currentNote.value?.copy(archived = true)
+            }
+            noteChanged()
+        }
+    }
+
+    fun deleteNotes(batch: List<Note>) {
+        viewModelScope.launch {
+            flush()
+            voicePlayer.stop()
+            for (note in batch) {
+                if (_currentNote.value?.id == note.id) _currentNote.value = null
+                repository.deleteNote(note)
+                // Les fichiers joints (images, enregistrements) partent avec la note.
+                if (voiceRecorder.noteUuid == note.uuid) voiceRecorder.cancel()
+                withContext(Dispatchers.IO) { NoteAttachments.removeAll(getApplication(), note.uuid) }
+                ReminderScheduler.sync(getApplication(), note.uuid, "", "", TimerRegistry.shared.alarmSound)
+                TimerRegistry.shared.discard(note.uuid)
+            }
+            noteChanged()
+        }
+    }
+
+    // ---- Notes vocales ----
+
+    /** Démarre une note vocale dans la note courante (autorisation micro déjà accordée). */
+    fun startVoiceNote() {
+        val note = _currentNote.value ?: return
+        if (voiceRecorder.isRecording) return
+        if (note.isVault) { showToast("Pas de note vocale dans une note sécurisée : l'audio ne serait pas chiffré."); return }
+        voicePlayer.stop()
+        if (!voiceRecorder.start(note.uuid)) showToast(voiceRecorder.error ?: "Enregistrement impossible.")
+    }
+
+    /** Termine : l'enregistrement rejoint la note où il a commencé, même si une autre est affichée. */
+    fun stopVoiceNote(interrupted: Boolean = false) {
+        if (!voiceRecorder.isRecording) return
+        viewModelScope.launch {
+            val result = voiceRecorder.stop()
+            if (result == null) {
+                showToast(voiceRecorder.error ?: "Enregistrement trop court : rien n'a été gardé.")
+                return@launch
+            }
+            if (!addVoiceNote(result)) return@launch
+            val prefix = if (interrupted) "Le micro s'est interrompu. " else ""
+            showToast(prefix + when {
+                result.transcript.isNotEmpty() -> "Note vocale ajoutée et transcrite."
+                // Le reconnaisseur n'a pas pu servir : on le dit tel quel.
+                voiceRecorder.transcriptionIssue != null -> "Note vocale ajoutée sans texte : transcription indisponible sur cet appareil."
+                else -> "Note vocale ajoutée, sans transcription (aucune parole reconnue)."
+            })
+        }
+    }
+
+    /** Abandonne : le fichier est supprimé, rien n'est ajouté à la note. */
+    fun cancelVoiceNote() = voiceRecorder.cancel()
+
+    /** Transcription dans le texte, référence du fichier en fin de note. */
+    private suspend fun addVoiceNote(result: VoiceNoteResult): Boolean {
+        flush()
+        val note = repository.getNoteByUuid(result.noteUuid)?.takeIf { !it.isDeleted && !it.isVault }
+        if (note == null) {
+            NoteAttachments.remove(getApplication(), result.noteUuid, result.audioName)
+            return false
+        }
+        replaceCurrent(note, NoteAttachments.addingVoiceNote(note.content, result.audioName, result.transcript))
+        return true
+    }
+
+    /** Supprime un enregistrement (fichier et référence) ; la transcription,
+     *  devenue du texte de la note, reste. */
+    fun removeVoiceNote(name: String) {
+        val current = _currentNote.value ?: return
+        voicePlayer.stop()
+        NoteAttachments.remove(getApplication(), current.uuid, name)
+        edit(NoteAttachments.removingReference(name, current.content))
     }
 
     fun edit(content: String) {
@@ -290,6 +491,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (_currentNote.value?.id == note.id) { dirtyNote = null; pendingSave?.cancel(); _currentNote.value = null }
             repository.deleteNote(note)
+            // Les fichiers joints (images, enregistrements) partent avec la note.
+            if (voiceRecorder.noteUuid == note.uuid) voiceRecorder.cancel()
+            voicePlayer.stop()
+            withContext(Dispatchers.IO) { NoteAttachments.removeAll(getApplication(), note.uuid) }
             ReminderScheduler.sync(getApplication(), note.uuid, "", "", TimerRegistry.shared.alarmSound)
             TimerRegistry.shared.discard(note.uuid)
             noteChanged()
@@ -627,6 +832,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         alarmPreview.stop()
+        voiceRecorder.cancel()
+        voicePlayer.stop()
         super.onCleared()
     }
 
@@ -638,6 +845,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun setListCheckTrigger(trigger: String) = viewModelScope.launch { appSettingsRepository.setListCheckTrigger(trigger) }
     fun setAutoCleanup(enabled: Boolean) = viewModelScope.launch { appSettingsRepository.setAutoCleanup(enabled) }
     fun setConfirmDelete(enabled: Boolean) = viewModelScope.launch { appSettingsRepository.setConfirmDelete(enabled) }
+    fun setGrouping(grouping: NoteGrouping) = viewModelScope.launch { appSettingsRepository.setGrouping(grouping) }
     fun setAppcastUrl(url: String) = viewModelScope.launch { appSettingsRepository.setAppcastUrl(url) }
 
     /** Ajoute une ligne de rappel à la note courante ; la planification suit la sauvegarde. */
@@ -790,6 +998,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         private const val SAVE_DEBOUNCE_MS = 400L
+        private const val THEME_REFRESH_DELAY_MS = 600L
         private const val LAN_CHANGE_DELAY_MS = 3_000L
         private val CURRENCY_LIKE = Regex("(?i)^\\s*[-+]?\\d+(?:[.,]\\d+)?\\s*[A-Za-z]{3}\\s+(to|in|en)\\s+[A-Za-z]{3}\\s*=?\\s*$")
     }

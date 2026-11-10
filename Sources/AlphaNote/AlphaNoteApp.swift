@@ -26,6 +26,8 @@ struct AlphaNoteApp: App {
                     .keyboardShortcut("l", modifiers: [.command, .option])
                 Button("Demande en langage naturel…") { post(.alphaNoteToggleCommandField) }
                     .keyboardShortcut("k", modifiers: [.command])
+                Button("Note vocale : enregistrer / terminer") { post(.alphaNoteToggleVoiceNote) }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
                 Button("Rechercher dans les notes…") { post(.alphaNoteFocusSearch) }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
 

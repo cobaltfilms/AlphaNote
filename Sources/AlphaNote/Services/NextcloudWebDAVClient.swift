@@ -53,6 +53,10 @@ final class NextcloudWebDAVClient {
     private let alphaFolderURL: URL
     private let notesFolderURL: URL
     private let manifestURL: URL
+    private let attachmentsFolderURL: URL
+    /// Envois et téléchargements de pièces jointes : même silence maximal, mais
+    /// une durée totale bien plus longue (une note vocale peut peser lourd).
+    private let transferSession: URLSession
 
     init(serverURL: String, username: String, password: String) throws {
         guard let baseURL = URL(string: serverURL.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -70,6 +74,10 @@ final class NextcloudWebDAVClient {
         config.timeoutIntervalForRequest = 60
         config.timeoutIntervalForResource = 180
         self.session = URLSession(configuration: config)
+        let transferConfig = URLSessionConfiguration.default
+        transferConfig.timeoutIntervalForRequest = 60
+        transferConfig.timeoutIntervalForResource = 3600
+        self.transferSession = URLSession(configuration: transferConfig)
 
         let normalizedServer = NextcloudWebDAVClient.removeTrailingSlash(from: baseURL)
         self.serverBaseURL = normalizedServer
@@ -83,6 +91,7 @@ final class NextcloudWebDAVClient {
         self.alphaFolderURL = webDAVRoot.appendingPathComponent("AlphaNote", isDirectory: true)
         self.notesFolderURL = alphaFolderURL.appendingPathComponent("notes", isDirectory: true)
         self.manifestURL = alphaFolderURL.appendingPathComponent("manifest.json")
+        self.attachmentsFolderURL = alphaFolderURL.appendingPathComponent(AttachmentSyncPlanner.folderName, isDirectory: true)
     }
 
     func testConnection() async throws {
@@ -154,6 +163,99 @@ final class NextcloudWebDAVClient {
     func deleteNote(uuid: String) async throws {
         let url = notesFolderURL.appendingPathComponent("\(uuid).json")
         _ = try await sendRequest(url: url, method: "DELETE", expectedStatusCodes: [200, 204, 404])
+    }
+
+    // MARK: Pièces jointes (`AlphaNote/attachments/<uuid de la note>/<nom>`)
+
+    /// Dossiers de notes sous `attachments` (avec leur ETag) ; nil si le dossier
+    /// `attachments` n'existe pas encore sur le serveur.
+    func listAttachmentFolders() async throws -> [RemoteFileEntry]? {
+        do {
+            return try await propfind(url: attachmentsFolderURL, depth: 1)
+        } catch let NextcloudClientError.httpStatus(code) where code == 404 {
+            return nil
+        }
+    }
+
+    /// Fichiers joints d'une note présents sur le serveur.
+    func listAttachments(noteUUID: String) async throws -> [RemoteFileEntry] {
+        do {
+            return try await propfind(url: try attachmentFolderURL(noteUUID: noteUUID), depth: 1)
+        } catch let NextcloudClientError.httpStatus(code) where code == 404 {
+            return []
+        }
+    }
+
+    /// Crée `attachments` (noteUUID nil) ou le dossier d'une note.
+    func ensureAttachmentsFolder(noteUUID: String?) async throws {
+        if let noteUUID {
+            try await ensureDirectory(try attachmentFolderURL(noteUUID: noteUUID))
+        } else {
+            try await ensureDirectory(attachmentsFolderURL)
+        }
+    }
+
+    /// Envoie le fichier tel quel, lu depuis le disque (jamais chargé en mémoire).
+    func uploadAttachment(noteUUID: String, name: String, from fileURL: URL) async throws {
+        var request = URLRequest(url: try attachmentURL(noteUUID: noteUUID, name: name))
+        request.httpMethod = "PUT"
+        request.setValue(authHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        let (_, response) = try await transferSession.upload(for: request, fromFile: fileURL)
+        try Self.check(response, expected: [200, 201, 204])
+    }
+
+    /// Télécharge le fichier sur disque puis le met en place d'un seul geste
+    /// (jamais de fichier à moitié écrit sous son nom final). Retourne false
+    /// s'il n'est pas (ou plus) sur le serveur.
+    func downloadAttachment(noteUUID: String, name: String, to target: URL) async throws -> Bool {
+        var request = URLRequest(url: try attachmentURL(noteUUID: noteUUID, name: name))
+        request.httpMethod = "GET"
+        request.setValue(authHeader(), forHTTPHeaderField: "Authorization")
+        let (downloaded, response) = try await transferSession.download(for: request)
+        let fileManager = FileManager.default
+        defer { try? fileManager.removeItem(at: downloaded) }
+        if (response as? HTTPURLResponse)?.statusCode == 404 { return false }
+        try Self.check(response, expected: [200])
+        let size = (try fileManager.attributesOfItem(atPath: downloaded.path)[.size] as? NSNumber)?.int64Value ?? 0
+        guard size > 0 else { throw NextcloudClientError.invalidResponse }
+
+        let folder = target.deletingLastPathComponent()
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        // Même dossier (donc même volume) que la cible : le renommage final est atomique.
+        let staging = folder.appendingPathComponent(".\(name).part")
+        try? fileManager.removeItem(at: staging)
+        try fileManager.moveItem(at: downloaded, to: staging)
+        if fileManager.fileExists(atPath: target.path) {
+            _ = try fileManager.replaceItemAt(target, withItemAt: staging)
+        } else {
+            try fileManager.moveItem(at: staging, to: target)
+        }
+        return true
+    }
+
+    /// Supprime le dossier distant des pièces jointes d'une note (purge d'une
+    /// note supprimée depuis plus de 30 jours).
+    func deleteAttachments(noteUUID: String) async throws {
+        _ = try await sendRequest(url: try attachmentFolderURL(noteUUID: noteUUID), method: "DELETE", expectedStatusCodes: [200, 204, 404])
+    }
+
+    private func attachmentFolderURL(noteUUID: String) throws -> URL {
+        // Un UUID vide ou farfelu viserait un autre dossier (voire `attachments` entier).
+        guard AttachmentSyncPlanner.isSafeNoteUUID(noteUUID) else { throw NextcloudClientError.invalidResponse }
+        return attachmentsFolderURL.appendingPathComponent(noteUUID, isDirectory: true)
+    }
+
+    private func attachmentURL(noteUUID: String, name: String) throws -> URL {
+        guard AttachmentSyncPlanner.isSafeName(name) else { throw NextcloudClientError.invalidResponse }
+        return try attachmentFolderURL(noteUUID: noteUUID).appendingPathComponent(name)
+    }
+
+    private static func check(_ response: URLResponse, expected: Set<Int>) throws {
+        guard let http = response as? HTTPURLResponse else { throw NextcloudClientError.invalidResponse }
+        if http.statusCode == 401 { throw NextcloudClientError.unauthorized }
+        if http.statusCode == 403 { throw NextcloudClientError.forbidden }
+        guard expected.contains(http.statusCode) else { throw NextcloudClientError.httpStatus(http.statusCode) }
     }
 
     func listTextFiles(relativeFolderPath: String, recursive: Bool = true) async throws -> [RemoteTextFile] {

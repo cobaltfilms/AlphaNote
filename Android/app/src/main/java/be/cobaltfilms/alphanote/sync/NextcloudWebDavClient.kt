@@ -10,8 +10,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.xmlpull.v1.XmlPullParser
+import java.io.File
 import java.io.StringReader
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
@@ -59,6 +61,8 @@ class NextcloudWebDavClient(
     private val notesFolderUrl: HttpUrl = alphaFolderUrl.newBuilder().addPathSegment("notes").build()
     private val backupsFolderUrl: HttpUrl = alphaFolderUrl.newBuilder().addPathSegment("backups").build()
     private val manifestUrl: HttpUrl = alphaFolderUrl.newBuilder().addPathSegment("manifest.json").build()
+    private val attachmentsFolderUrl: HttpUrl =
+        alphaFolderUrl.newBuilder().addPathSegment(AttachmentSyncPlanner.FOLDER_NAME).build()
 
     suspend fun testConnection() {
         ensureDirectories()
@@ -146,6 +150,95 @@ class NextcloudWebDavClient(
         val url = backupsFolderUrl.newBuilder().addPathSegment(filename).build()
         val result = sendRequest(url, "GET", expectedStatusCodes = setOf(200))
         return CloudJsonCoder.decodeBackup(result.body)
+    }
+
+    // ---- Pièces jointes (`AlphaNote/attachments/<uuid de la note>/<nom>`) ----
+
+    /**
+     * Dossiers de notes sous `attachments` (avec leur ETag) ; null si le dossier
+     * `attachments` n'existe pas encore sur le serveur.
+     */
+    suspend fun listAttachmentFolders(): List<RemoteFileEntry>? = try {
+        propfind(attachmentsFolderUrl, depth = 1)
+    } catch (error: NextcloudClientException.HttpStatus) {
+        if (error.code != 404) throw error
+        null
+    }
+
+    /** Fichiers joints d'une note présents sur le serveur. */
+    suspend fun listAttachments(noteUuid: String): List<RemoteFileEntry> = try {
+        propfind(attachmentFolderUrl(noteUuid), depth = 1)
+    } catch (error: NextcloudClientException.HttpStatus) {
+        if (error.code != 404) throw error
+        emptyList()
+    }
+
+    /** Crée `attachments` ([noteUuid] null) ou le dossier d'une note. */
+    suspend fun ensureAttachmentsFolder(noteUuid: String?) {
+        ensureDirectory(if (noteUuid == null) attachmentsFolderUrl else attachmentFolderUrl(noteUuid))
+    }
+
+    /** Envoie le fichier tel quel, lu depuis le disque (jamais chargé en mémoire). */
+    suspend fun uploadAttachment(noteUuid: String, name: String, file: File) {
+        sendRequest(
+            attachmentUrl(noteUuid, name),
+            "PUT",
+            body = file.asRequestBody(BINARY_MEDIA_TYPE),
+            expectedStatusCodes = setOf(200, 201, 204)
+        )
+    }
+
+    /**
+     * Télécharge le fichier en flux vers un fichier provisoire du même dossier,
+     * puis le renomme (jamais de fichier à moitié écrit sous son nom final).
+     * Rend false s'il n'est pas (ou plus) sur le serveur.
+     */
+    suspend fun downloadAttachment(noteUuid: String, name: String, target: File): Boolean = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(attachmentUrl(noteUuid, name))
+            .get()
+            .header("Authorization", Credentials.basic(username, password))
+            .build()
+        client.newCall(request).execute().use { response ->
+            when (response.code) {
+                200 -> Unit
+                404 -> return@withContext false
+                401 -> throw NextcloudClientException.Unauthorized
+                403 -> throw NextcloudClientException.Forbidden
+                else -> throw NextcloudClientException.HttpStatus(response.code)
+            }
+            val body = response.body ?: throw NextcloudClientException.InvalidResponse
+            val folder = target.parentFile ?: throw NextcloudClientException.InvalidResponse
+            folder.mkdirs()
+            val staging = File(folder, ".$name.part")
+            try {
+                body.byteStream().use { input -> staging.outputStream().use { output -> input.copyTo(output) } }
+                if (staging.length() == 0L) throw NextcloudClientException.InvalidResponse
+                if (!staging.renameTo(target)) throw java.io.IOException("Renommage impossible : ${target.name}")
+            } finally {
+                staging.delete()
+            }
+            true
+        }
+    }
+
+    /**
+     * Supprime le dossier distant des pièces jointes d'une note (purge d'une
+     * note supprimée depuis plus de 30 jours).
+     */
+    suspend fun deleteAttachments(noteUuid: String) {
+        sendRequest(attachmentFolderUrl(noteUuid), "DELETE", expectedStatusCodes = setOf(200, 204, 404))
+    }
+
+    private fun attachmentFolderUrl(noteUuid: String): HttpUrl {
+        // Un UUID vide ou farfelu viserait un autre dossier (voire `attachments` entier).
+        if (!AttachmentSyncPlanner.isSafeNoteUuid(noteUuid)) throw NextcloudClientException.InvalidResponse
+        return attachmentsFolderUrl.newBuilder().addPathSegment(noteUuid).build()
+    }
+
+    private fun attachmentUrl(noteUuid: String, name: String): HttpUrl {
+        if (!AttachmentSyncPlanner.isSafeName(name)) throw NextcloudClientException.InvalidResponse
+        return attachmentFolderUrl(noteUuid).newBuilder().addPathSegment(name).build()
     }
 
     private suspend fun ensureDirectory(url: HttpUrl) {
@@ -300,5 +393,6 @@ class NextcloudWebDavClient(
     private companion object {
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         val XML_MEDIA_TYPE = "application/xml; charset=utf-8".toMediaType()
+        val BINARY_MEDIA_TYPE = "application/octet-stream".toMediaType()
     }
 }

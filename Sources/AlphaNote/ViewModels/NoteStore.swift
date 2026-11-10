@@ -22,6 +22,11 @@ final class NoteStore: ObservableObject {
 
     @Published var toast: Toast?
 
+    /// uuid → thème (écrit dans la note, ou proposé par `ThemeSorter`).
+    /// Recalculé hors du fil principal après chaque changement.
+    @Published private(set) var themeByUUID: [String: String] = [:]
+    private var themeTask: Task<Void, Never>?
+
     /// Une note sécurisée attend le coffre (fermé ou sans mot de passe) : elle
     /// reste en mémoire, jamais écrite en clair. L'interface propose d'ouvrir.
     @Published var vaultNeedsUnlock = false
@@ -265,6 +270,164 @@ final class NoteStore: ObservableObject {
         } else if let index = archivedNotes.firstIndex(where: { $0.id == note.id }) {
             archivedNotes[index] = note
         }
+        scheduleThemeRefresh()
+    }
+
+    // MARK: - Thèmes
+
+    /// Thème d'une note : écrit dans son texte, sinon proposé, sinon nil.
+    func theme(of note: Note) -> String? { themeByUUID[note.uuid] }
+
+    /// Thèmes présents, par ordre alphabétique.
+    var themeNames: [String] {
+        var seen: [String: String] = [:]
+        for name in themeByUUID.values where seen[NoteThemes.key(name)] == nil {
+            seen[NoteThemes.key(name)] = name
+        }
+        return seen.keys.sorted().compactMap { seen[$0] }
+    }
+
+    /// Écrit le thème dans la note (`nil` : retire la ligne, le thème redevient proposé).
+    func setTheme(_ theme: String?, for note: Note) {
+        flushPendingSaves()
+        guard !note.isVault, let id = note.id,
+              var fresh = (notes + archivedNotes).first(where: { $0.id == id }) else { return }
+        let content = NoteThemes.settingTheme(theme, in: fresh.content)
+        guard content != fresh.content else { return }
+        fresh.content = content
+        updateNote(fresh)
+    }
+
+    /// Recalcul différé : une frappe ne relance pas le classement à chaque lettre.
+    private func scheduleThemeRefresh(delay: UInt64 = 600_000_000) {
+        themeTask?.cancel()
+        themeTask = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
+            guard !Task.isCancelled, let self else { return }
+            // Une note sécurisée n'est jamais classée : son texte est chiffré.
+            let items = (self.notes + self.archivedNotes).filter { !$0.isVault }.map {
+                ThemeSorter.Item(uuid: $0.uuid, title: $0.title, content: $0.content, keyword: $0.keyword)
+            }
+            let themes = await Task.detached(priority: .utility) { ThemeSorter.assign(items) }.value
+            guard !Task.isCancelled else { return }
+            if themes != self.themeByUUID { self.themeByUUID = themes }
+        }
+    }
+
+    // MARK: - Rangement par JEV (à la demande)
+
+    struct ClassificationProgress: Equatable {
+        let done: Int
+        let total: Int
+    }
+
+    /// Non nil pendant un rangement par JEV.
+    @Published private(set) var classification: ClassificationProgress?
+
+    /// Notes qu'un rangement par JEV enverrait au serveur.
+    var jevCandidateCount: Int {
+        ThemeClassificationFeature.candidates(notes + archivedNotes).count
+    }
+
+    /// Adresse du serveur de décision, pour le dire avant d'envoyer quoi que ce soit.
+    var jevServerName: String? { JEVClient.config()?.url }
+
+    /// Envoie au serveur JEV les notes sans thème écrit (jamais les notes
+    /// sécurisées) et écrit le rayon décidé dans chacune (`thème : …`).
+    /// Déclenché par l'utilisateur seulement.
+    func classifyWithJEV(transport: JEVTransport = URLSessionJEVTransport()) async {
+        guard classification == nil else { return }
+        guard isAIEnabled, let config = JEVClient.config() else {
+            showToast("Active l'IA et indique le serveur JEV dans Réglages › IA.", symbol: "exclamationmark.triangle")
+            return
+        }
+        flushPendingSaves()
+        let candidates = ThemeClassificationFeature.candidates(notes + archivedNotes)
+        guard !candidates.isEmpty else {
+            showToast("Toutes les notes ont déjà un thème.", symbol: "tag")
+            return
+        }
+        classification = ClassificationProgress(done: 0, total: candidates.count)
+        let outcome = await ThemeClassificationFeature().classify(candidates, config: config, transport: transport) { [weak self] done, total in
+            await self?.setClassification(done: done, total: total)
+        }
+        classification = nil
+
+        flushPendingSaves()
+        var written = 0
+        for (uuid, theme) in outcome.themes {
+            // Relue : la note a pu être rangée à la main ou supprimée entre-temps.
+            guard var fresh = Note.fetchByUUID(uuid), !fresh.isDeleted, !fresh.isVault,
+                  NoteThemes.explicit(in: fresh.content) == nil else { continue }
+            fresh.content = NoteThemes.settingTheme(theme, in: fresh.content)
+            Note.update(fresh)
+            written += 1
+        }
+        if written > 0 {
+            SyncEngine.shared.notifyLocalChange()
+            reloadNotes(selecting: currentNote?.id)
+        }
+        var parts = ["\(written) note(s) rangée(s) par JEV"]
+        if outcome.unsorted > 0 { parts.append("\(outcome.unsorted) laissée(s) sans thème") }
+        if outcome.failed > 0 { parts.append("\(outcome.failed) sans réponse") }
+        let summary = parts.joined(separator: ", ") + "."
+        showToast(outcome.error.map { summary + " " + $0 } ?? summary,
+                  symbol: outcome.error == nil ? "sparkles" : "exclamationmark.triangle", duration: 8)
+    }
+
+    private func setClassification(done: Int, total: Int) {
+        classification = ClassificationProgress(done: done, total: total)
+    }
+
+    // MARK: - Tri en série
+
+    func archiveNotes(_ batch: [Note]) {
+        flushPendingSaves()
+        for var note in batch where !note.archived {
+            note.archived = true
+            Note.update(note)
+        }
+        SyncEngine.shared.notifyLocalChange()
+        reloadNotes(selecting: currentNote?.id)
+    }
+
+    func deleteNotes(_ batch: [Note]) {
+        flushPendingSaves()
+        let selection = currentNote.flatMap { current in batch.contains(where: { $0.id == current.id }) ? nil : current.id }
+        for note in batch {
+            Note.delete(note)
+            NoteAttachments.removeAll(noteUUID: note.uuid)
+            TimerRegistry.shared.discard(noteUUID: note.uuid)
+            ReminderScheduler.shared.sync(noteUUID: note.uuid, title: "", content: "", isVault: false)
+            let uuid = note.uuid
+            Task.detached(priority: .utility) { await EmbeddingStore.shared.removeEmbedding(noteUUID: uuid) }
+        }
+        SyncEngine.shared.notifyLocalChange()
+        reloadNotes(selecting: selection)
+    }
+
+    // MARK: - Notes vocales
+
+    /// Ajoute à la note l'enregistrement terminé : transcription dans le texte,
+    /// référence du fichier en fin de note.
+    func addVoiceNote(_ result: VoiceNoteResult) {
+        flushPendingSaves()
+        guard var note = (notes + archivedNotes).first(where: { $0.uuid == result.noteUUID }), !note.isVault else {
+            NoteAttachments.remove(noteUUID: result.noteUUID, name: result.audioName)
+            return
+        }
+        note.content = NoteAttachments.addingVoiceNote(to: note.content, audioName: result.audioName, transcript: result.transcript)
+        updateNote(note)
+    }
+
+    /// Supprime un enregistrement (fichier et référence) ; la transcription,
+    /// devenue du texte de la note, reste.
+    func removeVoiceNote(named name: String, from note: Note) {
+        flushPendingSaves()
+        guard var fresh = (notes + archivedNotes).first(where: { $0.uuid == note.uuid }) else { return }
+        fresh.content = NoteAttachments.removingReference(name, from: fresh.content)
+        updateNote(fresh)
+        NoteAttachments.remove(noteUUID: note.uuid, name: name)
     }
 
     // MARK: - Actions sur une note
@@ -328,6 +491,7 @@ final class NoteStore: ObservableObject {
         }
         let nextSelection = note.id == currentNote?.id ? adjacentNoteID(forDeletedNoteID: note.id) : currentNote?.id
         Note.delete(note)
+        NoteAttachments.removeAll(noteUUID: note.uuid)
         TimerRegistry.shared.discard(noteUUID: note.uuid)
         ReminderScheduler.shared.sync(noteUUID: note.uuid, title: "", content: "", isVault: false)
         Task.detached(priority: .utility) { await EmbeddingStore.shared.removeEmbedding(noteUUID: note.uuid) }
@@ -497,6 +661,7 @@ final class NoteStore: ObservableObject {
         let allNotes = Note.fetchAll().map { note in note.id.flatMap { heldVaultNotes[$0] } ?? note }
         notes = allNotes.filter { !$0.archived }
         archivedNotes = allNotes.filter { $0.archived }
+        scheduleThemeRefresh(delay: themeByUUID.isEmpty ? 0 : 150_000_000)
 
         if notes.isEmpty {
             let created = Note.create(Note(position: 0))

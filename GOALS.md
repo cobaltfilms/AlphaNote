@@ -52,6 +52,18 @@
 - Quick search across all notes
 - Find and replace within a note
 
+### Voice notes
+- Mic button (⌥⌘R on macOS) records to `attachments/<note uuid>/<uuid>.m4a` and transcribes live with the system speech recognizer (on-device when the language allows).
+- The transcript becomes ordinary note text; the file is referenced by a `![audio](att:<name>.m4a)` line at the end of the note (`NoteAttachments`).
+- The recording is the source of truth: without transcription (denied, unavailable) the audio is kept and the UI says why the text is missing.
+- Attachments (audio and images) sync through Nextcloud next to the notes, in `AlphaNote/attachments/<note uuid>/<name>` (`AttachmentSync`): uploaded when missing on the server, downloaded when missing locally, never compared (files are immutable). Vault and deleted notes are skipped. Direct Wi-Fi sync still carries text only.
+
+### Organising the list
+- The note list can be grouped (`NoteGrouping`, `NoteOrganizer`): by date (default), by shelf (theme), by shape, by creation month, or "tri à faire" (probable junk: likely duplicates, timers, lone links, one-liners; bulk archive/delete per section).
+- A `thème : X` line in the note is its theme (`NoteThemes`), synced as text like reminders.
+- Notes without that line get a **proposed** shelf from `ThemeSorter` (local, deterministic, no AI, no network): similarity to notes already themed (TF-IDF cosine), then the word catalog of five shelves (Informatique, Image & son, Argent & papiers, Vie perso, Cuisine), then code-shaped notes → "Informatique"; otherwise "Sans thème".
+- Apple Notes import maps the folder to the theme, keeps original dates and skips "Recently Deleted".
+
 ## AI (JEV contract)
 
 AI in AlphaNote **classifies, it never drafts** — with one exception (below).
@@ -70,6 +82,16 @@ be turned into a formula **written by the model** (`FormulaDraftFeature`,
   comment, and the status line says so;
 - only the request is sent, never note content; Settings → AI shows the exact
   prompt and has a toggle to turn drafting off.
+
+**Shelf classification on demand (decided by Paul, 2026-11-10).** "Ranger avec
+JEV" sends the title and first 700 characters of each note that has no written
+theme to `POST /v1/decision` (one enum field `rayon`, six choices described in
+sentences — `ThemeClassificationFeature`) and writes the chosen shelf as a
+`thème : …` line. This is still classification, but it is the only place where
+note **content** leaves the device for the AI, so: user-triggered only, a
+confirmation states how many notes go to which server, vault notes and notes
+already themed never go, "fourre_tout" or a missing answer leaves the note
+unthemed, and Settings → AI shows the exact schema.
 
 **Recipe link → list (no AI).** A recipe URL in list mode is fetched and its
 schema.org `recipeIngredient` list (JSON-LD or microdata) becomes the list

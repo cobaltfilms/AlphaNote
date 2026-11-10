@@ -172,6 +172,8 @@ final class SyncEngine: ObservableObject {
 
                 if note.isDeleted, let deletedAt = note.deletedAt, deletedAt < cutoff {
                     try await client.deleteNote(uuid: note.uuid)
+                    // Ses pièces jointes partent avec elle ; un échec ici ne bloque rien.
+                    try? await client.deleteAttachments(noteUUID: note.uuid)
                     knownETags[note.uuid] = nil
                     continue
                 }
@@ -207,8 +209,21 @@ final class SyncEngine: ObservableObject {
                 noteUUIDs: finalNotes.map(\.uuid)
             ))
 
-            status = .success(syncTimestamp)
+            // Les notes sont à jour : l'interface se recharge sans attendre les fichiers.
             NotificationCenter.default.post(name: .alphaNoteDidSync, object: nil)
+
+            // Pièces jointes, après les notes : un échec ici est compté, jamais
+            // propagé — la synchro des notes est déjà faite.
+            let attachments = await AttachmentSync.run(client: client, notes: finalNotes, scope: etagScope)
+            if attachments.downloaded > 0 {
+                // Les rangées « Enregistrée sur un autre appareil » deviennent lisibles.
+                NotificationCenter.default.post(name: .alphaNoteDidSync, object: nil)
+            }
+            if attachments.failed > 0 {
+                status = .error("Notes synchronisées, mais \(attachments.failed) pièce(s) jointe(s) n'ont pas pu être envoyées ou reçues. Nouvel essai à la prochaine synchro.")
+            } else {
+                status = .success(syncTimestamp)
+            }
         } catch {
             status = .error(Self.describe(error))
             if Self.isNetworkFailure(error) { scheduleRetry() }
