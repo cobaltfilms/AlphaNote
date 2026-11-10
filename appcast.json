@@ -1,6 +1,6 @@
 {
-  "version": "0.6.1",
-  "notes": "Rappels \u00e0 date et heure (notification, sonnerie) : \u00e9crits dans la note, r\u00e9gl\u00e9s \u00e0 chaque modification ou synchro. Les sonneries jouent m\u00eame sans Ne pas d\u00e9ranger ; la vibration n'existe pas sur Mac.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.1/AlphaNote-0.6.1.zip",
+  "version": "0.6.2",
+  "notes": "Notes vocales : enregistrement et transcription en direct (micro, \u2325\u2318R sur Mac). Liste rang\u00e9e par rayon, forme, mois ou \u00ab tri \u00e0 faire \u00bb ; \u00ab Ranger avec JEV \u00bb \u00e0 la demande. Import Apple Notes : dossiers repris comme th\u00e8mes, dates d'origine gard\u00e9es, corbeille ignor\u00e9e. Images et notes vocales synchronis\u00e9es par Nextcloud.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.2/AlphaNote-0.6.2.zip",
   "minimumSystemVersion": "14.0"
 }

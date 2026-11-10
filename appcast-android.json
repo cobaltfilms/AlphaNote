@@ -1,7 +1,7 @@
 {
-  "version": "0.6.1",
-  "versionCode": 601,
-  "notes": "Rappels : synchronis\u00e9s depuis le Mac ; leurs alarmes sont reprogramm\u00e9es apr\u00e8s chaque synchro. Correctif des rappels re\u00e7us par synchro.",
-  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.1/AlphaNote-0.6.1.apk",
+  "version": "0.6.2",
+  "versionCode": 602,
+  "notes": "Notes vocales : enregistrement et transcription en direct (micro, \u2325\u2318R sur Mac). Liste rang\u00e9e par rayon, forme, mois ou \u00ab tri \u00e0 faire \u00bb ; \u00ab Ranger avec JEV \u00bb \u00e0 la demande. Import Apple Notes : dossiers repris comme th\u00e8mes, dates d'origine gard\u00e9es, corbeille ignor\u00e9e. Images et notes vocales synchronis\u00e9es par Nextcloud.",
+  "url": "https://github.com/cobaltfilms/AlphaNote/releases/download/v0.6.2/AlphaNote-0.6.2.apk",
   "minimumSdk": 26
 }
